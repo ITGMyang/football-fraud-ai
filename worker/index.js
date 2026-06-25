@@ -8,6 +8,8 @@ import { createSupabaseStorage } from '../src/supabase-storage.js';
 export default {
   async fetch(request, env) {
     try {
+      const authResponse = await protect(request, env);
+      if (authResponse) return authResponse;
       const apiResponse = await routeApi(request, env);
       if (apiResponse) return apiResponse;
       return env.ASSETS.fetch(request);
@@ -16,6 +18,182 @@ export default {
     }
   }
 };
+
+const AUTH_COOKIE = 'football_fraud_access';
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+
+async function protect(request, env) {
+  if (!env.ACCESS_PASSWORD) return null;
+
+  const url = new URL(request.url);
+  if (url.pathname === '/login' && request.method === 'GET') {
+    return loginPage(url.searchParams.get('next') || '/');
+  }
+  if (url.pathname === '/login' && request.method === 'POST') {
+    return handleLogin(request, env);
+  }
+  if (url.pathname === '/logout') {
+    return new Response('', {
+      status: 302,
+      headers: {
+        Location: '/login',
+        'Set-Cookie': `${AUTH_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`
+      }
+    });
+  }
+
+  const token = parseCookies(request.headers.get('Cookie') || '')[AUTH_COOKIE];
+  if (token && await verifySessionToken(token, env.ACCESS_PASSWORD)) return null;
+
+  if (url.pathname.startsWith('/api/')) {
+    return json({ error: '需要先输入访问密码' }, 401);
+  }
+
+  return new Response('', {
+    status: 302,
+    headers: { Location: `/login?next=${encodeURIComponent(url.pathname + url.search)}` }
+  });
+}
+
+async function handleLogin(request, env) {
+  const form = await request.formData();
+  const password = String(form.get('password') || '');
+  const next = sanitizeNext(form.get('next'));
+
+  if (password !== env.ACCESS_PASSWORD) {
+    return loginPage(next, '密码不对');
+  }
+
+  const token = await createSessionToken(env.ACCESS_PASSWORD);
+  return new Response('', {
+    status: 302,
+    headers: {
+      Location: next,
+      'Set-Cookie': `${AUTH_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_SECONDS}`
+    }
+  });
+}
+
+function loginPage(next = '/', error = '') {
+  return new Response(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>足球诈骗 | 访问验证</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #071017;
+      color: #f4f7fb;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+    }
+    main {
+      width: min(420px, calc(100vw - 32px));
+      border: 1px solid rgba(255,255,255,.14);
+      background: #101a24;
+      padding: 28px;
+      border-radius: 10px;
+      box-shadow: 0 24px 80px rgba(0,0,0,.36);
+    }
+    h1 { margin: 0 0 8px; font-size: 32px; letter-spacing: 0; }
+    p { margin: 0 0 22px; color: #aebdca; line-height: 1.5; }
+    label { display: block; margin-bottom: 8px; color: #d8e0e8; font-weight: 700; }
+    input {
+      width: 100%;
+      height: 46px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 8px;
+      background: #071017;
+      color: #fff;
+      padding: 0 14px;
+      font-size: 16px;
+      outline: none;
+    }
+    input:focus { border-color: #f2c94c; }
+    button {
+      width: 100%;
+      height: 46px;
+      margin-top: 16px;
+      border: 0;
+      border-radius: 8px;
+      background: #f2c94c;
+      color: #071017;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .error { margin: 14px 0 0; color: #ff8f8f; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>足球诈骗</h1>
+    <p>输入访问密码后继续。</p>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="${escapeHtml(sanitizeNext(next))}">
+      <label for="password">访问密码</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" autofocus>
+      <button type="submit">进入网站</button>
+      ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
+    </form>
+  </main>
+</body>
+</html>`, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  });
+}
+
+async function createSessionToken(secret) {
+  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  const signature = await hmac(`${expires}`, secret);
+  return `${expires}.${signature}`;
+}
+
+async function verifySessionToken(token, secret) {
+  const [expires, signature] = String(token || '').split('.');
+  const expiry = Number(expires);
+  if (!Number.isFinite(expiry) || expiry < Math.floor(Date.now() / 1000) || !signature) return false;
+  return signature === await hmac(expires, secret);
+}
+
+async function hmac(message, secret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function parseCookies(cookieHeader) {
+  return Object.fromEntries(cookieHeader.split(';').map((part) => {
+    const [name, ...rest] = part.trim().split('=');
+    return [name, rest.join('=')];
+  }).filter(([name]) => name));
+}
+
+function sanitizeNext(value) {
+  const next = String(value || '/');
+  return next.startsWith('/') && !next.startsWith('//') ? next : '/';
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
 
 async function routeApi(request, env) {
   const url = new URL(request.url);
