@@ -21,7 +21,8 @@ async function routeApi(request, env) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return null;
 
-  const storage = createSupabaseStorage(env, fetch);
+  const workerFetch = (input, init) => fetch(input, init);
+  const storage = createSupabaseStorage(env, workerFetch);
 
   if (request.method === 'GET' && url.pathname === '/api/markets') {
     return json({ markets: (await storage.readDb()).markets });
@@ -78,7 +79,7 @@ async function routeApi(request, env) {
 
   if (request.method === 'POST' && url.pathname === '/api/import/dongqiudi-url') {
     const body = await request.json();
-    const context = await storage.upsertMatchContext(await fetchDongqiudiContext(body.sourceUrl || body.url, fetch));
+    const context = await storage.upsertMatchContext(await fetchDongqiudiContext(body.sourceUrl || body.url, workerFetch));
     return json({ context });
   }
 
@@ -93,7 +94,7 @@ async function routeApi(request, env) {
     const id = decodeURIComponent(predictMatch[1]);
     const market = (await storage.readDb()).markets.find((item) => item.id === id);
     if (!market) return json({ error: '找不到盘口' }, 404);
-    const report = await predictMarket(market, env, fetch);
+    const report = await predictMarket(market, env, workerFetch);
     await storage.saveReport(report);
     return json({ report });
   }
@@ -104,7 +105,7 @@ async function routeApi(request, env) {
     const context = (db.matchContexts || [])[0] || null;
     if (!db.markets.length && !context) return json({ error: '还没有导入懂球帝比赛数据' }, 400);
     const requestedModel = body.model || 'all';
-    const ranking = await rankMarkets(db.markets, requestedModel, env, fetch, context);
+    const ranking = await rankMarkets(db.markets, requestedModel, env, workerFetch, context);
     const savedRanking = await storage.saveRanking(ranking, { mergeLatest: requestedModel !== 'all' });
     return json({ ranking: savedRanking });
   }
