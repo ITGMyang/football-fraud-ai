@@ -16,8 +16,8 @@ npm start
 ## Cloudflare + Supabase 架构
 
 - 前端和 API 部署到 Cloudflare Workers。
-- 数据存到 Supabase Postgres，Worker 使用 `SUPABASE_SERVICE_ROLE_KEY` 从服务端访问。
-- 浏览器不会拿到 Supabase service role key。
+- 数据存到 Supabase Postgres，Worker 使用 `SUPABASE_SECRET_KEY` 或旧版 `SUPABASE_SERVICE_ROLE_KEY` 从服务端访问。
+- 浏览器不会拿到 Supabase secret/service role key。
 - OpenRouter key 也作为 Cloudflare secret 保存。
 
 ## Supabase 初始化
@@ -37,12 +37,14 @@ npm start
 ```powershell
 npx wrangler secret put OPENROUTER_API_KEY
 npx wrangler secret put SUPABASE_URL
-npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+npx wrangler secret put SUPABASE_SECRET_KEY
 npx wrangler secret put MODEL_GPT
 npx wrangler secret put MODEL_GEMINI
 npx wrangler secret put MODEL_DEEPSEEK
 npx wrangler secret put MODEL_QWEN
 ```
+
+Supabase 新版后台路径：`Project Settings` -> `API Keys`。新版复制 `Secret keys` 区域的 `sb_secret_...`；旧版切到 `Legacy API Keys`，复制 `service_role`。
 
 校验和部署：
 
