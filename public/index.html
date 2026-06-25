@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>足球诈骗</title>
+    <link rel="stylesheet" href="/styles.css?v=20260626-0505">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-inner">
+        <p class="hero-kicker">World Cup AI Odds Lab</p>
+        <h1>足球诈骗</h1>
+        <p class="hero-copy">多模型复盘公开比赛信息，输出可追踪的 Top 4 概率卡片。只做分析，不自动下注，不承诺盈利。</p>
+        <div class="hero-actions">
+          <a class="button" href="#ai-panel">开始预测</a>
+          <a class="button secondary" href="#historyPanel">查看历史</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel quickstart reveal">
+        <h2>最简单用法</h2>
+        <div class="steps">
+          <div><strong>1</strong><span>打开懂球帝比赛页，导入分析、阵容、指数、文字直播等公开信息</span></div>
+          <div><strong>2</strong><span>点击重跑按钮，让每个 AI 模型独立预测 Top 4</span></div>
+          <div><strong>3</strong><span>在结果标签中切换模型，按 AI 概率从大到小查看卡片</span></div>
+        </div>
+        <div class="toolbar compact">
+          <a class="button" href="https://www.dongqiudi.com/match/54329952" target="_blank" rel="noreferrer">打开懂球帝页面</a>
+          <button id="clearMarkets" class="secondary">清空旧盘口</button>
+          <button id="refresh" class="secondary">刷新列表</button>
+        </div>
+        <div class="url-import">
+          <label>懂球帝比赛 URL
+            <input id="dongqiudiUrl" value="https://www.dongqiudi.com/match/54329995" placeholder="https://www.dongqiudi.com/match/54329995">
+          </label>
+          <button id="importDongqiudiUrl">直接提取网页信息</button>
+        </div>
+        <p class="meta">当前模式不再依赖 Stake 赔率。AI 会基于懂球帝公开比赛数据生成候选方向并排序。</p>
+      </section>
+
+      <section class="toolbar reveal">
+        <details>
+          <summary>高级方式：手动导入旧盘口</summary>
+          <p class="meta">保留旧盘口导入只用于对照。默认 AI 预测不需要 Stake。</p>
+          <button id="loadSample" class="secondary">载入截图样例</button>
+        </details>
+      </section>
+
+      <section class="panel reveal">
+        <h2>可选：粘贴旧盘口页面文本</h2>
+        <div class="grid">
+          <label>来源 URL <input id="sourceUrl" value="https://stake.com/zh/sports/soccer/international/world-cup"></label>
+          <label class="wide">页面文本 <textarea id="stakeText" rows="7" placeholder="可选功能：粘贴旧盘口页面文本。当前主流程使用懂球帝数据。"></textarea></label>
+        </div>
+        <button id="importText">解析并导入</button>
+      </section>
+
+      <section class="panel reveal">
+        <h2>手动修正/新增盘口</h2>
+        <form id="manualForm" class="grid">
+          <label>比赛 <input name="matchName" placeholder="厄瓜多尔 v 德国" required></label>
+          <label>市场
+            <select name="marketType">
+              <option>足球 胜平负</option>
+              <option>足球 比分</option>
+              <option>足球 亚洲让分盘</option>
+              <option>足球 大小球</option>
+            </select>
+          </label>
+          <label>选择 <input name="selection" placeholder="德国" required></label>
+          <label>盘口 <input name="line" placeholder="-0.5 / 胜平负 / 2.5" required></label>
+          <label>赔率 <input name="odds" type="number" step="0.01" placeholder="0.75" required></label>
+          <label>来源 URL <input name="sourceUrl" placeholder="https://..."></label>
+          <button type="submit">保存盘口</button>
+        </form>
+      </section>
+
+      <section id="ai-panel" class="panel reveal">
+        <h2>AI 预测</h2>
+        <div id="contexts" class="contexts"></div>
+        <div class="ai-controls">
+          <div>
+            <strong>AI 总预测</strong>
+            <span>上方按钮会重新调用 API；预测完成后，下方模型标签只切换已有结果，不会重新扣费。</span>
+          </div>
+          <div class="ai-buttons">
+            <button data-rank-model="all">重新预测全部 AI</button>
+            <button class="secondary" data-rank-model="GPT">重跑 GPT</button>
+            <button class="secondary" data-rank-model="Gemini">重跑 Gemini</button>
+            <button class="secondary" data-rank-model="DeepSeek">重跑 DeepSeek</button>
+            <button class="secondary" data-rank-model="Qwen">重跑 Qwen</button>
+          </div>
+        </div>
+        <div id="rankings" class="rankings"></div>
+        <h2>旧盘口分类（可选）</h2>
+        <div id="markets" class="cards"></div>
+      </section>
+
+      <section id="matchPanel" class="panel reveal" hidden>
+        <h2>单场详情</h2>
+        <div id="matchDetail"></div>
+      </section>
+
+      <section id="historyPanel" class="panel reveal">
+        <h2>历史报告</h2>
+        <div id="reports" class="cards"></div>
+      </section>
+    </main>
+
+    <script src="/app.js?v=20260626-0505"></script>
+  </body>
+</html>

@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+test('single model ranking merges into latest ranking instead of replacing other models', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'football-storage-'));
+  process.chdir(tempDir);
+  try {
+    const storage = await import(`../src/storage.js?test=${Date.now()}`);
+    storage.saveRanking({
+      id: 'batch-1',
+      marketCount: 4,
+      createdAt: '2026-06-26T00:00:00.000Z',
+      results: [
+        { modelName: 'DeepSeek', picks: [{ marketId: 'a' }], scorePicks: [] },
+        { modelName: 'Qwen', picks: [{ marketId: 'b' }], scorePicks: [] }
+      ]
+    });
+
+    const merged = storage.saveRanking({
+      id: 'single-gpt',
+      marketCount: 4,
+      createdAt: '2026-06-26T00:01:00.000Z',
+      results: [
+        { modelName: 'GPT', picks: [{ marketId: 'c' }], scorePicks: [{ score: '1:0' }] }
+      ]
+    }, { mergeLatest: true });
+
+    assert.deepEqual(merged.results.map((result) => result.modelName), ['DeepSeek', 'Qwen', 'GPT']);
+    assert.equal(storage.readDb().rankings.length, 1);
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

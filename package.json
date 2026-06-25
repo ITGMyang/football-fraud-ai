@@ -1,0 +1,23 @@
+{
+  "name": "football-odds-llm-predictor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "cf:check": "wrangler check",
+    "cf:dry-run": "wrangler deploy --dry-run",
+    "cf:deploy": "wrangler deploy",
+    "test:models": "node scripts/test-models.js",
+    "test": "node --test test"
+  },
+  "dependencies": {
+    "undici": "^6.22.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "wrangler": "^4.105.0"
+  }
+}
