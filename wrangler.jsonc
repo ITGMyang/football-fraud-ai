@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "football-fraud-ai",
   "main": "worker/index.js",
-  "compatibility_date": "2026-06-26",
+  "compatibility_date": "2026-06-25",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
