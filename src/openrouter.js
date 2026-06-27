@@ -170,8 +170,9 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
     const content = data?.choices?.[0]?.message?.content;
     if (!content) throw new Error('模型没有返回 content');
     const parsed = parseModelJson(content);
-    const scorePicks = validateScorePicks(parsed, markets).slice(0, 3);
-    const picks = completeRankingPicks(validateRankingPicks(parsed, markets), scorePicks, markets).slice(0, 4);
+    const rawPicks = validateRankingPicks(parsed, markets);
+    const scorePicks = alignScorePicksWithTotals(validateScorePicks(parsed, markets), rawPicks, markets).slice(0, 3);
+    const picks = completeRankingPicks(rawPicks, scorePicks, markets).slice(0, 4);
     return {
       modelName: label,
       modelId: model,
@@ -373,6 +374,9 @@ function rankingUserPromptV2(markets, matchContext, retry) {
       'picks should cover normal betting categories when possible: one 胜平负/moneyline, one 亚洲让分盘/handicap, one 大小球/total, then one strongest extra choice.',
       'Do not put correct-score markets in picks unless there are no other markets. Correct scores belong in scorePicks only.',
       'scorePicks must have exactly 3 items.',
+      'Predict total goals direction before exact scores. scorePicks must be consistent with your strongest 大小球/total pick in picks.',
+      'If picks chooses 大/over 2.5, every scorePick must have total goals >= 3. If picks chooses 小/under 2.5, every scorePick must have total goals <= 2.',
+      'If picks chooses 大/over 3.5, every scorePick must have total goals >= 4. If picks chooses 小/under 3.5, every scorePick must have total goals <= 3.',
       'For scorePicks, use a score/correct score/比分 marketId when available. If no exact score marketId fits, still provide the score text.',
       'estimatedProbability is your AI probability, not odds implied probability.',
       'Sort both picks and scorePicks by estimatedProbability descending.',
@@ -543,6 +547,88 @@ function completeRankingPicks(picks, scorePicks, markets) {
   }
 
   return completed.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+}
+
+function alignScorePicksWithTotals(scorePicks, picks, markets) {
+  const totalPick = strongestTotalPick(picks);
+  if (!totalPick) return scorePicks.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+
+  const seen = new Set();
+  const aligned = scorePicks
+    .filter((pick) => scoreMatchesTotalPick(pick.score, totalPick))
+    .filter((pick) => {
+      if (seen.has(pick.score)) return false;
+      seen.add(pick.score);
+      return true;
+    });
+
+  if (aligned.length >= 3) return aligned.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+
+  for (const score of fallbackScoresForTotalPick(totalPick, markets)) {
+    if (seen.has(score)) continue;
+    seen.add(score);
+    aligned.push(syntheticScorePick(score, totalPick, markets));
+    if (aligned.length >= 3) break;
+  }
+
+  return aligned.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+}
+
+function strongestTotalPick(picks = []) {
+  return [...picks]
+    .filter((pick) => isTotalMarket(pick.market))
+    .sort((a, b) => b.estimatedProbability - a.estimatedProbability)[0] || null;
+}
+
+function isTotalMarket(market) {
+  return /大小球|大\/小|总进球|total|over|under/i.test(String(market?.marketType || ''));
+}
+
+function totalPickRule(pick) {
+  const line = Number(String(pick?.market?.line || '').match(/\d+(?:\.\d+)?/)?.[0]);
+  if (!Number.isFinite(line)) return null;
+  const selection = String(pick?.market?.selection || '');
+  const direction = /大|over/i.test(selection) ? 'over' : /小|under/i.test(selection) ? 'under' : '';
+  return direction ? { direction, line } : null;
+}
+
+function scoreMatchesTotalPick(score, totalPick) {
+  const rule = totalPickRule(totalPick);
+  const parsed = parseScorePair(score);
+  if (!rule || !parsed) return true;
+  const totalGoals = parsed[0] + parsed[1];
+  return rule.direction === 'over'
+    ? totalGoals > rule.line
+    : totalGoals < rule.line;
+}
+
+function fallbackScoresForTotalPick(totalPick, markets) {
+  const rule = totalPickRule(totalPick);
+  if (!rule) return [];
+  const scoreMarkets = markets
+    .filter(isScoreMarket)
+    .map((market) => normalizeScore(market.selection))
+    .filter(Boolean)
+    .filter((score) => scoreMatchesTotalPick(score, totalPick));
+  const defaults = rule.direction === 'over'
+    ? ['2:1', '1:2', '3:1', '2:2', '3:0', '0:3', '4:1']
+    : ['1:0', '0:1', '1:1', '0:0', '2:0', '0:2'];
+  return [...scoreMarkets, ...defaults]
+    .filter((score, index, list) => list.indexOf(score) === index)
+    .slice(0, 8);
+}
+
+function syntheticScorePick(score, totalPick, markets) {
+  const market = markets.find((item) => normalizeScore(item.selection) === score && isScoreMarket(item))
+    || syntheticScoreMarket(score, markets);
+  return {
+    marketId: market.id,
+    market,
+    score,
+    estimatedProbability: Math.max(0.08, Math.min(0.22, Number(totalPick?.estimatedProbability || 0.5) * 0.25)),
+    confidence: Math.max(0.2, Math.min(0.45, Number(totalPick?.confidence || 0.35) * 0.75)),
+    reason: '根据大小球主判断补齐的兼容比分'
+  };
 }
 
 function inferPicksFromScores(scorePicks, markets) {

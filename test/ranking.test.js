@@ -257,6 +257,88 @@ test('ranking infers main picks when model only returns score predictions', asyn
   assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'under25'));
 });
 
+test('ranking score predictions stay consistent with over total pick', async () => {
+  const markets = [
+    buildMarket({ id: 'over25', matchName: 'A v B', marketType: '足球 大小球', selection: '大', line: '2.5', odds: 1.8 }),
+    buildMarket({ id: 'under25', matchName: 'A v B', marketType: '足球 大小球', selection: '小', line: '2.5', odds: 1.9 }),
+    buildMarket({ id: 's10', matchName: 'A v B', marketType: '足球 比分', selection: '1:0', line: '正确比分', odds: 7 }),
+    buildMarket({ id: 's11', matchName: 'A v B', marketType: '足球 比分', selection: '1:1', line: '正确比分', odds: 6 }),
+    buildMarket({ id: 's21', matchName: 'A v B', marketType: '足球 比分', selection: '2:1', line: '正确比分', odds: 8 }),
+    buildMarket({ id: 's22', matchName: 'A v B', marketType: '足球 比分', selection: '2:2', line: '正确比分', odds: 10 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            picks: [
+              { marketId: 'over25', estimatedProbability: 0.72, confidence: 0.6, reason: 'open game', risks: [] }
+            ],
+            scorePicks: [
+              { score: '1:0', estimatedProbability: 0.18, confidence: 0.4, reason: 'conflict' },
+              { score: '1:1', estimatedProbability: 0.16, confidence: 0.36, reason: 'conflict' },
+              { score: '2:1', estimatedProbability: 0.14, confidence: 0.32, reason: 'fits' }
+            ]
+          })
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.equal(ranking.results[0].scorePicks.length, 3);
+  assert.ok(ranking.results[0].scorePicks.every((pick) => {
+    const [home, away] = pick.score.split(':').map(Number);
+    return home + away >= 3;
+  }));
+});
+
+test('ranking score predictions stay consistent with under total pick', async () => {
+  const markets = [
+    buildMarket({ id: 'over25', matchName: 'A v B', marketType: '足球 大小球', selection: '大', line: '2.5', odds: 1.8 }),
+    buildMarket({ id: 'under25', matchName: 'A v B', marketType: '足球 大小球', selection: '小', line: '2.5', odds: 1.9 }),
+    buildMarket({ id: 's10', matchName: 'A v B', marketType: '足球 比分', selection: '1:0', line: '正确比分', odds: 7 }),
+    buildMarket({ id: 's11', matchName: 'A v B', marketType: '足球 比分', selection: '1:1', line: '正确比分', odds: 6 }),
+    buildMarket({ id: 's21', matchName: 'A v B', marketType: '足球 比分', selection: '2:1', line: '正确比分', odds: 8 }),
+    buildMarket({ id: 's31', matchName: 'A v B', marketType: '足球 比分', selection: '3:1', line: '正确比分', odds: 12 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            picks: [
+              { marketId: 'under25', estimatedProbability: 0.68, confidence: 0.58, reason: 'tight game', risks: [] }
+            ],
+            scorePicks: [
+              { score: '3:1', estimatedProbability: 0.18, confidence: 0.4, reason: 'conflict' },
+              { score: '2:1', estimatedProbability: 0.16, confidence: 0.36, reason: 'conflict' },
+              { score: '1:1', estimatedProbability: 0.14, confidence: 0.32, reason: 'fits' }
+            ]
+          })
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.equal(ranking.results[0].scorePicks.length, 3);
+  assert.ok(ranking.results[0].scorePicks.every((pick) => {
+    const [home, away] = pick.score.split(':').map(Number);
+    return home + away <= 2;
+  }));
+});
+
 test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
