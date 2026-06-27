@@ -500,7 +500,9 @@ function renderAiContextTab(context) {
   const ranking = rankingForContext(context);
   const predictedModels = predictedModelsForRanking(ranking);
   const hasPrediction = predictedModels.size > 0;
-  const urgent = isInOneHourCountdown(context) && !hasPrediction;
+  const urgent = isInOneHourCountdown(context);
+  const statusClass = urgent ? 'urgent' : hasPrediction ? 'predicted' : 'future';
+  const statusLabel = urgent ? '红色 1 小时预警' : hasPrediction ? '已预测' : '未来预测';
   return `
     <article class="ai-context-tab-card ${key === activeContextId ? 'active' : ''} ${urgent ? 'needs-predict' : ''}">
       <button class="ai-context-main" data-ai-context-tab="${escapeHtml(key)}" type="button">
@@ -512,7 +514,7 @@ function renderAiContextTab(context) {
         <div class="ai-context-meta-line">
           <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
           <em class="${players.state}">${escapeHtml(players.shortLabel)}</em>
-          <small class="${hasPrediction ? 'predicted' : urgent ? 'urgent' : ''}">${hasPrediction ? '已预测' : urgent ? '临近开赛，点模型重跑' : '未预测'}</small>
+          <small class="${statusClass}">${statusLabel}</small>
         </div>
       </button>
       <div class="ai-context-actions">

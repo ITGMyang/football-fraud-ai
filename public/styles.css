@@ -837,7 +837,9 @@ summary {
 }
 
 .ai-context-tab-card.needs-predict {
-  border-color: rgba(255, 177, 186, 0.45);
+  border-color: rgba(255, 91, 110, 0.68);
+  background: #1c1118;
+  box-shadow: 0 0 0 3px rgba(255, 91, 110, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .ai-context-tab-card:hover {
@@ -960,9 +962,14 @@ summary {
   background: #0d1f1e;
 }
 
+.ai-context-tabs small.future {
+  color: #d6ddea;
+  background: #101823;
+}
+
 .ai-context-tabs small.urgent {
-  color: #ffdfdf;
-  background: #2a1016;
+  color: #fff1f2;
+  background: #7a1424;
 }
 
 .ai-context-actions {
