@@ -778,21 +778,22 @@ summary {
 
 .ai-context-filter {
   display: grid;
-  grid-template-columns: minmax(150px, 180px) minmax(190px, 220px) minmax(180px, 220px) minmax(0, 1fr);
-  gap: 12px;
-  align-items: end;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: start;
   margin-bottom: 14px;
 }
 
 .ai-context-tabs {
   display: flex;
+  grid-column: 1 / -1;
   flex-wrap: nowrap;
-  gap: 8px;
-  align-items: center;
+  gap: 14px;
+  align-items: stretch;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 2px 2px 8px;
+  padding: 4px 4px 12px;
   scroll-snap-type: x proximity;
   scrollbar-width: thin;
   scrollbar-color: rgba(243, 201, 91, 0.65) rgba(255, 255, 255, 0.08);
@@ -814,13 +815,13 @@ summary {
 
 .ai-context-tab-card {
   display: grid;
-  flex: 0 0 230px;
-  gap: 9px;
-  min-width: 190px;
-  max-width: 280px;
+  flex: 0 0 clamp(360px, 34vw, 520px);
+  gap: 14px;
+  min-width: 340px;
+  max-width: 540px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 10px;
+  padding: 16px;
   background: var(--surface-2);
   color: var(--ink);
   border-color: var(--line);
@@ -845,7 +846,7 @@ summary {
 
 .ai-context-main {
   display: grid;
-  gap: 5px;
+  gap: 14px;
   width: 100%;
   border: 0;
   padding: 0;
@@ -859,7 +860,59 @@ summary {
   box-shadow: none;
 }
 
-.ai-context-tabs strong,
+.ai-context-teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.ai-context-team {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-context-team.away {
+  justify-items: end;
+  text-align: right;
+}
+
+.ai-context-team b {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0d131d;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.ai-context-team strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-context-v {
+  color: var(--gold);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.ai-context-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .ai-context-tabs span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -915,21 +968,22 @@ summary {
 .ai-context-actions {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  align-items: center;
+  gap: 12px;
+  align-items: end;
 }
 
 .context-model-icons {
   display: flex;
-  gap: 5px;
+  flex-wrap: nowrap;
+  gap: 8px;
   min-width: 0;
 }
 
 .model-icon-button {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   border-color: var(--line);
   border-radius: 50%;
   padding: 0;
@@ -948,23 +1002,24 @@ summary {
 }
 
 .model-icon-button .model-brand {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border: 0;
   font-size: 0;
 }
 
 .model-icon-button .model-brand b {
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .context-detail-button {
   border-color: var(--line-strong);
-  padding: 6px 9px;
+  min-width: 58px;
+  padding: 10px 12px;
   background: transparent;
   color: var(--gold);
   box-shadow: none;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .context-card {
@@ -1800,6 +1855,11 @@ pre {
   .section-title-row, .schedule-meta, .schedule-actions, .data-match-head { flex-direction: column; }
   .data-snapshot, .data-modules { grid-template-columns: 1fr; }
   .context-card { align-items: flex-start; flex-direction: column; }
+  .ai-context-tab-card { flex-basis: min(86vw, 420px); min-width: min(86vw, 340px); }
+  .ai-context-team b { width: 48px; height: 34px; font-size: 22px; }
+  .ai-context-team strong { font-size: 16px; }
+  .model-icon-button { width: 36px; height: 36px; }
+  .model-icon-button .model-brand { width: 25px; height: 25px; }
   .ai-buttons { justify-content: flex-start; }
   .section-heading { align-items: flex-start; }
   .ranking-meta, .model-ranking-head { flex-direction: column; }

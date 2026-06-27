@@ -495,6 +495,7 @@ function lineupSortScore(context = {}) {
 
 function renderAiContextTab(context) {
   const key = contextKey(context);
+  const teams = contextTeams(context);
   const players = playerInfoStatus(context);
   const ranking = rankingForContext(context);
   const predictedModels = predictedModelsForRanking(ranking);
@@ -503,10 +504,16 @@ function renderAiContextTab(context) {
   return `
     <article class="ai-context-tab-card ${key === activeContextId ? 'active' : ''} ${urgent ? 'needs-predict' : ''}">
       <button class="ai-context-main" data-ai-context-tab="${escapeHtml(key)}" type="button">
-        <strong>${escapeHtml(context.matchName || '比赛')}</strong>
-        <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
-        <em class="${players.state}">${escapeHtml(players.shortLabel)}</em>
-        <small class="${hasPrediction ? 'predicted' : urgent ? 'urgent' : ''}">${hasPrediction ? '已预测' : urgent ? '临近开赛，点模型重跑' : '未预测'}</small>
+        <div class="ai-context-teams">
+          ${renderAiContextTeam(teams[0], 'home')}
+          <span class="ai-context-v">v</span>
+          ${renderAiContextTeam(teams[1], 'away')}
+        </div>
+        <div class="ai-context-meta-line">
+          <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
+          <em class="${players.state}">${escapeHtml(players.shortLabel)}</em>
+          <small class="${hasPrediction ? 'predicted' : urgent ? 'urgent' : ''}">${hasPrediction ? '已预测' : urgent ? '临近开赛，点模型重跑' : '未预测'}</small>
+        </div>
       </button>
       <div class="ai-context-actions">
         <div class="context-model-icons" aria-label="单模型预测">
@@ -515,6 +522,15 @@ function renderAiContextTab(context) {
         <button class="context-detail-button" data-context-detail="${escapeHtml(key)}" type="button">详情</button>
       </div>
     </article>
+  `;
+}
+
+function renderAiContextTeam(team, side) {
+  return `
+    <div class="ai-context-team ${side}">
+      <b>${escapeHtml(countryFlag(team))}</b>
+      <strong>${escapeHtml(team || '未知')}</strong>
+    </div>
   `;
 }
 
