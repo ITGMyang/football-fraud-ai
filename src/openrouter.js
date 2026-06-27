@@ -170,8 +170,8 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
     const content = data?.choices?.[0]?.message?.content;
     if (!content) throw new Error('模型没有返回 content');
     const parsed = parseModelJson(content);
-    const picks = validateRankingPicks(parsed, markets).slice(0, 4);
     const scorePicks = validateScorePicks(parsed, markets).slice(0, 3);
+    const picks = completeRankingPicks(validateRankingPicks(parsed, markets), scorePicks, markets).slice(0, 4);
     return {
       modelName: label,
       modelId: model,
@@ -369,7 +369,9 @@ function rankingUserPromptV2(markets, matchContext, retry) {
     },
     rules: [
       'Return only JSON, no markdown.',
-      'picks has at most 4 items and must use ids from markets[].id.',
+      'picks must contain 3 to 4 non-score market choices and must use ids from markets[].id.',
+      'picks should cover normal betting categories when possible: one 胜平负/moneyline, one 亚洲让分盘/handicap, one 大小球/total, then one strongest extra choice.',
+      'Do not put correct-score markets in picks unless there are no other markets. Correct scores belong in scorePicks only.',
       'scorePicks must have exactly 3 items.',
       'For scorePicks, use a score/correct score/比分 marketId when available. If no exact score marketId fits, still provide the score text.',
       'estimatedProbability is your AI probability, not odds implied probability.',
@@ -483,6 +485,21 @@ function isCoreScore(selection) {
   return total <= 4;
 }
 
+function splitMatchTeams(matchName) {
+  return String(matchName || '')
+    .split(/\s+(?:v|vs|VS|V|对|vs\.|VS\.)\s+|[-–—]/)
+    .map((team) => team.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
+function sameTeam(selection, team) {
+  const normalize = (value) => String(value || '').toLowerCase().replace(/\s+/g, '');
+  const a = normalize(selection);
+  const b = normalize(team);
+  return a && b && (a.includes(b) || b.includes(a));
+}
+
 function validateRankingPicks(parsed, markets) {
   const allowed = new Map(markets.map((market) => [market.id, market]));
   const rawPicks = Array.isArray(parsed?.picks) ? parsed.picks : [];
@@ -507,6 +524,105 @@ function validateRankingPicks(parsed, markets) {
   }
 
   return picks.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+}
+
+function completeRankingPicks(picks, scorePicks, markets) {
+  const completed = [...picks];
+  const seen = new Set(completed.map((pick) => pick.marketId));
+  const nonScoreCount = completed.filter((pick) => !isScoreMarket(pick.market)).length;
+
+  if (completed.length >= 4 && nonScoreCount >= 3) {
+    return completed.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+  }
+
+  for (const pick of inferPicksFromScores(scorePicks, markets)) {
+    if (seen.has(pick.marketId)) continue;
+    seen.add(pick.marketId);
+    completed.push(pick);
+    if (completed.length >= 4) break;
+  }
+
+  return completed.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+}
+
+function inferPicksFromScores(scorePicks, markets) {
+  const topScore = [...(scorePicks || [])].sort((a, b) => b.estimatedProbability - a.estimatedProbability)[0];
+  const parsed = parseScorePair(topScore?.score);
+  if (!parsed) return [];
+
+  const [homeGoals, awayGoals] = parsed;
+  const totalGoals = homeGoals + awayGoals;
+  const margin = homeGoals - awayGoals;
+  const inferred = [
+    inferMoneylinePick(markets, margin, topScore),
+    inferTotalPick(markets, totalGoals, topScore),
+    inferHandicapPick(markets, margin, topScore)
+  ].filter(Boolean);
+
+  return inferred;
+}
+
+function inferMoneylinePick(markets, margin, scorePick) {
+  const target = markets.find((market) => {
+    if (!/胜平负|1x2|moneyline/i.test(String(market.marketType || ''))) return false;
+    if (margin === 0) return /平|draw|tie/i.test(String(market.selection || ''));
+    const teams = splitMatchTeams(market.matchName);
+    return margin > 0
+      ? sameTeam(market.selection, teams[0])
+      : sameTeam(market.selection, teams[1]);
+  });
+  return target ? inferredPick(target, scorePick, '根据模型最高比分推导出的胜平负方向') : null;
+}
+
+function inferTotalPick(markets, totalGoals, scorePick) {
+  const target = markets.find((market) => {
+    if (!/大小球|大\/小|total|over|under/i.test(String(market.marketType || ''))) return false;
+    const line = Number(String(market.line || '').match(/\d+(?:\.\d+)?/)?.[0]);
+    if (!Number.isFinite(line)) return false;
+    const wantsOver = totalGoals > line;
+    return wantsOver
+      ? /大|over/i.test(String(market.selection || ''))
+      : /小|under/i.test(String(market.selection || ''));
+  });
+  return target ? inferredPick(target, scorePick, '根据模型最高比分总进球推导出的大小球方向') : null;
+}
+
+function inferHandicapPick(markets, margin, scorePick) {
+  const candidates = markets.filter((market) => /亚洲让分盘|让球|handicap/i.test(String(market.marketType || '')));
+  if (!candidates.length) return null;
+  const target = candidates.find((market) => handicapCovers(market, margin))
+    || candidates.find((market) => {
+      const teams = splitMatchTeams(market.matchName);
+      if (margin > 0) return sameTeam(market.selection, teams[0]);
+      if (margin < 0) return sameTeam(market.selection, teams[1]);
+      return Number(String(market.line || '').replace('+', '')) > 0;
+    });
+  return target ? inferredPick(target, scorePick, '根据模型最高比分净胜球推导出的让球方向') : null;
+}
+
+function inferredPick(market, scorePick, reason) {
+  const probability = Math.max(0.42, Math.min(0.72, Number(scorePick?.estimatedProbability || 0.18) + 0.38));
+  return {
+    marketId: market.id,
+    market,
+    estimatedProbability: probability,
+    confidence: Math.max(0.25, Math.min(0.55, Number(scorePick?.confidence || 0.32))),
+    reason,
+    risks: ['该选择由模型比分预测自动推导，建议重跑模型获取直接盘口判断']
+  };
+}
+
+function parseScorePair(score) {
+  const match = normalizeScore(score).match(/^(\d+):(\d+)$/);
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
+
+function handicapCovers(market, margin) {
+  const teams = splitMatchTeams(market.matchName);
+  const line = Number(String(market.line || '').replace('+', ''));
+  if (!Number.isFinite(line)) return false;
+  const selectedMargin = sameTeam(market.selection, teams[0]) ? margin : -margin;
+  return selectedMargin + line > 0;
 }
 
 function validateScorePicks(parsed, markets) {

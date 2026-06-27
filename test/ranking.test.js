@@ -220,6 +220,43 @@ test('ranking keeps score predictions even when model omits score market ids', a
   assert.ok(ranking.results[0].scorePicks.every((pick) => pick.marketId.startsWith('ai-score-')));
 });
 
+test('ranking infers main picks when model only returns score predictions', async () => {
+  const markets = [
+    buildMarket({ id: 'home', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 }),
+    buildMarket({ id: 'draw', matchName: 'A v B', marketType: '足球 胜平负', selection: '平局', line: '胜平负', odds: 3 }),
+    buildMarket({ id: 'away', matchName: 'A v B', marketType: '足球 胜平负', selection: 'B', line: '胜平负', odds: 2.2 }),
+    buildMarket({ id: 'under25', matchName: 'A v B', marketType: '足球 大小球', selection: '小', line: '2.5', odds: 1.8 }),
+    buildMarket({ id: 'awayPlus05', matchName: 'A v B', marketType: '足球 亚洲让分盘', selection: 'B', line: '+0.5', odds: 1.7 }),
+    buildMarket({ id: 's02', matchName: 'A v B', marketType: '足球 比分', selection: '0:2', line: '正确比分', odds: 8 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            scorePicks: [
+              { score: '0:2', estimatedProbability: 0.17, confidence: 0.4, reason: 'away stronger' },
+              { score: '0:1', estimatedProbability: 0.15, confidence: 0.36, reason: 'low scoring' },
+              { score: '1:2', estimatedProbability: 0.11, confidence: 0.3, reason: 'away edge' }
+            ]
+          })
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['0:2', '0:1', '1:2']);
+  assert.ok(ranking.results[0].picks.length >= 2);
+  assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'away'));
+  assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'under25'));
+});
+
 test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
