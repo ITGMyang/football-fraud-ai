@@ -552,6 +552,70 @@ h3 {
   font-size: 12px;
 }
 
+.modal-open {
+  overflow: hidden;
+}
+
+.modal-shell[hidden] {
+  display: none;
+}
+
+.modal-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 7, 12, 0.78);
+  backdrop-filter: blur(8px);
+}
+
+.context-modal {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  width: min(1120px, 100%);
+  max-height: min(86vh, 920px);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.modal-head span {
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.modal-head h2 {
+  margin: 4px 0 0;
+}
+
+.modal-close {
+  flex: 0 0 auto;
+}
+
+.context-modal-body {
+  min-height: 0;
+  overflow: auto;
+}
+
 .error-text {
   color: #ffb1ba;
 }
@@ -714,7 +778,7 @@ summary {
 
 .ai-context-filter {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) 1fr;
+  grid-template-columns: minmax(150px, 180px) minmax(190px, 220px) minmax(180px, 220px) minmax(0, 1fr);
   gap: 12px;
   align-items: end;
   margin-bottom: 14px;
@@ -748,29 +812,51 @@ summary {
   background: rgba(243, 201, 91, 0.65);
 }
 
-.ai-context-tabs button {
+.ai-context-tab-card {
   display: grid;
   flex: 0 0 230px;
-  gap: 5px;
+  gap: 9px;
   min-width: 190px;
   max-width: 280px;
-  border-color: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
   background: var(--surface-2);
   color: var(--ink);
-  text-align: left;
+  border-color: var(--line);
   scroll-snap-align: start;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
   transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
 
-.ai-context-tabs button.active {
+.ai-context-tab-card.active {
   border-color: var(--gold);
   background: #1e1a10;
   box-shadow: 0 0 0 3px rgba(243, 201, 91, 0.10);
 }
 
-.ai-context-tabs button:hover {
+.ai-context-tab-card.needs-predict {
+  border-color: rgba(255, 177, 186, 0.45);
+}
+
+.ai-context-tab-card:hover {
   border-color: rgba(243, 201, 91, 0.52);
+}
+
+.ai-context-main {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  box-shadow: none;
+}
+
+.ai-context-main:hover {
+  box-shadow: none;
 }
 
 .ai-context-tabs strong,
@@ -804,6 +890,81 @@ summary {
 .ai-context-tabs em.no-players {
   color: #ffe7a6;
   background: #1e1a10;
+}
+
+.ai-context-tabs small {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: #101823;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ai-context-tabs small.predicted {
+  color: #ccfff8;
+  background: #0d1f1e;
+}
+
+.ai-context-tabs small.urgent {
+  color: #ffdfdf;
+  background: #2a1016;
+}
+
+.ai-context-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.context-model-icons {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.model-icon-button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-color: var(--line);
+  border-radius: 50%;
+  padding: 0;
+  background: #0d131d;
+  box-shadow: none;
+}
+
+.model-icon-button.predicted {
+  border-color: rgba(41, 199, 128, 0.45);
+  background: #0d1f1e;
+}
+
+.model-icon-button:hover {
+  border-color: var(--gold);
+  box-shadow: none;
+}
+
+.model-icon-button .model-brand {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  font-size: 0;
+}
+
+.model-icon-button .model-brand b {
+  font-size: 8px;
+}
+
+.context-detail-button {
+  border-color: var(--line-strong);
+  padding: 6px 9px;
+  background: transparent;
+  color: var(--gold);
+  box-shadow: none;
+  font-size: 12px;
 }
 
 .context-card {
@@ -1112,6 +1273,22 @@ summary {
   font-size: 11px;
   font-weight: 900;
   line-height: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.model-brand img {
+  width: 18px;
+  height: 18px;
+  filter: invert(1);
+}
+
+.model-brand b {
+  display: none;
+}
+
+.model-brand.no-svg b {
+  display: block;
 }
 
 .model-brand.gpt { background: #29c780; }
@@ -1628,6 +1805,9 @@ pre {
   .ranking-meta, .model-ranking-head { flex-direction: column; }
   .subscription-panel { align-items: stretch; flex-direction: column; }
   .subscription-price { text-align: left; }
+  .modal-shell { padding: 10px; }
+  .context-modal { max-height: 92vh; padding: 12px; }
+  .modal-head { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

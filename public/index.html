@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>足球诈骗</title>
-    <link rel="stylesheet" href="/styles.css?v=20260628-0901">
+    <link rel="stylesheet" href="/styles.css?v=20260628-1001">
   </head>
   <body>
     <nav class="floating-nav" aria-label="主导航">
@@ -91,8 +91,22 @@
       <section id="ai-panel" class="panel reveal">
         <h2>AI 预测</h2>
         <div class="ai-context-filter">
+          <label>查看范围
+            <select id="aiContextRange">
+              <option value="today">今日</option>
+              <option value="week" selected>一星期</option>
+              <option value="month">一个月</option>
+            </select>
+          </label>
           <label>已导入日期
             <select id="aiContextDate"></select>
+          </label>
+          <label>排序方式
+            <select id="aiContextSort">
+              <option value="imported" selected>按导入时间</option>
+              <option value="kickoff">按比赛日期</option>
+              <option value="lineup">按赛前 1 小时倒计时</option>
+            </select>
           </label>
           <div id="aiContextTabs" class="ai-context-tabs"></div>
         </div>
@@ -136,6 +150,20 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260628-1201"></script>
+    <div id="contextModal" class="modal-shell" hidden>
+      <div class="modal-backdrop" data-close-context-modal></div>
+      <section class="context-modal" role="dialog" aria-modal="true" aria-labelledby="contextModalTitle">
+        <div class="modal-head">
+          <div>
+            <span>已抓取数据</span>
+            <h2 id="contextModalTitle">比赛详情</h2>
+          </div>
+          <button class="secondary modal-close" type="button" data-close-context-modal>关闭</button>
+        </div>
+        <div id="contextModalBody" class="context-modal-body"></div>
+      </section>
+    </div>
+
+    <script src="/app.js?v=20260628-1301"></script>
   </body>
 </html>

@@ -8,15 +8,25 @@ const matchScheduleEl = $('#matchSchedule');
 const contextTabsEl = $('#contextTabs');
 const contextExplorerEl = $('#contextExplorer');
 const aiContextDateEl = $('#aiContextDate');
+const aiContextRangeEl = $('#aiContextRange');
+const aiContextSortEl = $('#aiContextSort');
 const aiContextTabsEl = $('#aiContextTabs');
 const matchPanel = $('#matchPanel');
 const matchDetailEl = $('#matchDetail');
+const contextModalEl = $('#contextModal');
+const contextModalBodyEl = $('#contextModalBody');
+const contextModalTitleEl = $('#contextModalTitle');
 
 const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
 const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
+const AI_CONTEXT_RANGE_STORAGE_KEY = 'footballFraud.aiContextRange';
+const AI_CONTEXT_SORT_STORAGE_KEY = 'footballFraud.aiContextSort';
+const RANK_MODELS = ['GPT', 'Claude', 'Gemini', 'DeepSeek', 'Qwen'];
 let activeRankingModel = 'all';
 let activeContextId = readStoredActiveContextId();
 let activeAiContextDate = readStoredValue(AI_CONTEXT_DATE_STORAGE_KEY);
+let activeAiContextRange = readStoredValue(AI_CONTEXT_RANGE_STORAGE_KEY) || 'week';
+let activeAiContextSort = readStoredValue(AI_CONTEXT_SORT_STORAGE_KEY) || 'imported';
 
 const MARKET_GROUPS = [
   { key: 'moneyline', label: '胜平负', help: '主胜、平局、客胜这类 1X2 市场。' },
@@ -36,6 +46,8 @@ bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
 bind('#competitionFilter', 'change', loadDongqiudiMatches);
 bind('#matchDate', 'change', loadDongqiudiMatches);
 bind('#aiContextDate', 'change', handleAiContextDateChange);
+bind('#aiContextRange', 'change', handleAiContextRangeChange);
+bind('#aiContextSort', 'change', handleAiContextSortChange);
 
 bind('#importDongqiudiUrl', 'click', importDongqiudiUrl);
 
@@ -46,6 +58,14 @@ bind('#clearMarkets', 'click', async () => {
 
 document.querySelectorAll('[data-rank-model]').forEach((button) => {
   button.addEventListener('click', () => runRanking(button.dataset.rankModel, button));
+});
+
+document.querySelectorAll('[data-close-context-modal]').forEach((element) => {
+  element.addEventListener('click', closeContextModal);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeContextModal();
 });
 
 bind('#importText', 'click', async () => {
@@ -108,6 +128,24 @@ function setActiveAiContextDate(value) {
     }
   } catch {
     // Keep the in-memory date when persistent storage is unavailable.
+  }
+}
+
+function setActiveAiContextRange(value) {
+  activeAiContextRange = ['today', 'week', 'month'].includes(value) ? value : 'week';
+  try {
+    localStorage.setItem(AI_CONTEXT_RANGE_STORAGE_KEY, activeAiContextRange);
+  } catch {
+    // Keep in-memory filter if storage is unavailable.
+  }
+}
+
+function setActiveAiContextSort(value) {
+  activeAiContextSort = ['imported', 'kickoff', 'lineup'].includes(value) ? value : 'imported';
+  try {
+    localStorage.setItem(AI_CONTEXT_SORT_STORAGE_KEY, activeAiContextSort);
+  } catch {
+    // Keep in-memory sorting if storage is unavailable.
   }
 }
 
@@ -307,17 +345,20 @@ function renderContexts(contexts) {
 
 function renderAiContextSelector(contexts = []) {
   if (!aiContextDateEl || !aiContextTabsEl) return;
-  const datedContexts = contexts.filter((context) => contextDate(context));
+  if (aiContextRangeEl) aiContextRangeEl.value = activeAiContextRange;
+  if (aiContextSortEl) aiContextSortEl.value = activeAiContextSort;
+
+  const datedContexts = filterContextsByAiRange(contexts.filter((context) => contextDate(context)));
   if (!datedContexts.length) {
     aiContextDateEl.innerHTML = '<option value="">暂无已导入数据</option>';
-    aiContextTabsEl.innerHTML = '<p class="meta">还没有已导入比赛。</p>';
+    aiContextTabsEl.innerHTML = '<p class="meta">当前范围里还没有已导入比赛。</p>';
     return;
   }
 
   const dates = [...new Set(datedContexts.map(contextDate))].sort((a, b) => b.localeCompare(a));
   const activeContext = activeContextId ? contexts.find((context) => contextKey(context) === activeContextId) : null;
   const activeContextDate = activeContext ? contextDate(activeContext) : '';
-  if (!activeAiContextDate && activeContextDate) {
+  if (!activeAiContextDate && activeContextDate && dates.includes(activeContextDate)) {
     setActiveAiContextDate(activeContextDate);
   }
   if (!activeAiContextDate) {
@@ -333,33 +374,30 @@ function renderAiContextSelector(contexts = []) {
     return `<option value="${escapeHtml(date)}" ${date === activeAiContextDate ? 'selected' : ''}>${escapeHtml(date)}（已导入 ${count} 场）</option>`;
   }).join('');
 
-  const visibleContexts = datedContexts.filter((context) => contextDate(context) === activeAiContextDate);
+  const visibleContexts = sortAiContexts(datedContexts.filter((context) => contextDate(context) === activeAiContextDate));
   if (!visibleContexts.some((context) => contextKey(context) === activeContextId)) {
     setActiveContextId(contextKey(visibleContexts[0]));
   }
 
-  aiContextTabsEl.innerHTML = visibleContexts.map((context) => {
-    const key = contextKey(context);
-    const players = playerInfoStatus(context);
-    return `
-      <button class="${key === activeContextId ? 'active' : ''}" data-ai-context-tab="${escapeHtml(key)}" type="button">
-        <strong>${escapeHtml(context.matchName || '比赛')}</strong>
-        <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
-        <em class="${players.state}">${escapeHtml(players.shortLabel)}</em>
-      </button>
-    `;
-  }).join('');
+  aiContextTabsEl.innerHTML = visibleContexts.map(renderAiContextTab).join('');
 
   aiContextTabsEl.querySelectorAll('[data-ai-context-tab]').forEach((button) => {
-    button.addEventListener('click', () => {
-      setActiveContextId(button.dataset.aiContextTab);
-      const selected = contexts.find((context) => contextKey(context) === activeContextId);
-      setActiveAiContextDate(contextDate(selected) || activeAiContextDate);
-      renderAiContextSelector(contexts);
-      renderContexts(contexts);
-      renderRankings(window.currentRankings || [], window.currentMarkets || []);
-      updateRankButtons(window.currentRankings || []);
-      setupRevealAnimations();
+    button.addEventListener('click', () => selectAiContext(button.dataset.aiContextTab, contexts));
+  });
+  aiContextTabsEl.querySelectorAll('[data-context-detail]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const context = contexts.find((item) => contextKey(item) === button.dataset.contextDetail);
+      if (context) openContextModal(context, contexts);
+    });
+  });
+  aiContextTabsEl.querySelectorAll('[data-context-model]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectAiContext(button.dataset.contextId, contexts, { silent: true });
+      await runRanking(button.dataset.contextModel, button);
     });
   });
 }
@@ -368,13 +406,146 @@ function handleAiContextDateChange(event) {
   const date = event.currentTarget.value;
   setActiveAiContextDate(date);
   const contexts = window.currentContexts || [];
-  const first = contexts.find((context) => contextDate(context) === date);
+  const first = sortAiContexts(filterContextsByAiRange(contexts).filter((context) => contextDate(context) === date))[0];
   if (first) setActiveContextId(contextKey(first));
   renderAiContextSelector(contexts);
   renderContexts(contexts);
   renderRankings(window.currentRankings || [], window.currentMarkets || []);
   updateRankButtons(window.currentRankings || []);
   setupRevealAnimations();
+}
+
+function handleAiContextRangeChange(event) {
+  setActiveAiContextRange(event.currentTarget.value);
+  const contexts = window.currentContexts || [];
+  const visible = sortAiContexts(filterContextsByAiRange(contexts));
+  if (visible.length) {
+    const current = visible.find((context) => contextKey(context) === activeContextId);
+    const selected = current || visible[0];
+    setActiveContextId(contextKey(selected));
+    setActiveAiContextDate(contextDate(selected));
+  }
+  renderAiContextSelector(contexts);
+  renderContexts(contexts);
+  renderRankings(window.currentRankings || [], window.currentMarkets || []);
+  updateRankButtons(window.currentRankings || []);
+  setupRevealAnimations();
+}
+
+function handleAiContextSortChange(event) {
+  setActiveAiContextSort(event.currentTarget.value);
+  const contexts = window.currentContexts || [];
+  renderAiContextSelector(contexts);
+  setupRevealAnimations();
+}
+
+function selectAiContext(key, contexts = [], options = {}) {
+  setActiveContextId(key);
+  const selected = contexts.find((context) => contextKey(context) === activeContextId);
+  setActiveAiContextDate(contextDate(selected) || activeAiContextDate);
+  if (options.silent) return;
+  renderAiContextSelector(contexts);
+  renderContexts(contexts);
+  renderRankings(window.currentRankings || [], window.currentMarkets || []);
+  updateRankButtons(window.currentRankings || []);
+  setupRevealAnimations();
+}
+
+function filterContextsByAiRange(contexts = []) {
+  const today = dateInShanghai(0);
+  return contexts.filter((context) => {
+    const date = contextDate(context);
+    if (!date) return false;
+    const diff = dateDistanceInDays(date, today);
+    if (activeAiContextRange === 'today') return diff === 0;
+    if (activeAiContextRange === 'month') return diff >= -30 && diff <= 31;
+    return diff >= -6 && diff <= 7;
+  });
+}
+
+function sortAiContexts(contexts = []) {
+  return [...contexts].sort((a, b) => {
+    if (activeAiContextSort === 'kickoff') {
+      return timestampOf(a.kickoff) - timestampOf(b.kickoff)
+        || timestampOf(b.capturedAt) - timestampOf(a.capturedAt);
+    }
+    if (activeAiContextSort === 'lineup') {
+      return lineupSortScore(a) - lineupSortScore(b)
+        || timestampOf(a.kickoff) - timestampOf(b.kickoff);
+    }
+    return timestampOf(b.capturedAt) - timestampOf(a.capturedAt)
+      || timestampOf(a.kickoff) - timestampOf(b.kickoff);
+  });
+}
+
+function dateDistanceInDays(date, baseDate) {
+  const parsed = Date.parse(`${date}T00:00:00+08:00`);
+  const base = Date.parse(`${baseDate}T00:00:00+08:00`);
+  if (Number.isNaN(parsed) || Number.isNaN(base)) return 0;
+  return Math.round((parsed - base) / 86400000);
+}
+
+function lineupSortScore(context = {}) {
+  const kickoff = parseKickoffTime(context.kickoff);
+  if (!kickoff) return Number.MAX_SAFE_INTEGER;
+  const oneHour = 60 * 60 * 1000;
+  const diff = kickoff.getTime() - Date.now();
+  return Math.abs(diff - oneHour);
+}
+
+function renderAiContextTab(context) {
+  const key = contextKey(context);
+  const players = playerInfoStatus(context);
+  const ranking = rankingForContext(context);
+  const predictedModels = predictedModelsForRanking(ranking);
+  const hasPrediction = predictedModels.size > 0;
+  const urgent = isInOneHourCountdown(context) && !hasPrediction;
+  return `
+    <article class="ai-context-tab-card ${key === activeContextId ? 'active' : ''} ${urgent ? 'needs-predict' : ''}">
+      <button class="ai-context-main" data-ai-context-tab="${escapeHtml(key)}" type="button">
+        <strong>${escapeHtml(context.matchName || '比赛')}</strong>
+        <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
+        <em class="${players.state}">${escapeHtml(players.shortLabel)}</em>
+        <small class="${hasPrediction ? 'predicted' : urgent ? 'urgent' : ''}">${hasPrediction ? '已预测' : urgent ? '临近开赛，点模型重跑' : '未预测'}</small>
+      </button>
+      <div class="ai-context-actions">
+        <div class="context-model-icons" aria-label="单模型预测">
+          ${RANK_MODELS.map((model) => modelIconButton(model, key, predictedModels.has(modelBrandKey(model)))).join('')}
+        </div>
+        <button class="context-detail-button" data-context-detail="${escapeHtml(key)}" type="button">详情</button>
+      </div>
+    </article>
+  `;
+}
+
+function rankingForContext(context) {
+  const key = contextKey(context);
+  return (window.currentRankings || []).find((ranking) => ranking.contextId === key) || null;
+}
+
+function predictedModelsForRanking(ranking) {
+  const models = new Set();
+  for (const result of ranking?.results || []) {
+    const hasResult = (result.picks || []).length || (result.scorePicks || []).length;
+    if (!hasResult || result.error) continue;
+    models.add(modelBrandKey(result.modelName));
+  }
+  return models;
+}
+
+function isInOneHourCountdown(context = {}) {
+  const kickoff = parseKickoffTime(context.kickoff);
+  if (!kickoff) return false;
+  const diff = kickoff.getTime() - Date.now();
+  return diff >= 0 && diff <= 60 * 60 * 1000;
+}
+
+function modelIconButton(model, contextId, predicted) {
+  return `
+    <button class="model-icon-button ${predicted ? 'predicted' : ''}" data-context-model="${escapeHtml(model)}" data-context-id="${escapeHtml(contextId)}" type="button" title="${escapeHtml(model)} 预测" aria-label="${escapeHtml(model)} 预测">
+      ${modelBrand(model)}
+    </button>
+  `;
 }
 
 function renderContextExplorer(contexts) {
@@ -413,7 +584,12 @@ function renderContextExplorer(contexts) {
   }
 
   const context = activeContext;
-  contextExplorerEl.innerHTML = `
+  contextExplorerEl.innerHTML = renderContextDetailCard(context, activeIndex);
+  contextExplorerEl.querySelector('[data-refresh-context]')?.addEventListener('click', refreshContextData);
+}
+
+function renderContextDetailCard(context, activeIndex = 0) {
+  return `
     <article class="data-match-card featured">
       <div class="data-match-head">
         <div>
@@ -441,7 +617,26 @@ function renderContextExplorer(contexts) {
       </div>
     </article>
   `;
-  contextExplorerEl.querySelector('[data-refresh-context]')?.addEventListener('click', refreshContextData);
+}
+
+function openContextModal(context, contexts = []) {
+  if (!contextModalEl || !contextModalBodyEl) return;
+  const activeIndex = Math.max(0, contexts.findIndex((item) => contextKey(item) === contextKey(context)));
+  if (contextModalTitleEl) contextModalTitleEl.textContent = context.matchName || '比赛详情';
+  contextModalBodyEl.innerHTML = renderContextDetailCard(context, activeIndex);
+  contextModalBodyEl.querySelector('[data-refresh-context]')?.addEventListener('click', async (event) => {
+    await refreshContextData(event);
+    closeContextModal();
+  });
+  contextModalEl.hidden = false;
+  document.body.classList.add('modal-open');
+  contextModalEl.querySelector('[data-close-context-modal]')?.focus?.();
+}
+
+function closeContextModal() {
+  if (!contextModalEl) return;
+  contextModalEl.hidden = true;
+  document.body.classList.remove('modal-open');
 }
 
 function contextKey(context = {}) {
@@ -622,7 +817,17 @@ function modelBrand(modelName = '') {
     qwen: 'QW',
     ai: 'AI'
   }[key] || 'AI';
-  return `<span class="model-brand ${key}" aria-hidden="true">${label}</span>`;
+  const slug = {
+    gpt: 'openai',
+    claude: 'anthropic',
+    gemini: 'googlegemini',
+    deepseek: 'deepseek',
+    qwen: 'alibabacloud'
+  }[key];
+  const icon = slug
+    ? `<img src="https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg" alt="" loading="lazy" onerror="this.parentElement.classList.add('no-svg');this.remove()">`
+    : '';
+  return `<span class="model-brand ${key}" aria-hidden="true">${icon}<b>${label}</b></span>`;
 }
 
 function modelBrandKey(modelName = '') {
@@ -1024,7 +1229,7 @@ async function predict(id) {
 }
 
 async function runRanking(model, button) {
-  const original = button.textContent;
+  const originalHtml = button.innerHTML;
   let completed = false;
   try {
     button.disabled = true;
@@ -1042,7 +1247,7 @@ async function runRanking(model, button) {
     alert(error.message);
   } finally {
     button.disabled = false;
-    if (!completed) button.textContent = original;
+    if (!completed) button.innerHTML = originalHtml;
   }
 }
 
@@ -1054,10 +1259,9 @@ function renderRoute(markets, reports, contexts = []) {
   const aiPanel = $('#ai-panel');
   const historyPanel = $('#historyPanel');
   const isHome = location.pathname === '/';
-  const unfinishedContexts = contexts.filter(isUnfinishedContext);
 
   if (matchPanel) matchPanel.hidden = true;
-  if (dataPage) dataPage.hidden = !(location.pathname === '/data' || (isHome && unfinishedContexts.length));
+  if (dataPage) dataPage.hidden = location.pathname !== '/data';
   if (dataBackHome) dataBackHome.hidden = isHome;
   if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
   if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
@@ -1067,9 +1271,6 @@ function renderRoute(markets, reports, contexts = []) {
     renderContextExplorer(contexts);
     dataPage?.scrollIntoView({ block: 'start' });
     return;
-  }
-  if (isHome) {
-    renderContextExplorer(unfinishedContexts);
   }
   if (location.pathname === '/history') {
     $('#historyPanel')?.scrollIntoView({ block: 'start' });
