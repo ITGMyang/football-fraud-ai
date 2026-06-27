@@ -4,7 +4,7 @@ import { fetchDongqiudiContext, fetchDongqiudiMatches } from '../src/dongqiudi-f
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
-import { findExistingContext } from '../src/context-utils.js';
+import { contextKey, findExistingContext } from '../src/context-utils.js';
 
 export default {
   async fetch(request, env) {
@@ -297,11 +297,19 @@ async function routeApi(request, env) {
   if (request.method === 'POST' && url.pathname === '/api/rankings') {
     const body = await request.json();
     const db = await storage.readDb();
-    const context = (db.matchContexts || [])[0] || null;
+    const contextSelector = body.contextId || body.sourceUrl || body.matchId;
+    const context = contextSelector
+      ? findExistingContext(db.matchContexts || [], contextSelector)
+      : (db.matchContexts || [])[0] || null;
     if (!db.markets.length && !context) return json({ error: '还没有导入懂球帝比赛数据' }, 400);
     const requestedModel = body.model || 'all';
     const ranking = await rankMarkets(db.markets, requestedModel, env, workerFetch, context);
-    const savedRanking = await storage.saveRanking(ranking, { mergeLatest: requestedModel !== 'all' });
+    ranking.contextId = context ? contextKey(context) : '';
+    ranking.contextName = context?.matchName || '';
+    const latest = (db.rankings || [])[0];
+    const savedRanking = await storage.saveRanking(ranking, {
+      mergeLatest: requestedModel !== 'all' && latest?.contextId === ranking.contextId
+    });
     return json({ ranking: savedRanking });
   }
 

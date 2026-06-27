@@ -11,7 +11,9 @@ export function findExistingContext(contexts = [], sourceUrl = '') {
   const targetUrl = String(sourceUrl || '').trim();
   const targetId = extractDongqiudiMatchId(targetUrl);
   return (contexts || []).find((context) => {
-    const existingId = contextKey(context);
-    return (targetId && existingId === targetId) || (targetUrl && context.sourceUrl === targetUrl);
+    const existingKey = contextKey(context);
+    return (targetId && existingKey === targetId)
+      || (targetUrl && context.sourceUrl === targetUrl)
+      || (targetUrl && existingKey === targetUrl);
   }) || null;
 }

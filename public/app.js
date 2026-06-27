@@ -201,7 +201,10 @@ async function importScheduleMatch(sourceUrl, button) {
 }
 
 function renderContexts(contexts) {
-  const latest = contexts?.[0];
+  const active = activeContextId
+    ? contexts?.find((context) => contextKey(context) === activeContextId)
+    : null;
+  const latest = active || contexts?.[0];
   if (!latest) {
     contextsEl.innerHTML = '<p class="meta">尚未导入懂球帝比赛数据。AI 预测目前只能参考手动盘口。</p>';
     return;
@@ -681,7 +684,7 @@ async function runRanking(model, button) {
     button.textContent = '预测中...';
     await api('/api/rankings', {
       method: 'POST',
-      body: JSON.stringify({ model })
+      body: JSON.stringify({ model, contextId: activeContextId })
     });
     activeRankingModel = model === 'all'
       ? 'all'

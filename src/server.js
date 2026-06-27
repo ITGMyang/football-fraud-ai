@@ -8,7 +8,7 @@ import { fetchDongqiudiContext, fetchDongqiudiMatches } from './dongqiudi-fetche
 import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
-import { findExistingContext } from './context-utils.js';
+import { contextKey, findExistingContext } from './context-utils.js';
 import { clearMarkets, readDb, saveRanking, saveReport, upsertMarkets, upsertMatchContext } from './storage.js';
 
 loadEnv();
@@ -127,11 +127,19 @@ async function route(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/rankings') {
     const body = await readJson(req);
     const db = readDb();
-    const context = (db.matchContexts || [])[0] || null;
+    const contextSelector = body.contextId || body.sourceUrl || body.matchId;
+    const context = contextSelector
+      ? findExistingContext(db.matchContexts || [], contextSelector)
+      : (db.matchContexts || [])[0] || null;
     if (!db.markets.length && !context) return json(res, 400, { error: '还没有导入懂球帝比赛数据' });
     const requestedModel = body.model || 'all';
     const ranking = await rankMarkets(db.markets, requestedModel, process.env, openRouterFetch, context);
-    const savedRanking = saveRanking(ranking, { mergeLatest: requestedModel !== 'all' });
+    ranking.contextId = context ? contextKey(context) : '';
+    ranking.contextName = context?.matchName || '';
+    const latest = (db.rankings || [])[0];
+    const savedRanking = saveRanking(ranking, {
+      mergeLatest: requestedModel !== 'all' && latest?.contextId === ranking.contextId
+    });
     return json(res, 200, { ranking: savedRanking });
   }
 
