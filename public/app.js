@@ -707,7 +707,6 @@ function renderRankings(rankings, markets) {
         `).join('')}
       </div>
     </div>
-    ${renderCategorySummary(activeResult, marketMap)}
     <div class="ranking-grid single">
       ${renderModelRanking(activeResult, marketMap)}
     </div>
@@ -844,30 +843,6 @@ function renderRankingPick(pick, marketMap, index) {
         ${risks.length ? risks.map((risk) => `<b>${escapeHtml(risk)}</b>`).join('') : '<b>模型未列出具体风险</b>'}
       </div>
     </article>
-  `;
-}
-
-function renderCategorySummary(result, marketMap) {
-  if (!result || result.error) return '';
-  const picks = result.picks || [];
-  return `
-    <div class="category-summary">
-      ${MARKET_GROUPS.slice(0, 4).map((group) => {
-        const topPick = picks.find((pick) => {
-          const market = pick.market || marketMap.get(pick.marketId) || {};
-          return marketCategory(market) === group.key;
-        });
-        const market = topPick ? (topPick.market || marketMap.get(topPick.marketId) || {}) : null;
-        const label = market ? formatCategorySummaryLabel(group.key, market) : '';
-        return `
-          <div class="category-chip ${topPick ? 'filled' : ''}">
-            <span>${escapeHtml(group.label)}</span>
-            <strong>${topPick ? escapeHtml(label) : '未入 Top 4'}</strong>
-            <em>${topPick ? percent(topPick.estimatedProbability) : 'N/A'}</em>
-          </div>
-        `;
-      }).join('')}
-    </div>
   `;
 }
 
