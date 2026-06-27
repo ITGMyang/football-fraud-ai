@@ -4,10 +4,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>足球诈骗</title>
-    <link rel="stylesheet" href="/styles.css?v=20260628-0101">
+    <link rel="stylesheet" href="/styles.css?v=20260628-0201">
   </head>
   <body>
+    <nav class="floating-nav" aria-label="主导航">
+      <a class="brand" href="/">足球诈骗</a>
+      <div class="nav-links">
+        <a href="#matchSchedule">如果使用</a>
+        <a href="/data">已抓取数据</a>
+        <a href="#historyPanel">查看历史</a>
+        <a href="#subscriptionPanel">订阅费</a>
+      </div>
+      <a class="nav-auth" href="/login?next=/">登录 + 注册</a>
+    </nav>
+
     <header class="hero">
+      <video class="hero-video" autoplay muted loop playsinline preload="metadata" aria-hidden="true">
+        <source src="/hero-background.mp4" type="video/mp4">
+      </video>
+      <div class="hero-shade"></div>
       <div class="hero-inner">
         <p class="hero-kicker">World Cup AI Odds Lab</p>
         <h1>足球诈骗</h1>
@@ -94,8 +109,19 @@
         <h2>历史报告</h2>
         <div id="reports" class="cards"></div>
       </section>
+
+      <section id="subscriptionPanel" class="panel subscription-panel reveal">
+        <div>
+          <h2>订阅费</h2>
+          <p class="meta">后续可以接 Stripe、加会员权限、限制每日预测次数。当前版本先保留展示入口。</p>
+        </div>
+        <div class="subscription-price">
+          <span>当前</span>
+          <strong>内测免费</strong>
+        </div>
+      </section>
     </main>
 
-    <script src="/app.js?v=20260628-0101"></script>
+    <script src="/app.js?v=20260628-0201"></script>
   </body>
 </html>
