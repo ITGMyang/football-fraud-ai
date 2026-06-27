@@ -10,8 +10,9 @@ const contextExplorerEl = $('#contextExplorer');
 const matchPanel = $('#matchPanel');
 const matchDetailEl = $('#matchDetail');
 
+const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
 let activeRankingModel = 'all';
-let activeContextId = '';
+let activeContextId = readStoredActiveContextId();
 
 const MARKET_GROUPS = [
   { key: 'moneyline', label: '胜平负', help: '主胜、平局、客胜这类 1X2 市场。' },
@@ -67,6 +68,40 @@ function bind(selector, event, handler) {
   if (element) element.addEventListener(event, handler);
 }
 
+function readStoredActiveContextId() {
+  try {
+    return localStorage.getItem(ACTIVE_CONTEXT_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setActiveContextId(value) {
+  activeContextId = String(value || '');
+  try {
+    if (activeContextId) {
+      localStorage.setItem(ACTIVE_CONTEXT_STORAGE_KEY, activeContextId);
+    } else {
+      localStorage.removeItem(ACTIVE_CONTEXT_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage can be disabled in strict browser modes; the in-memory value still works.
+  }
+}
+
+function sortContextsForDisplay(contexts = []) {
+  return [...contexts].sort((a, b) => {
+    const capturedDiff = timestampOf(b.capturedAt) - timestampOf(a.capturedAt);
+    if (capturedDiff) return capturedDiff;
+    return timestampOf(b.kickoff) - timestampOf(a.kickoff);
+  });
+}
+
+function timestampOf(value) {
+  const parsed = Date.parse(value || '');
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 async function refresh() {
   const [{ markets }, { reports }, { rankings }, { contexts }] = await Promise.all([
     api('/api/markets'),
@@ -74,12 +109,16 @@ async function refresh() {
     api('/api/rankings'),
     api('/api/contexts')
   ]);
+  const orderedContexts = sortContextsForDisplay(contexts);
+  if (activeContextId && !orderedContexts.some((context) => contextKey(context) === activeContextId)) {
+    setActiveContextId('');
+  }
 
   window.currentMarkets = markets;
   window.currentRankings = rankings;
-  window.currentContexts = contexts;
-  renderRoute(markets, reports, contexts);
-  renderContexts(contexts);
+  window.currentContexts = orderedContexts;
+  renderRoute(markets, reports, orderedContexts);
+  renderContexts(orderedContexts);
   if (marketsEl) renderMarkets(markets);
   renderRankings(rankings, markets);
   updateRankButtons(rankings);
@@ -185,7 +224,7 @@ async function importScheduleMatch(sourceUrl, button) {
       method: 'POST',
       body: JSON.stringify({ sourceUrl })
     });
-    activeContextId = contextKey(context);
+    setActiveContextId(contextKey(context));
     await refresh();
     if (alreadyImported) {
       alert(`该场次已导入：${context.matchName || sourceUrl}`);
@@ -247,10 +286,12 @@ function renderContextExplorer(contexts) {
     return;
   }
 
-  if (!contexts.some((context) => contextKey(context) === activeContextId)) {
-    activeContextId = contextKey(contexts[0]);
+  let explorerActiveContextId = activeContextId;
+  if (!contexts.some((context) => contextKey(context) === explorerActiveContextId)) {
+    explorerActiveContextId = contextKey(contexts[0]);
+    if (!activeContextId) setActiveContextId(explorerActiveContextId);
   }
-  const activeContext = contexts.find((context) => contextKey(context) === activeContextId) || contexts[0];
+  const activeContext = contexts.find((context) => contextKey(context) === explorerActiveContextId) || contexts[0];
   const activeIndex = contexts.findIndex((context) => contextKey(context) === contextKey(activeContext));
 
   if (contextTabsEl) {
@@ -262,7 +303,7 @@ function renderContextExplorer(contexts) {
     `).join('');
     contextTabsEl.querySelectorAll('[data-context-tab]').forEach((button) => {
       button.addEventListener('click', () => {
-        activeContextId = button.dataset.contextTab;
+        setActiveContextId(button.dataset.contextTab);
         renderContextExplorer(contexts);
         renderContexts(window.currentContexts || contexts);
         renderRankings(window.currentRankings || [], window.currentMarkets || []);
@@ -410,7 +451,7 @@ async function refreshContextData(event) {
       method: 'POST',
       body: JSON.stringify({ sourceUrl })
     });
-    activeContextId = contextKey(context);
+    setActiveContextId(contextKey(context));
     await refresh();
     alert(`已刷新：${context.matchName || sourceUrl}`);
   } catch (error) {
@@ -484,6 +525,7 @@ async function importDongqiudiUrl(event) {
       method: 'POST',
       body: JSON.stringify({ sourceUrl })
     });
+    setActiveContextId(contextKey(context));
     await refresh();
     alert(`已导入：${context.matchName || '懂球帝比赛'}`);
   } catch (error) {
