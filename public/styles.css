@@ -793,6 +793,12 @@ summary {
   background: #181815;
 }
 
+.kickoff-pill.secondary-time {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--muted) !important;
+  background: #101823;
+}
+
 .lineup-window {
   border: 1px solid var(--line);
   color: var(--muted) !important;

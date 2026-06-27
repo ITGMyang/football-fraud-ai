@@ -268,7 +268,8 @@ function renderContexts(contexts) {
           `).join('')}
         </div>
         <div class="context-time-row">
-          <span class="kickoff-pill">开赛 ${escapeHtml(formatKickoff(latest.kickoff))}</span>
+          <span class="kickoff-pill primary-time">当地开赛 ${escapeHtml(formatKickoff(latest))}</span>
+          <span class="kickoff-pill secondary-time">北京时间 ${escapeHtml(formatBeijingKickoff(latest.kickoff))}</span>
           <span class="lineup-window ${timing.state}">${escapeHtml(timing.label)}</span>
         </div>
         <span>阵容/战绩/指数/专家/文字直播上下文会随 AI 预测发送</span>
@@ -393,7 +394,24 @@ function countryFlag(teamName) {
   return flags.find(([name]) => text.includes(name))?.[1] || '🏳';
 }
 
-function formatKickoff(value) {
+function formatKickoff(context = {}) {
+  const kickoff = parseKickoffTime(context.kickoff);
+  if (!kickoff) return context.kickoff || '时间未知';
+  const venue = venueText(context);
+  const timeZone = venueTimeZone(venue) || 'Asia/Shanghai';
+  const label = kickoff.toLocaleString('zh-CN', {
+    timeZone,
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const venueLabel = shortVenue(venue);
+  return venueLabel ? `${label} · ${venueLabel}` : `${label} · 比赛地`;
+}
+
+function formatBeijingKickoff(value) {
   const kickoff = parseKickoffTime(value);
   if (!kickoff) return value || '时间未知';
   return kickoff.toLocaleString('zh-CN', {
@@ -404,6 +422,44 @@ function formatKickoff(value) {
     minute: '2-digit',
     hour12: false
   });
+}
+
+function venueText(context = {}) {
+  const items = [
+    ...(Array.isArray(context.live) ? context.live : []),
+    ...(Array.isArray(context.lineup?.notes) ? context.lineup.notes : [])
+  ];
+  const found = items.find((item) => /场地|球场|体育场|stadium|venue/i.test(String(item)));
+  return String(found || '')
+    .replace(/^场地[:：\s]*/i, '')
+    .trim();
+}
+
+function shortVenue(venue = '') {
+  return String(venue || '').split(/[·,，|]/)[0].trim();
+}
+
+function venueTimeZone(venue = '') {
+  const text = String(venue || '').toLowerCase().replace(/\s+/g, '');
+  const zones = [
+    ['费城', 'America/New_York'], ['philadelphia', 'America/New_York'],
+    ['纽约', 'America/New_York'], ['新泽西', 'America/New_York'], ['newyork', 'America/New_York'], ['newjersey', 'America/New_York'],
+    ['迈阿密', 'America/New_York'], ['miami', 'America/New_York'],
+    ['亚特兰大', 'America/New_York'], ['atlanta', 'America/New_York'],
+    ['波士顿', 'America/New_York'], ['boston', 'America/New_York'],
+    ['多伦多', 'America/Toronto'], ['toronto', 'America/Toronto'],
+    ['堪萨斯', 'America/Chicago'], ['kansascity', 'America/Chicago'],
+    ['达拉斯', 'America/Chicago'], ['dallas', 'America/Chicago'],
+    ['休斯敦', 'America/Chicago'], ['休斯顿', 'America/Chicago'], ['houston', 'America/Chicago'],
+    ['蒙特雷', 'America/Monterrey'], ['monterrey', 'America/Monterrey'],
+    ['墨西哥城', 'America/Mexico_City'], ['mexicocity', 'America/Mexico_City'],
+    ['瓜达拉哈拉', 'America/Mexico_City'], ['guadalajara', 'America/Mexico_City'],
+    ['洛杉矶', 'America/Los_Angeles'], ['losangeles', 'America/Los_Angeles'],
+    ['旧金山', 'America/Los_Angeles'], ['圣克拉拉', 'America/Los_Angeles'], ['sanfrancisco', 'America/Los_Angeles'], ['santaclara', 'America/Los_Angeles'],
+    ['西雅图', 'America/Los_Angeles'], ['seattle', 'America/Los_Angeles'],
+    ['温哥华', 'America/Vancouver'], ['vancouver', 'America/Vancouver']
+  ];
+  return zones.find(([name]) => text.includes(name))?.[1] || '';
 }
 
 function lineupTiming(context = {}) {
