@@ -707,6 +707,70 @@ summary {
   margin-bottom: 14px;
 }
 
+.ai-context-filter {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.ai-context-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ai-context-tabs button {
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+  max-width: 280px;
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+}
+
+.ai-context-tabs button.active {
+  border-color: var(--gold);
+  background: #1e1a10;
+}
+
+.ai-context-tabs strong,
+.ai-context-tabs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-context-tabs span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ai-context-tabs em {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: #101823;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.ai-context-tabs em.has-players {
+  color: #ccfff8;
+  background: #0d1f1e;
+}
+
+.ai-context-tabs em.no-players {
+  color: #ffe7a6;
+  background: #1e1a10;
+}
+
 .context-card {
   display: flex;
   justify-content: space-between;
@@ -828,6 +892,30 @@ summary {
   border-color: rgba(255, 255, 255, 0.14);
   color: #c4ccd8 !important;
   background: #151923;
+}
+
+.player-info-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--muted) !important;
+  background: #101823;
+  font-weight: 900;
+}
+
+.player-info-pill.has-players {
+  border-color: rgba(47, 199, 181, 0.48);
+  color: #ccfff8 !important;
+  background: #0d1f1e;
+}
+
+.player-info-pill.no-players {
+  border-color: rgba(243, 201, 91, 0.34);
+  color: #ffe7a6 !important;
+  background: #1e1a10;
 }
 
 .ai-controls {
@@ -1482,7 +1570,7 @@ pre {
   .hero-tagline { font-size: clamp(32px, 11vw, 58px); }
   .hero-copy { font-size: 16px; }
   main { width: min(100% - 20px, 1240px); padding-top: 18px; }
-  .grid, .steps, .ai-controls, .url-import { grid-template-columns: 1fr; }
+  .grid, .steps, .ai-controls, .url-import, .ai-context-filter { grid-template-columns: 1fr; }
   .market-overview, .report-metrics, .prediction-cards, .score-grid { grid-template-columns: 1fr; }
   .section-title-row, .schedule-meta, .schedule-actions, .data-match-head { flex-direction: column; }
   .data-snapshot, .data-modules { grid-template-columns: 1fr; }

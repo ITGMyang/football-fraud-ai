@@ -7,12 +7,16 @@ const contextsEl = $('#contexts');
 const matchScheduleEl = $('#matchSchedule');
 const contextTabsEl = $('#contextTabs');
 const contextExplorerEl = $('#contextExplorer');
+const aiContextDateEl = $('#aiContextDate');
+const aiContextTabsEl = $('#aiContextTabs');
 const matchPanel = $('#matchPanel');
 const matchDetailEl = $('#matchDetail');
 
 const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
+const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
 let activeRankingModel = 'all';
 let activeContextId = readStoredActiveContextId();
+let activeAiContextDate = readStoredValue(AI_CONTEXT_DATE_STORAGE_KEY);
 
 const MARKET_GROUPS = [
   { key: 'moneyline', label: '胜平负', help: '主胜、平局、客胜这类 1X2 市场。' },
@@ -31,6 +35,7 @@ bind('#refresh', 'click', refresh);
 bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
 bind('#competitionFilter', 'change', loadDongqiudiMatches);
 bind('#matchDate', 'change', loadDongqiudiMatches);
+bind('#aiContextDate', 'change', handleAiContextDateChange);
 
 bind('#importDongqiudiUrl', 'click', importDongqiudiUrl);
 
@@ -69,8 +74,12 @@ function bind(selector, event, handler) {
 }
 
 function readStoredActiveContextId() {
+  return readStoredValue(ACTIVE_CONTEXT_STORAGE_KEY);
+}
+
+function readStoredValue(key) {
   try {
-    return localStorage.getItem(ACTIVE_CONTEXT_STORAGE_KEY) || '';
+    return localStorage.getItem(key) || '';
   } catch {
     return '';
   }
@@ -86,6 +95,19 @@ function setActiveContextId(value) {
     }
   } catch {
     // localStorage can be disabled in strict browser modes; the in-memory value still works.
+  }
+}
+
+function setActiveAiContextDate(value) {
+  activeAiContextDate = String(value || '');
+  try {
+    if (activeAiContextDate) {
+      localStorage.setItem(AI_CONTEXT_DATE_STORAGE_KEY, activeAiContextDate);
+    } else {
+      localStorage.removeItem(AI_CONTEXT_DATE_STORAGE_KEY);
+    }
+  } catch {
+    // Keep the in-memory date when persistent storage is unavailable.
   }
 }
 
@@ -118,6 +140,7 @@ async function refresh() {
   window.currentRankings = rankings;
   window.currentContexts = orderedContexts;
   renderRoute(markets, reports, orderedContexts);
+  renderAiContextSelector(orderedContexts);
   renderContexts(orderedContexts);
   if (marketsEl) renderMarkets(markets);
   renderRankings(rankings, markets);
@@ -225,6 +248,7 @@ async function importScheduleMatch(sourceUrl, button) {
       body: JSON.stringify({ sourceUrl })
     });
     setActiveContextId(contextKey(context));
+    setActiveAiContextDate(contextDate(context));
     await refresh();
     if (alreadyImported) {
       alert(`该场次已导入：${context.matchName || sourceUrl}`);
@@ -254,6 +278,7 @@ function renderContexts(contexts) {
 
   const teams = contextTeams(latest);
   const timing = lineupTiming(latest);
+  const playerStatus = playerInfoStatus(latest);
   contextsEl.innerHTML = `
     <div class="context-card">
       <div class="context-card-main">
@@ -271,12 +296,85 @@ function renderContexts(contexts) {
           <span class="kickoff-pill primary-time">当地开赛 ${escapeHtml(formatKickoff(latest))}</span>
           <span class="kickoff-pill secondary-time">北京时间 ${escapeHtml(formatBeijingKickoff(latest.kickoff))}</span>
           <span class="lineup-window ${timing.state}">${escapeHtml(timing.label)}</span>
+          <span class="player-info-pill ${playerStatus.state}">${escapeHtml(playerStatus.label)}</span>
         </div>
         <span>阵容/战绩/指数/专家/文字直播上下文会随 AI 预测发送</span>
       </div>
       <a href="${escapeHtml(latest.sourceUrl || '#')}" target="_blank" rel="noreferrer">来源</a>
     </div>
   `;
+}
+
+function renderAiContextSelector(contexts = []) {
+  if (!aiContextDateEl || !aiContextTabsEl) return;
+  const datedContexts = contexts.filter((context) => contextDate(context));
+  if (!datedContexts.length) {
+    aiContextDateEl.innerHTML = '<option value="">暂无已导入数据</option>';
+    aiContextTabsEl.innerHTML = '<p class="meta">还没有已导入比赛。</p>';
+    return;
+  }
+
+  const dates = [...new Set(datedContexts.map(contextDate))].sort((a, b) => b.localeCompare(a));
+  const activeContext = activeContextId ? contexts.find((context) => contextKey(context) === activeContextId) : null;
+  const activeContextDate = activeContext ? contextDate(activeContext) : '';
+  if (!activeAiContextDate && activeContextDate) {
+    setActiveAiContextDate(activeContextDate);
+  }
+  if (!activeAiContextDate) {
+    const today = dateInShanghai(0);
+    setActiveAiContextDate(dates.includes(today) ? today : dates[0]);
+  }
+  if (!dates.includes(activeAiContextDate)) {
+    setActiveAiContextDate(activeContextDate && dates.includes(activeContextDate) ? activeContextDate : dates[0]);
+  }
+
+  aiContextDateEl.innerHTML = dates.map((date) => {
+    const count = datedContexts.filter((context) => contextDate(context) === date).length;
+    return `<option value="${escapeHtml(date)}" ${date === activeAiContextDate ? 'selected' : ''}>${escapeHtml(date)}（已导入 ${count} 场）</option>`;
+  }).join('');
+
+  const visibleContexts = datedContexts.filter((context) => contextDate(context) === activeAiContextDate);
+  if (!visibleContexts.some((context) => contextKey(context) === activeContextId)) {
+    setActiveContextId(contextKey(visibleContexts[0]));
+  }
+
+  aiContextTabsEl.innerHTML = visibleContexts.map((context) => {
+    const key = contextKey(context);
+    const players = playerInfoStatus(context);
+    return `
+      <button class="${key === activeContextId ? 'active' : ''}" data-ai-context-tab="${escapeHtml(key)}" type="button">
+        <strong>${escapeHtml(context.matchName || '比赛')}</strong>
+        <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
+        <em class="${players.state}">${escapeHtml(players.shortLabel)}</em>
+      </button>
+    `;
+  }).join('');
+
+  aiContextTabsEl.querySelectorAll('[data-ai-context-tab]').forEach((button) => {
+    button.addEventListener('click', () => {
+      setActiveContextId(button.dataset.aiContextTab);
+      const selected = contexts.find((context) => contextKey(context) === activeContextId);
+      setActiveAiContextDate(contextDate(selected) || activeAiContextDate);
+      renderAiContextSelector(contexts);
+      renderContexts(contexts);
+      renderRankings(window.currentRankings || [], window.currentMarkets || []);
+      updateRankButtons(window.currentRankings || []);
+      setupRevealAnimations();
+    });
+  });
+}
+
+function handleAiContextDateChange(event) {
+  const date = event.currentTarget.value;
+  setActiveAiContextDate(date);
+  const contexts = window.currentContexts || [];
+  const first = contexts.find((context) => contextDate(context) === date);
+  if (first) setActiveContextId(contextKey(first));
+  renderAiContextSelector(contexts);
+  renderContexts(contexts);
+  renderRankings(window.currentRankings || [], window.currentMarkets || []);
+  updateRankButtons(window.currentRankings || []);
+  setupRevealAnimations();
 }
 
 function renderContextExplorer(contexts) {
@@ -349,6 +447,20 @@ function renderContextExplorer(contexts) {
 function contextKey(context = {}) {
   const sourceUrl = String(context.sourceUrl || '');
   return context.matchId || sourceUrl.match(/dongqiudi\.com\/match\/(\d+)/i)?.[1] || sourceUrl || context.matchName || '';
+}
+
+function contextDate(context = {}) {
+  const text = String(context.kickoff || context.capturedAt || '').trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const parsed = parseKickoffTime(text);
+  if (!parsed) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(parsed);
 }
 
 function contextTeams(context = {}) {
@@ -474,6 +586,32 @@ function lineupTiming(context = {}) {
   return { state: 'done', label: '比赛可能已结束：仅适合复盘，不建议预测' };
 }
 
+function playerInfoStatus(context = {}) {
+  const kickoff = parseKickoffTime(context.kickoff);
+  const captured = context.capturedAt ? new Date(context.capturedAt) : null;
+  if (!kickoff || !captured || Number.isNaN(captured.getTime())) {
+    return {
+      state: 'unknown',
+      label: '队员信息状态未知',
+      shortLabel: '队员未知'
+    };
+  }
+  const diff = kickoff.getTime() - captured.getTime();
+  const inOneHourWindow = diff >= 0 && diff <= 60 * 60 * 1000;
+  if (inOneHourWindow) {
+    return {
+      state: 'has-players',
+      label: '赛前 1 小时内导入：含队员信息',
+      shortLabel: '含队员'
+    };
+  }
+  return {
+    state: 'no-players',
+    label: '非赛前 1 小时导入：无队员信息',
+    shortLabel: '无队员'
+  };
+}
+
 function modelBrand(modelName = '') {
   const key = modelBrandKey(modelName);
   const label = {
@@ -509,6 +647,7 @@ async function refreshContextData(event) {
       body: JSON.stringify({ sourceUrl })
     });
     setActiveContextId(contextKey(context));
+    setActiveAiContextDate(contextDate(context));
     await refresh();
     alert(`已刷新：${context.matchName || sourceUrl}`);
   } catch (error) {
@@ -583,6 +722,7 @@ async function importDongqiudiUrl(event) {
       body: JSON.stringify({ sourceUrl })
     });
     setActiveContextId(contextKey(context));
+    setActiveAiContextDate(contextDate(context));
     await refresh();
     alert(`已导入：${context.matchName || '懂球帝比赛'}`);
   } catch (error) {

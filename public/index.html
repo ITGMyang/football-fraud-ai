@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>足球诈骗</title>
-    <link rel="stylesheet" href="/styles.css?v=20260628-0601">
+    <link rel="stylesheet" href="/styles.css?v=20260628-0701">
   </head>
   <body>
     <nav class="floating-nav" aria-label="主导航">
@@ -90,6 +90,12 @@
 
       <section id="ai-panel" class="panel reveal">
         <h2>AI 预测</h2>
+        <div class="ai-context-filter">
+          <label>已导入日期
+            <select id="aiContextDate"></select>
+          </label>
+          <div id="aiContextTabs" class="ai-context-tabs"></div>
+        </div>
         <div id="contexts" class="contexts"></div>
         <div class="ai-controls">
           <div>
@@ -130,6 +136,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260628-1101"></script>
+    <script src="/app.js?v=20260628-1201"></script>
   </body>
 </html>
