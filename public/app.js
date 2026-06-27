@@ -77,7 +77,6 @@ async function refresh() {
 
   window.currentMarkets = markets;
   renderContexts(contexts);
-  renderContextExplorer(contexts);
   if (marketsEl) renderMarkets(markets);
   renderRankings(rankings, markets);
   renderReports(reports);
@@ -704,9 +703,10 @@ function renderRoute(markets, reports, contexts = []) {
   const aiPanel = $('#ai-panel');
   const historyPanel = $('#historyPanel');
   const isHome = location.pathname === '/';
+  const unfinishedContexts = contexts.filter(isUnfinishedContext);
 
   if (matchPanel) matchPanel.hidden = true;
-  if (dataPage) dataPage.hidden = !(location.pathname === '/data' || (isHome && contexts.length));
+  if (dataPage) dataPage.hidden = !(location.pathname === '/data' || (isHome && unfinishedContexts.length));
   if (dataBackHome) dataBackHome.hidden = isHome;
   if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
   if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
@@ -716,6 +716,9 @@ function renderRoute(markets, reports, contexts = []) {
     renderContextExplorer(contexts);
     dataPage?.scrollIntoView({ block: 'start' });
     return;
+  }
+  if (isHome) {
+    renderContextExplorer(unfinishedContexts);
   }
   if (location.pathname === '/history') {
     $('#historyPanel')?.scrollIntoView({ block: 'start' });
@@ -745,6 +748,25 @@ function renderRoute(markets, reports, contexts = []) {
   `;
   matchDetailEl.querySelector('button')?.addEventListener('click', () => predict(market.id));
   matchPanel.scrollIntoView({ block: 'start' });
+}
+
+function isUnfinishedContext(context) {
+  const kickoff = parseKickoffTime(context?.kickoff);
+  if (!kickoff) return false;
+  const estimatedFinalWhistle = kickoff.getTime() + (150 * 60 * 1000);
+  return estimatedFinalWhistle > Date.now();
+}
+
+function parseKickoffTime(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (match) {
+    const [, year, month, day, hour, minute, second = '00'] = match;
+    return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`);
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 async function api(path, options = {}) {
