@@ -2,15 +2,15 @@ import { aggregateReport, validatePrediction } from './domain.js';
 
 export function configuredModels(env = process.env) {
   return [
-    [env.MODEL_GPT_LABEL || 'GPT', env.MODEL_GPT, 'GPT'],
-    [env.MODEL_GEMINI_LABEL || 'Gemini', env.MODEL_GEMINI, 'Gemini'],
-    [env.MODEL_DEEPSEEK_LABEL || 'DeepSeek', env.MODEL_DEEPSEEK, 'DeepSeek'],
-    [env.MODEL_QWEN_LABEL || 'Qwen', env.MODEL_QWEN, 'Qwen']
+    [env.MODEL_GPT_LABEL || 'GPT', env.MODEL_GPT, 'GPT', env.MODEL_GPT_PROVIDER || (env.OPENAI_API_KEY ? 'openai' : 'openrouter')],
+    [env.MODEL_GEMINI_LABEL || 'Gemini', env.MODEL_GEMINI, 'Gemini', 'openrouter'],
+    [env.MODEL_DEEPSEEK_LABEL || 'DeepSeek', env.MODEL_DEEPSEEK, 'DeepSeek', 'openrouter'],
+    [env.MODEL_QWEN_LABEL || 'Qwen', env.MODEL_QWEN, 'Qwen', 'openrouter']
   ].filter(([, model]) => model);
 }
 
 export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
-  if (!env.OPENROUTER_API_KEY) {
+  if (!env.OPENROUTER_API_KEY && !env.OPENAI_API_KEY) {
     throw new Error('缺少 OPENROUTER_API_KEY，请在 .env 中配置');
   }
 
@@ -18,8 +18,8 @@ export async function predictMarket(market, env = process.env, fetchImpl = fetch
   if (models.length === 0) throw new Error('没有配置模型，请设置 MODEL_GPT/MODEL_GEMINI/MODEL_DEEPSEEK/MODEL_QWEN');
 
   const predictions = [];
-  for (const [label, model] of models) {
-    const result = await callModelWithRetry({ label, model, market, env, fetchImpl });
+  for (const [label, model,, provider] of models) {
+    const result = await callModelWithRetry({ label, model, provider, market, env, fetchImpl });
     predictions.push(result);
   }
 
@@ -34,7 +34,7 @@ export async function predictMarket(market, env = process.env, fetchImpl = fetch
 }
 
 export async function rankMarkets(markets, modelLabel = 'all', env = process.env, fetchImpl = fetch, matchContext = null) {
-  if (!env.OPENROUTER_API_KEY) {
+  if (!env.OPENROUTER_API_KEY && !env.OPENAI_API_KEY) {
     throw new Error('缺少 OPENROUTER_API_KEY，请在 .env 中配置');
   }
 
@@ -55,8 +55,8 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
   }));
 
   const results = [];
-  for (const [label, model] of selected) {
-    results.push(await callRankingModelWithRetry({ label, model, markets: compactMarkets, env, fetchImpl, matchContext }));
+  for (const [label, model,, provider] of selected) {
+    results.push(await callRankingModelWithRetry({ label, model, provider, markets: compactMarkets, env, fetchImpl, matchContext }));
   }
 
   return {
@@ -82,16 +82,15 @@ async function callRankingModelWithRetry(args) {
   return second.error ? { ...second, firstError: first.error } : second;
 }
 
-async function callModel({ label, model, market, env, fetchImpl, retry = false }) {
+async function callModel({ label, model, provider, market, env, fetchImpl, retry = false }) {
   try {
-    const baseUrl = env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
-    const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    const client = modelClient(provider, env);
+    const response = await fetchImpl(`${client.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+        'Authorization': `Bearer ${client.apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Football Odds LLM Predictor'
+        ...client.extraHeaders
       },
       body: JSON.stringify({
         model,
@@ -106,7 +105,7 @@ async function callModel({ label, model, market, env, fetchImpl, retry = false }
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`OpenRouter ${response.status}: ${body.slice(0, 300)}`);
+      throw new Error(`${client.name} ${response.status}: ${body.slice(0, 300)}`);
     }
 
     const data = await response.json();
@@ -116,27 +115,28 @@ async function callModel({ label, model, market, env, fetchImpl, retry = false }
     return {
       modelName: label,
       modelId: model,
+      provider: client.name,
       prediction: validatePrediction(parsed, label)
     };
   } catch (error) {
     return {
       modelName: label,
       modelId: model,
+      provider: provider || 'openrouter',
       error: error.message
     };
   }
 }
 
-async function callRankingModel({ label, model, markets, env, fetchImpl, matchContext = null, retry = false }) {
+async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, retry = false }) {
   try {
-    const baseUrl = env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
-    const response = await fetchImpl(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    const client = modelClient(provider, env);
+    const response = await fetchImpl(`${client.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
+        'Authorization': `Bearer ${client.apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost',
-        'X-Title': 'Football Odds LLM Predictor'
+        ...client.extraHeaders
       },
       body: JSON.stringify({
         model,
@@ -152,7 +152,7 @@ async function callRankingModel({ label, model, markets, env, fetchImpl, matchCo
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`OpenRouter ${response.status}: ${body.slice(0, 300)}`);
+      throw new Error(`${client.name} ${response.status}: ${body.slice(0, 300)}`);
     }
 
     const data = await response.json();
@@ -164,6 +164,7 @@ async function callRankingModel({ label, model, markets, env, fetchImpl, matchCo
     return {
       modelName: label,
       modelId: model,
+      provider: client.name,
       picks,
       scorePicks
     };
@@ -171,6 +172,7 @@ async function callRankingModel({ label, model, markets, env, fetchImpl, matchCo
     return {
       modelName: label,
       modelId: model,
+      provider: provider || 'openrouter',
       error: error.message,
       picks: [],
       scorePicks: []
@@ -180,6 +182,29 @@ async function callRankingModel({ label, model, markets, env, fetchImpl, matchCo
 
 function stripJsonFence(content) {
   return String(content).replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+}
+
+function modelClient(provider = 'openrouter', env = process.env) {
+  if (provider === 'openai') {
+    if (!env.OPENAI_API_KEY) throw new Error('缺少 OPENAI_API_KEY，GPT 模型无法直连 OpenAI');
+    return {
+      name: 'OpenAI',
+      baseUrl: String(env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+      apiKey: env.OPENAI_API_KEY,
+      extraHeaders: {}
+    };
+  }
+
+  if (!env.OPENROUTER_API_KEY) throw new Error('缺少 OPENROUTER_API_KEY，OpenRouter 模型无法调用');
+  return {
+    name: 'OpenRouter',
+    baseUrl: String(env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
+    apiKey: env.OPENROUTER_API_KEY,
+    extraHeaders: {
+      'HTTP-Referer': 'http://localhost',
+      'X-Title': 'Football Odds LLM Predictor'
+    }
+  };
 }
 
 function parseModelJson(content) {

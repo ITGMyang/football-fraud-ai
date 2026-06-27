@@ -11,7 +11,8 @@
   },
   "vars": {
     "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
-    "MODEL_GPT_LABEL": "GPT",
+    "OPENAI_BASE_URL": "https://api.openai.com/v1",
+    "MODEL_GPT_LABEL": "GPT 5.5",
     "MODEL_GEMINI_LABEL": "Gemini",
     "MODEL_DEEPSEEK_LABEL": "DeepSeek",
     "MODEL_QWEN_LABEL": "Qwen"

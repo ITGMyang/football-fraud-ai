@@ -6,7 +6,7 @@
 
 ```powershell
 Copy-Item .env.example .env
-# 编辑 .env，填 OPENROUTER_API_KEY
+# 编辑 .env，填 OPENROUTER_API_KEY；如果 GPT 走 OpenAI 直连，也填 OPENAI_API_KEY
 npm install
 npm start
 ```
@@ -18,7 +18,7 @@ npm start
 - 前端和 API 部署到 Cloudflare Workers。
 - 数据存到 Supabase Postgres，Worker 使用 `SUPABASE_SECRET_KEY` 或旧版 `SUPABASE_SERVICE_ROLE_KEY` 从服务端访问。
 - 浏览器不会拿到 Supabase secret/service role key。
-- OpenRouter key 也作为 Cloudflare secret 保存。
+- OpenRouter key 和 OpenAI key 都作为 Cloudflare secret 保存。GPT 可以走 OpenAI 直连，其他模型继续走 OpenRouter。
 
 ## Supabase 初始化
 
@@ -36,6 +36,7 @@ npm start
 
 ```powershell
 npx wrangler secret put OPENROUTER_API_KEY
+npx wrangler secret put OPENAI_API_KEY
 npx wrangler secret put SUPABASE_URL
 npx wrangler secret put SUPABASE_SECRET_KEY
 npx wrangler secret put MODEL_GPT
