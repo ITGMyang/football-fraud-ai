@@ -76,11 +76,14 @@ async function refresh() {
   ]);
 
   window.currentMarkets = markets;
+  window.currentRankings = rankings;
+  window.currentContexts = contexts;
+  renderRoute(markets, reports, contexts);
   renderContexts(contexts);
   if (marketsEl) renderMarkets(markets);
   renderRankings(rankings, markets);
+  updateRankButtons(rankings);
   renderReports(reports);
-  renderRoute(markets, reports, contexts);
   setupRevealAnimations();
 }
 
@@ -246,6 +249,9 @@ function renderContextExplorer(contexts) {
       button.addEventListener('click', () => {
         activeContextId = button.dataset.contextTab;
         renderContextExplorer(contexts);
+        renderContexts(window.currentContexts || contexts);
+        renderRankings(window.currentRankings || [], window.currentMarkets || []);
+        updateRankButtons(window.currentRankings || []);
       });
     });
   }
@@ -462,7 +468,7 @@ function renderRankings(rankings, markets) {
     return;
   }
 
-  const newest = rankings?.[0];
+  const newest = currentContextRanking(rankings);
   const latestHasSuccess = newest?.results?.some((result) => (result.picks || []).length > 0);
   const latestNotice = latestHasSuccess
     ? '<div class="ranking-notice">当前只显示最新一轮预测结果；旧结果请到历史区复盘。</div>'
@@ -512,7 +518,7 @@ function renderRankings(rankings, markets) {
 }
 
 function collectLatestGeneratedResults(rankings) {
-  const latest = rankings?.[0];
+  const latest = currentContextRanking(rankings);
   if (!latest) return [];
   const results = latest.results || [];
   const successful = results.filter((result) => (result.picks || []).length > 0);
@@ -522,6 +528,24 @@ function collectLatestGeneratedResults(rankings) {
     ranking: latest,
     result
   }));
+}
+
+function currentContextRanking(rankings = []) {
+  if (!rankings?.length) return null;
+  if (!activeContextId) return rankings[0] || null;
+  return rankings.find((ranking) => ranking.contextId === activeContextId) || null;
+}
+
+function updateRankButtons(rankings = []) {
+  const hasRanking = Boolean(currentContextRanking(rankings));
+  document.querySelectorAll('[data-rank-model]').forEach((button) => {
+    const model = button.dataset.rankModel;
+    if (model === 'all') {
+      button.textContent = hasRanking ? '重新预测全部 AI' : '开始预测全部 AI';
+      return;
+    }
+    button.textContent = hasRanking ? `重跑 ${model}` : `开始 ${model}`;
+  });
 }
 
 function isActiveRankingItem(item) {
@@ -679,6 +703,7 @@ async function predict(id) {
 
 async function runRanking(model, button) {
   const original = button.textContent;
+  let completed = false;
   try {
     button.disabled = true;
     button.textContent = '预测中...';
@@ -690,11 +715,12 @@ async function runRanking(model, button) {
       ? 'all'
       : model;
     await refresh();
+    completed = true;
   } catch (error) {
     alert(error.message);
   } finally {
     button.disabled = false;
-    button.textContent = original;
+    if (!completed) button.textContent = original;
   }
 }
 
