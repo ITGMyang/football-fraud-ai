@@ -2,11 +2,17 @@ import { aggregateReport, validatePrediction } from './domain.js';
 
 export function configuredModels(env = process.env) {
   return [
-    [env.MODEL_GPT_LABEL || 'GPT', env.MODEL_GPT, 'GPT', env.MODEL_GPT_PROVIDER || (env.OPENAI_API_KEY ? 'openai' : 'openrouter')],
+    [env.MODEL_GPT_LABEL || 'GPT', env.MODEL_GPT, 'GPT', gptProvider(env)],
     [env.MODEL_GEMINI_LABEL || 'Gemini', env.MODEL_GEMINI, 'Gemini', 'openrouter'],
     [env.MODEL_DEEPSEEK_LABEL || 'DeepSeek', env.MODEL_DEEPSEEK, 'DeepSeek', 'openrouter'],
     [env.MODEL_QWEN_LABEL || 'Qwen', env.MODEL_QWEN, 'Qwen', 'openrouter']
   ].filter(([, model]) => model);
+}
+
+function gptProvider(env = process.env) {
+  const explicit = String(env.MODEL_GPT_PROVIDER || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  return String(env.MODEL_GPT || '').toLowerCase().startsWith('gpt-') ? 'openai' : 'openrouter';
 }
 
 export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
@@ -122,7 +128,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
     return {
       modelName: label,
       modelId: model,
-      provider: provider || 'openrouter',
+      provider: providerLabel(provider),
       error: error.message
     };
   }
@@ -172,12 +178,16 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
     return {
       modelName: label,
       modelId: model,
-      provider: provider || 'openrouter',
+      provider: providerLabel(provider),
       error: error.message,
       picks: [],
       scorePicks: []
     };
   }
+}
+
+function providerLabel(provider = 'openrouter') {
+  return provider === 'openai' ? 'OpenAI' : 'OpenRouter';
 }
 
 function stripJsonFence(content) {

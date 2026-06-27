@@ -8,6 +8,7 @@ import { fetchDongqiudiContext, fetchDongqiudiMatches } from './dongqiudi-fetche
 import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
+import { findExistingContext } from './context-utils.js';
 import { clearMarkets, readDb, saveRanking, saveReport, upsertMarkets, upsertMatchContext } from './storage.js';
 
 loadEnv();
@@ -31,7 +32,7 @@ server.listen(PORT, () => {
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/history' || /^\/match\/[^/]+$/.test(url.pathname))) {
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/history' || url.pathname === '/data' || /^\/match\/[^/]+$/.test(url.pathname))) {
     return serveFile(res, 'index.html', 'text/html; charset=utf-8');
   }
   if (req.method === 'GET' && url.pathname === '/app.js') return serveFile(res, 'app.js', 'text/javascript; charset=utf-8');
@@ -88,8 +89,18 @@ async function route(req, res) {
 
   if (req.method === 'POST' && url.pathname === '/api/import/dongqiudi-url') {
     const body = await readJson(req);
-    const context = upsertMatchContext(await fetchDongqiudiContext(body.sourceUrl || body.url, fetch));
-    return json(res, 200, { context });
+    const sourceUrl = body.sourceUrl || body.url;
+    const existing = findExistingContext(readDb().matchContexts || [], sourceUrl);
+    if (existing) return json(res, 200, { context: existing, alreadyImported: true });
+    const context = upsertMatchContext(await fetchDongqiudiContext(sourceUrl, fetch));
+    return json(res, 200, { context, alreadyImported: false });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/contexts/refresh') {
+    const body = await readJson(req);
+    const sourceUrl = body.sourceUrl || body.url;
+    const context = upsertMatchContext(await fetchDongqiudiContext(sourceUrl, fetch));
+    return json(res, 200, { context, refreshed: true });
   }
 
   if (req.method === 'OPTIONS' && url.pathname === '/api/import/chrome') {

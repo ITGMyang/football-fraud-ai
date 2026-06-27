@@ -219,3 +219,69 @@ test('ranking keeps score predictions even when model omits score market ids', a
   assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['1:0', '2:1', '1:1']);
   assert.ok(ranking.results[0].scorePicks.every((pick) => pick.marketId.startsWith('ai-score-')));
 });
+
+test('gpt-prefixed model uses OpenAI provider automatically', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let requestedUrl = '';
+  const fakeFetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.6, confidence: 0.5, reason: 'home', risks: [] }],
+              scorePicks: [
+                { score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'low' },
+                { score: '2:1', estimatedProbability: 0.18, confidence: 0.35, reason: 'edge' },
+                { score: '1:1', estimatedProbability: 0.16, confidence: 0.3, reason: 'draw' }
+              ]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENAI_API_KEY: 'test-openai',
+    OPENROUTER_API_KEY: 'test-openrouter',
+    MODEL_GPT: 'gpt-5.5'
+  }, fakeFetch);
+
+  assert.match(requestedUrl, /^https:\/\/api\.openai\.com\/v1\/chat\/completions$/);
+  assert.equal(ranking.results[0].provider, 'OpenAI');
+});
+
+test('non-gpt model id still uses OpenRouter provider', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let requestedUrl = '';
+  const fakeFetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.6, confidence: 0.5, reason: 'home', risks: [] }]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test-openrouter',
+    MODEL_GPT: 'openai/gpt-4o'
+  }, fakeFetch);
+
+  assert.match(requestedUrl, /^https:\/\/openrouter\.ai\/api\/v1\/chat\/completions$/);
+  assert.equal(ranking.results[0].provider, 'OpenRouter');
+});

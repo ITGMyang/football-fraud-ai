@@ -36,3 +36,31 @@ test('single model ranking merges into latest ranking instead of replacing other
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('upserting an imported match context refreshes capturedAt in place', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'football-storage-'));
+  process.chdir(tempDir);
+  try {
+    const storage = await import(`../src/storage.js?test=${Date.now()}-context`);
+    storage.upsertMatchContext({
+      matchId: '54329995',
+      sourceUrl: 'https://www.dongqiudi.com/match/54329995',
+      matchName: 'A v B',
+      capturedAt: '2026-06-26T00:00:00.000Z'
+    });
+    storage.upsertMatchContext({
+      matchId: '54329995',
+      sourceUrl: 'https://www.dongqiudi.com/match/54329995',
+      matchName: 'A v B',
+      capturedAt: '2026-06-27T00:00:00.000Z'
+    });
+
+    const contexts = storage.readDb().matchContexts;
+    assert.equal(contexts.length, 1);
+    assert.equal(contexts[0].capturedAt, '2026-06-27T00:00:00.000Z');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

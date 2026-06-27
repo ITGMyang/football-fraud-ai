@@ -4,6 +4,7 @@ import { fetchDongqiudiContext, fetchDongqiudiMatches } from '../src/dongqiudi-f
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
+import { findExistingContext } from '../src/context-utils.js';
 
 export default {
   async fetch(request, env) {
@@ -264,8 +265,17 @@ async function routeApi(request, env) {
 
   if (request.method === 'POST' && url.pathname === '/api/import/dongqiudi-url') {
     const body = await request.json();
+    const sourceUrl = body.sourceUrl || body.url;
+    const existing = findExistingContext((await storage.readDb()).matchContexts || [], sourceUrl);
+    if (existing) return json({ context: existing, alreadyImported: true });
+    const context = await storage.upsertMatchContext(await fetchDongqiudiContext(sourceUrl, workerFetch));
+    return json({ context, alreadyImported: false });
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/contexts/refresh') {
+    const body = await request.json();
     const context = await storage.upsertMatchContext(await fetchDongqiudiContext(body.sourceUrl || body.url, workerFetch));
-    return json({ context });
+    return json({ context, refreshed: true });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/markets') {

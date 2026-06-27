@@ -5,11 +5,13 @@ const reportsEl = $('#reports');
 const rankingsEl = $('#rankings');
 const contextsEl = $('#contexts');
 const matchScheduleEl = $('#matchSchedule');
+const contextTabsEl = $('#contextTabs');
 const contextExplorerEl = $('#contextExplorer');
 const matchPanel = $('#matchPanel');
 const matchDetailEl = $('#matchDetail');
 
 let activeRankingModel = 'all';
+let activeContextId = '';
 
 const MARKET_GROUPS = [
   { key: 'moneyline', label: '胜平负', help: '主胜、平局、客胜这类 1X2 市场。' },
@@ -76,10 +78,10 @@ async function refresh() {
   window.currentMarkets = markets;
   renderContexts(contexts);
   renderContextExplorer(contexts);
-  renderMarkets(markets);
+  if (marketsEl) renderMarkets(markets);
   renderRankings(rankings, markets);
   renderReports(reports);
-  renderRoute(markets, reports);
+  renderRoute(markets, reports, contexts);
   setupRevealAnimations();
 }
 
@@ -177,14 +179,19 @@ async function importScheduleMatch(sourceUrl, button) {
       button.disabled = true;
       button.textContent = '导入中...';
     }
-    $('#dongqiudiUrl').value = sourceUrl;
-    const { context } = await api('/api/import/dongqiudi-url', {
+    const { context, alreadyImported } = await api('/api/import/dongqiudi-url', {
       method: 'POST',
       body: JSON.stringify({ sourceUrl })
     });
+    activeContextId = contextKey(context);
+    if (alreadyImported) history.pushState({}, '', '/data');
     await refresh();
-    $('#ai-panel')?.scrollIntoView({ block: 'start' });
-    alert(`已导入：${context.matchName || sourceUrl}`);
+    if (alreadyImported) {
+      alert(`该场次已导入：${context.matchName || sourceUrl}`);
+    } else {
+      $('#ai-panel')?.scrollIntoView({ block: 'start' });
+      alert(`已导入：${context.matchName || sourceUrl}`);
+    }
   } catch (error) {
     alert(error.message);
   } finally {
@@ -216,19 +223,45 @@ function renderContexts(contexts) {
 function renderContextExplorer(contexts) {
   if (!contextExplorerEl) return;
   if (!contexts?.length) {
+    if (contextTabsEl) contextTabsEl.innerHTML = '';
     contextExplorerEl.innerHTML = '<p class="meta">还没有抓取比赛详情。先在“今日开场”里选择一场导入。</p>';
     return;
   }
 
-  contextExplorerEl.innerHTML = contexts.map((context, index) => `
-    <article class="data-match-card ${index === 0 ? 'featured' : ''}">
+  if (!contexts.some((context) => contextKey(context) === activeContextId)) {
+    activeContextId = contextKey(contexts[0]);
+  }
+  const activeContext = contexts.find((context) => contextKey(context) === activeContextId) || contexts[0];
+  const activeIndex = contexts.findIndex((context) => contextKey(context) === contextKey(activeContext));
+
+  if (contextTabsEl) {
+    contextTabsEl.innerHTML = contexts.map((context, index) => `
+      <button class="${contextKey(context) === contextKey(activeContext) ? 'active' : ''}" data-context-tab="${escapeHtml(contextKey(context))}" type="button">
+        <strong>${escapeHtml(context.matchName || `比赛 ${index + 1}`)}</strong>
+        <span>${escapeHtml(context.kickoff || context.capturedAt || '')}</span>
+      </button>
+    `).join('');
+    contextTabsEl.querySelectorAll('[data-context-tab]').forEach((button) => {
+      button.addEventListener('click', () => {
+        activeContextId = button.dataset.contextTab;
+        renderContextExplorer(contexts);
+      });
+    });
+  }
+
+  const context = activeContext;
+  contextExplorerEl.innerHTML = `
+    <article class="data-match-card featured">
       <div class="data-match-head">
         <div>
-          <span>${index === 0 ? '最新导入' : '历史抓取'}</span>
+          <span>${activeIndex === 0 ? '最新导入' : '已导入数据'}</span>
           <h3>${escapeHtml(context.matchName || '比赛')}</h3>
           <p>${escapeHtml(context.competition || '')} · ${escapeHtml(context.kickoff || '')}</p>
         </div>
-        <a href="${escapeHtml(context.sourceUrl || '#')}" target="_blank" rel="noreferrer">源页</a>
+        <div class="data-actions">
+          <button class="secondary" data-refresh-context="${escapeHtml(context.sourceUrl || '')}" type="button">刷新该场数据</button>
+          <a href="${escapeHtml(context.sourceUrl || '#')}" target="_blank" rel="noreferrer">源页</a>
+        </div>
       </div>
       <div class="data-snapshot">
         ${renderInfoTile('天气/场地', context.live?.join(' · ') || context.lineup?.notes?.join(' · ') || '未抓到')}
@@ -244,7 +277,35 @@ function renderContextExplorer(contexts) {
         ${renderExpertModule(context.experts || [])}
       </div>
     </article>
-  `).join('');
+  `;
+  contextExplorerEl.querySelector('[data-refresh-context]')?.addEventListener('click', refreshContextData);
+}
+
+function contextKey(context = {}) {
+  const sourceUrl = String(context.sourceUrl || '');
+  return context.matchId || sourceUrl.match(/dongqiudi\.com\/match\/(\d+)/i)?.[1] || sourceUrl || context.matchName || '';
+}
+
+async function refreshContextData(event) {
+  const button = event.currentTarget;
+  const sourceUrl = button.dataset.refreshContext;
+  const original = button.textContent;
+  try {
+    button.disabled = true;
+    button.textContent = '刷新中...';
+    const { context } = await api('/api/contexts/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ sourceUrl })
+    });
+    activeContextId = contextKey(context);
+    await refresh();
+    alert(`已刷新：${context.matchName || sourceUrl}`);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = original;
+  }
 }
 
 function renderInfoTile(label, value) {
@@ -323,6 +384,7 @@ async function importDongqiudiUrl(event) {
 }
 
 function renderMarkets(markets) {
+  if (!marketsEl) return;
   if (!markets.length) {
     marketsEl.innerHTML = '<p class="meta">旧盘口已清空。当前 AI 预测会基于懂球帝上下文生成候选项。</p>';
     return;
@@ -470,7 +532,7 @@ function renderModelRanking(result, marketMap) {
   if (result?.error) {
     return `
       <article class="model-ranking error">
-        <h3>${escapeHtml(result.modelName)}</h3>
+        <h3>${escapeHtml(result.modelName)} ${result.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}</h3>
         <p>${escapeHtml(formatModelError(result.error))}</p>
       </article>
     `;
@@ -482,6 +544,7 @@ function renderModelRanking(result, marketMap) {
       <div class="model-ranking-head">
         <div>
           <h3>${escapeHtml(result?.modelName || 'AI')}</h3>
+          ${result?.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}
           <p>按 AI 预测概率从大到小排序。概率来自模型判断，不是赔率换算。</p>
         </div>
         <span>Top ${picks.length}</span>
@@ -634,9 +697,24 @@ async function runRanking(model, button) {
   }
 }
 
-function renderRoute(markets, reports) {
+function renderRoute(markets, reports, contexts = []) {
   const match = location.pathname.match(/^\/match\/([^/]+)$/);
-  matchPanel.hidden = true;
+  const dataPage = $('#dataPage');
+  const matchCenter = $('.match-center');
+  const aiPanel = $('#ai-panel');
+  const historyPanel = $('#historyPanel');
+
+  if (matchPanel) matchPanel.hidden = true;
+  if (dataPage) dataPage.hidden = location.pathname !== '/data';
+  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
+  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
+  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || Boolean(match);
+
+  if (location.pathname === '/data') {
+    renderContextExplorer(contexts);
+    dataPage?.scrollIntoView({ block: 'start' });
+    return;
+  }
   if (location.pathname === '/history') {
     $('#historyPanel')?.scrollIntoView({ block: 'start' });
     return;
@@ -646,7 +724,7 @@ function renderRoute(markets, reports) {
   const id = decodeURIComponent(match[1]);
   const market = markets.find((item) => item.id === id);
   const related = reports.filter((report) => report.market?.id === id || report.consensus?.marketId === id);
-  matchPanel.hidden = false;
+  if (matchPanel) matchPanel.hidden = false;
   if (!market) {
     matchDetailEl.innerHTML = '<p class="meta">找不到这条盘口，可能已被清理。</p>';
     return;
@@ -763,6 +841,12 @@ function shortUrl(url) {
 
 function formatModelError(error) {
   const message = String(error || '');
+  if (/OpenAI 401|invalid_api_key|Incorrect API key|Missing Authentication/i.test(message) && /openai|api\.openai/i.test(message)) {
+    return 'OpenAI 401：OpenAI API Key 无效或没有被 Worker 读取。请检查 OPENAI_API_KEY secret 后重跑 GPT。';
+  }
+  if (/OpenRouter 401|Missing Authentication header/i.test(message)) {
+    return 'OpenRouter 401：这是旧结果或 OpenRouter API Key 缺失。GPT 使用 gpt-* 模型时会改走 OpenAI，请重跑 GPT 覆盖旧错误。';
+  }
   if (/more credits|credits|402|can only afford/i.test(message)) {
     return 'OpenRouter 余额不足或请求过大。可以先单独重跑 Qwen/DeepSeek，或充值后再试。';
   }

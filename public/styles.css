@@ -248,6 +248,41 @@ h3 {
   gap: 14px;
 }
 
+.context-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.context-tabs button {
+  display: grid;
+  gap: 4px;
+  max-width: 280px;
+  min-height: 62px;
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  text-align: left;
+}
+
+.context-tabs button.active {
+  border-color: var(--gold);
+  background: #1e1a10;
+}
+
+.context-tabs strong,
+.context-tabs span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-tabs span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .data-match-card {
   display: grid;
   gap: 14px;
@@ -288,6 +323,13 @@ h3 {
   color: var(--gold);
   font-weight: 900;
   text-decoration: none;
+}
+
+.data-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .data-snapshot {
@@ -744,6 +786,18 @@ summary {
 
 .model-ranking-head > span {
   color: var(--gold);
+  font-weight: 900;
+}
+
+.provider-badge {
+  display: inline-block;
+  width: fit-content;
+  border: 1px solid rgba(47, 199, 181, 0.34);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--teal);
+  background: #0d1a20;
+  font-size: 12px;
   font-weight: 900;
 }
 
