@@ -12,10 +12,13 @@
   --green: #29c780;
   --teal: #2fc7b5;
   --blue: #6f94ff;
+  --blue-strong: #3b82f6;
   --red: #ff6b7a;
   --crimson: #e11d48;
   --violet: #b284ff;
   --shadow: rgba(0, 0, 0, 0.24);
+  --shadow-strong: rgba(0, 0, 0, 0.42);
+  --focus-ring: rgba(243, 201, 91, 0.32);
 }
 
 * { box-sizing: border-box; }
@@ -26,7 +29,7 @@ html {
 
 body {
   margin: 0;
-  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-family: "Fira Sans", Arial, "Microsoft YaHei", sans-serif;
   background: var(--bg);
   color: var(--ink);
 }
@@ -224,8 +227,9 @@ details,
 }
 
 .panel {
-  padding: 18px;
+  padding: 20px;
   margin-bottom: 18px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 h2 {
@@ -295,12 +299,13 @@ h3 {
   border-radius: 8px;
   padding: 14px;
   background: var(--surface-2);
-  transition: transform 170ms ease, border-color 170ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .schedule-card:hover {
-  transform: translateY(-2px);
   border-color: rgba(47, 199, 181, 0.42);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.26);
 }
 
 .team-logo-row {
@@ -660,13 +665,13 @@ button,
   font: inherit;
   font-weight: 900;
   cursor: pointer;
-  transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
 }
 
 button:hover,
 .toolbar a:hover,
 .button:hover {
-  transform: translateY(-2px);
+  box-shadow: 0 0 0 3px rgba(243, 201, 91, 0.16);
 }
 
 button.secondary,
@@ -723,7 +728,7 @@ summary {
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 6px;
+  padding: 2px 2px 8px;
   scroll-snap-type: x proximity;
   scrollbar-width: thin;
   scrollbar-color: rgba(243, 201, 91, 0.65) rgba(255, 255, 255, 0.08);
@@ -754,11 +759,18 @@ summary {
   color: var(--ink);
   text-align: left;
   scroll-snap-align: start;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
 
 .ai-context-tabs button.active {
   border-color: var(--gold);
   background: #1e1a10;
+  box-shadow: 0 0 0 3px rgba(243, 201, 91, 0.10);
+}
+
+.ai-context-tabs button:hover {
+  border-color: rgba(243, 201, 91, 0.52);
 }
 
 .ai-context-tabs strong,
@@ -803,6 +815,7 @@ summary {
   border-radius: 8px;
   padding: 13px;
   background: #0d1a20;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .context-card-main {
@@ -950,7 +963,8 @@ summary {
   border-radius: 8px;
   padding: 14px;
   margin-bottom: 18px;
-  background: #151b22;
+  background: #111922;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .ai-controls strong {
@@ -1005,6 +1019,7 @@ summary {
   border-radius: 8px;
   padding: 12px;
   background: #0d1a20;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .generated-switch strong {
@@ -1030,6 +1045,7 @@ summary {
   border-color: var(--line);
   background: var(--surface-2);
   color: var(--ink);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .model-tabs button strong {
@@ -1039,6 +1055,7 @@ summary {
 .model-tabs button.active {
   border-color: var(--gold);
   background: #24200f;
+  box-shadow: 0 0 0 3px rgba(243, 201, 91, 0.10);
 }
 
 .model-tabs button.has-error {
@@ -1055,7 +1072,7 @@ summary {
 }
 
 .model-ranking {
-  padding: 14px;
+  padding: 18px;
 }
 
 .model-ranking.error {
@@ -1132,8 +1149,9 @@ summary {
   margin-bottom: 16px;
   border: 1px solid rgba(178, 132, 255, 0.28);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
   background: #121525;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .score-head {
@@ -1165,12 +1183,13 @@ summary {
   border-radius: 8px;
   padding: 12px;
   background: var(--surface-2);
-  transition: transform 170ms ease, border-color 170ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .score-card:hover {
-  transform: translateY(-2px);
   border-color: rgba(178, 132, 255, 0.52);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
 }
 
 .score-card span {
@@ -1206,17 +1225,21 @@ summary {
   min-height: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 14px;
+  padding: 16px;
   background: var(--surface-2);
-  transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .prediction-card:hover,
 .market-card:hover,
-.report-card:hover,
-.panel:hover {
-  transform: translateY(-2px);
+.report-card:hover {
   border-color: var(--line-strong);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+}
+
+.panel:hover {
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .prediction-card.moneyline { border-color: rgba(41, 199, 128, 0.36); }
@@ -1261,6 +1284,7 @@ summary {
   font-size: 42px;
   line-height: 1;
   font-weight: 900;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .prediction-metrics {
@@ -1275,6 +1299,7 @@ summary {
   border-radius: 8px;
   padding: 9px;
   background: #0d131d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
 .prediction-metrics span,
@@ -1340,12 +1365,12 @@ summary {
   display: grid;
   gap: 6px;
   padding: 12px;
-  transition: transform 160ms ease, border-color 160ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
   border-color: var(--line-strong);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.24);
 }
 
 .stat-card span {
@@ -1403,7 +1428,7 @@ summary {
   display: grid;
   gap: 10px;
   padding: 12px;
-  transition: transform 170ms ease, border-color 170ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .market-card h4 {
@@ -1494,7 +1519,7 @@ summary {
   display: grid;
   gap: 12px;
   padding: 14px;
-  transition: transform 170ms ease, border-color 170ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .report-head h3 {
