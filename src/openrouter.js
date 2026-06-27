@@ -3,9 +3,10 @@ import { aggregateReport, validatePrediction } from './domain.js';
 export function configuredModels(env = process.env) {
   return [
     [env.MODEL_GPT_LABEL || 'GPT', env.MODEL_GPT, 'GPT', gptProvider(env)],
-    [env.MODEL_GEMINI_LABEL || 'Gemini', env.MODEL_GEMINI, 'Gemini', 'openrouter'],
-    [env.MODEL_DEEPSEEK_LABEL || 'DeepSeek', env.MODEL_DEEPSEEK, 'DeepSeek', 'openrouter'],
-    [env.MODEL_QWEN_LABEL || 'Qwen', env.MODEL_QWEN, 'Qwen', 'openrouter']
+    [env.MODEL_CLAUDE_LABEL || 'Claude', env.MODEL_CLAUDE, 'Claude', modelProvider(env, 'CLAUDE', 'apimart')],
+    [env.MODEL_GEMINI_LABEL || 'Gemini', env.MODEL_GEMINI, 'Gemini', modelProvider(env, 'GEMINI', 'openrouter')],
+    [env.MODEL_DEEPSEEK_LABEL || 'DeepSeek', env.MODEL_DEEPSEEK, 'DeepSeek', modelProvider(env, 'DEEPSEEK', 'openrouter')],
+    [env.MODEL_QWEN_LABEL || 'Qwen', env.MODEL_QWEN, 'Qwen', modelProvider(env, 'QWEN', 'openrouter')]
   ].filter(([, model]) => model);
 }
 
@@ -13,6 +14,10 @@ function gptProvider(env = process.env) {
   const explicit = String(env.MODEL_GPT_PROVIDER || '').trim().toLowerCase();
   if (explicit) return explicit;
   return String(env.MODEL_GPT || '').toLowerCase().startsWith('gpt-') ? 'openai' : 'openrouter';
+}
+
+function modelProvider(env, name, fallback) {
+  return String(env[`MODEL_${name}_PROVIDER`] || fallback).trim().toLowerCase();
 }
 
 export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
@@ -204,7 +209,7 @@ function modelClient(provider = 'openrouter', env = process.env) {
     if (!env.APIMART_API_KEY) throw new Error('缺少 APIMART_API_KEY，GPT 模型无法通过 APIMart 调用');
     return {
       name: 'APIMart',
-      baseUrl: String(env.APIMART_BASE_URL || 'https://api.apimart.ai/v1').replace(/\/$/, ''),
+      baseUrl: String(env.APIMART_BASE_URL || 'https://api.apimart.ai/api/v1').replace(/\/$/, ''),
       apiKey: env.APIMART_API_KEY,
       extraHeaders: {}
     };

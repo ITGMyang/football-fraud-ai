@@ -279,12 +279,43 @@ test('explicit GPT provider can route through APIMart', async () => {
 
   const ranking = await rankMarkets(markets, 'GPT', {
     APIMART_API_KEY: 'test-apimart',
-    APIMART_BASE_URL: 'https://api.apimart.ai/v1',
+    APIMART_BASE_URL: 'https://api.apimart.ai/api/v1',
     MODEL_GPT: 'gpt-5.5',
     MODEL_GPT_PROVIDER: 'apimart'
   }, fakeFetch);
 
-  assert.match(requestedUrl, /^https:\/\/api\.apimart\.ai\/v1\/chat\/completions$/);
+  assert.match(requestedUrl, /^https:\/\/api\.apimart\.ai\/api\/v1\/chat\/completions$/);
+  assert.equal(ranking.results[0].provider, 'APIMart');
+});
+
+test('Claude model can route through APIMart', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let requestedUrl = '';
+  const fakeFetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.6, confidence: 0.5, reason: 'home', risks: [] }]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'Claude', {
+    APIMART_API_KEY: 'test-apimart',
+    MODEL_CLAUDE: 'claude-4.8',
+    MODEL_CLAUDE_PROVIDER: 'apimart'
+  }, fakeFetch);
+
+  assert.match(requestedUrl, /^https:\/\/api\.apimart\.ai\/api\/v1\/chat\/completions$/);
   assert.equal(ranking.results[0].provider, 'APIMart');
 });
 
