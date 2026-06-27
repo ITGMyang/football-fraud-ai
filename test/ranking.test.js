@@ -319,6 +319,38 @@ test('Claude model can route through APIMart', async () => {
   assert.equal(ranking.results[0].provider, 'APIMart');
 });
 
+test('model ids and api keys tolerate BOM and whitespace from secrets', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let sentAuth = '';
+  let sentModel = '';
+  const fakeFetch = async (_url, options) => {
+    sentAuth = options.headers.Authorization;
+    sentModel = JSON.parse(options.body).model;
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.6, confidence: 0.5, reason: 'home', risks: [] }]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  await rankMarkets(markets, 'Qwen', {
+    OPENROUTER_API_KEY: '\uFEFFsk-or-test\n',
+    MODEL_QWEN: '\uFEFFqwen/qwen3.7-max\n'
+  }, fakeFetch);
+
+  assert.equal(sentAuth, 'Bearer sk-or-test');
+  assert.equal(sentModel, 'qwen/qwen3.7-max');
+});
+
 test('non-gpt model id still uses OpenRouter provider', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })

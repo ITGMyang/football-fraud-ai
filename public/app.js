@@ -847,7 +847,10 @@ function formatModelError(error) {
     return 'OpenAI 401：OpenAI API Key 无效或没有被 Worker 读取。请检查 OPENAI_API_KEY secret 后重跑 GPT。';
   }
   if (/OpenRouter 401|Missing Authentication header/i.test(message)) {
-    return 'OpenRouter 401：这是旧结果或 OpenRouter API Key 缺失。GPT 使用 gpt-* 模型时会改走 OpenAI，请重跑 GPT 覆盖旧错误。';
+    return 'OpenRouter 401：OpenRouter API Key 缺失、无效，或密钥里混入不可见字符。请更新 OpenRouter key 后重跑该模型覆盖旧错误。';
+  }
+  if (/APIMart 401|invalid API key/i.test(message)) {
+    return 'APIMart 401：APIMart API Key 无效或没有被 Worker 正确读取。请更新 APIMart key 后重跑该模型。';
   }
   if (/more credits|credits|402|can only afford/i.test(message)) {
     return 'OpenRouter 余额不足或请求过大。可以先单独重跑 Qwen/DeepSeek，或充值后再试。';

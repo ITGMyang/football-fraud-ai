@@ -2,22 +2,22 @@ import { aggregateReport, validatePrediction } from './domain.js';
 
 export function configuredModels(env = process.env) {
   return [
-    [env.MODEL_GPT_LABEL || 'GPT', env.MODEL_GPT, 'GPT', gptProvider(env)],
-    [env.MODEL_CLAUDE_LABEL || 'Claude', env.MODEL_CLAUDE, 'Claude', modelProvider(env, 'CLAUDE', 'apimart')],
-    [env.MODEL_GEMINI_LABEL || 'Gemini', env.MODEL_GEMINI, 'Gemini', modelProvider(env, 'GEMINI', 'openrouter')],
-    [env.MODEL_DEEPSEEK_LABEL || 'DeepSeek', env.MODEL_DEEPSEEK, 'DeepSeek', modelProvider(env, 'DEEPSEEK', 'openrouter')],
-    [env.MODEL_QWEN_LABEL || 'Qwen', env.MODEL_QWEN, 'Qwen', modelProvider(env, 'QWEN', 'openrouter')]
+    [cleanEnvValue(env.MODEL_GPT_LABEL) || 'GPT', cleanEnvValue(env.MODEL_GPT), 'GPT', gptProvider(env)],
+    [cleanEnvValue(env.MODEL_CLAUDE_LABEL) || 'Claude', cleanEnvValue(env.MODEL_CLAUDE), 'Claude', modelProvider(env, 'CLAUDE', 'apimart')],
+    [cleanEnvValue(env.MODEL_GEMINI_LABEL) || 'Gemini', cleanEnvValue(env.MODEL_GEMINI), 'Gemini', modelProvider(env, 'GEMINI', 'openrouter')],
+    [cleanEnvValue(env.MODEL_DEEPSEEK_LABEL) || 'DeepSeek', cleanEnvValue(env.MODEL_DEEPSEEK), 'DeepSeek', modelProvider(env, 'DEEPSEEK', 'openrouter')],
+    [cleanEnvValue(env.MODEL_QWEN_LABEL) || 'Qwen', cleanEnvValue(env.MODEL_QWEN), 'Qwen', modelProvider(env, 'QWEN', 'openrouter')]
   ].filter(([, model]) => model);
 }
 
 function gptProvider(env = process.env) {
-  const explicit = String(env.MODEL_GPT_PROVIDER || '').trim().toLowerCase();
+  const explicit = cleanEnvValue(env.MODEL_GPT_PROVIDER).toLowerCase();
   if (explicit) return explicit;
-  return String(env.MODEL_GPT || '').toLowerCase().startsWith('gpt-') ? 'openai' : 'openrouter';
+  return cleanEnvValue(env.MODEL_GPT).toLowerCase().startsWith('gpt-') ? 'openai' : 'openrouter';
 }
 
 function modelProvider(env, name, fallback) {
-  return String(env[`MODEL_${name}_PROVIDER`] || fallback).trim().toLowerCase();
+  return cleanEnvValue(env[`MODEL_${name}_PROVIDER`] || fallback).toLowerCase();
 }
 
 export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
@@ -197,7 +197,11 @@ function providerLabel(provider = 'openrouter') {
 }
 
 function hasAnyApiKey(env = process.env) {
-  return Boolean(env.OPENROUTER_API_KEY || env.OPENAI_API_KEY || env.APIMART_API_KEY);
+  return Boolean(cleanEnvValue(env.OPENROUTER_API_KEY) || cleanEnvValue(env.OPENAI_API_KEY) || cleanEnvValue(env.APIMART_API_KEY));
+}
+
+function cleanEnvValue(value = '') {
+  return String(value || '').replace(/^\uFEFF/, '').trim();
 }
 
 function stripJsonFence(content) {
@@ -206,30 +210,33 @@ function stripJsonFence(content) {
 
 function modelClient(provider = 'openrouter', env = process.env) {
   if (provider === 'apimart') {
-    if (!env.APIMART_API_KEY) throw new Error('缺少 APIMART_API_KEY，GPT 模型无法通过 APIMart 调用');
+    const apiKey = cleanEnvValue(env.APIMART_API_KEY);
+    if (!apiKey) throw new Error('缺少 APIMART_API_KEY，GPT 模型无法通过 APIMart 调用');
     return {
       name: 'APIMart',
-      baseUrl: String(env.APIMART_BASE_URL || 'https://api.apimart.ai/api/v1').replace(/\/$/, ''),
-      apiKey: env.APIMART_API_KEY,
+      baseUrl: cleanEnvValue(env.APIMART_BASE_URL || 'https://api.apimart.ai/api/v1').replace(/\/$/, ''),
+      apiKey,
       extraHeaders: {}
     };
   }
 
   if (provider === 'openai') {
-    if (!env.OPENAI_API_KEY) throw new Error('缺少 OPENAI_API_KEY，GPT 模型无法直连 OpenAI');
+    const apiKey = cleanEnvValue(env.OPENAI_API_KEY);
+    if (!apiKey) throw new Error('缺少 OPENAI_API_KEY，GPT 模型无法直连 OpenAI');
     return {
       name: 'OpenAI',
-      baseUrl: String(env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
-      apiKey: env.OPENAI_API_KEY,
+      baseUrl: cleanEnvValue(env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+      apiKey,
       extraHeaders: {}
     };
   }
 
-  if (!env.OPENROUTER_API_KEY) throw new Error('缺少 OPENROUTER_API_KEY，OpenRouter 模型无法调用');
+  const apiKey = cleanEnvValue(env.OPENROUTER_API_KEY);
+  if (!apiKey) throw new Error('缺少 OPENROUTER_API_KEY，OpenRouter 模型无法调用');
   return {
     name: 'OpenRouter',
-    baseUrl: String(env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
-    apiKey: env.OPENROUTER_API_KEY,
+    baseUrl: cleanEnvValue(env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
+    apiKey,
     extraHeaders: {
       'HTTP-Referer': 'http://localhost',
       'X-Title': 'Football Odds LLM Predictor'
