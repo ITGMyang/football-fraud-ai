@@ -213,11 +213,26 @@ function renderContexts(contexts) {
     return;
   }
 
+  const teams = contextTeams(latest);
+  const timing = lineupTiming(latest);
   contextsEl.innerHTML = `
     <div class="context-card">
-      <div>
+      <div class="context-card-main">
         <strong>已导入懂球帝数据：${escapeHtml(latest.matchName || '比赛')}</strong>
-        <span>${escapeHtml(latest.kickoff || '')} · 阵容/战绩/指数/专家/文字直播上下文会随 AI 预测发送</span>
+        <div class="context-teams" aria-label="比赛双方">
+          ${teams.map((team, index) => `
+            <span class="team-flag">
+              <b>${escapeHtml(countryFlag(team))}</b>
+              ${escapeHtml(team || (index === 0 ? '主队' : '客队'))}
+            </span>
+            ${index === 0 ? '<em>v</em>' : ''}
+          `).join('')}
+        </div>
+        <div class="context-time-row">
+          <span class="kickoff-pill">开赛 ${escapeHtml(formatKickoff(latest.kickoff))}</span>
+          <span class="lineup-window ${timing.state}">${escapeHtml(timing.label)}</span>
+        </div>
+        <span>阵容/战绩/指数/专家/文字直播上下文会随 AI 预测发送</span>
       </div>
       <a href="${escapeHtml(latest.sourceUrl || '#')}" target="_blank" rel="noreferrer">来源</a>
     </div>
@@ -291,6 +306,97 @@ function renderContextExplorer(contexts) {
 function contextKey(context = {}) {
   const sourceUrl = String(context.sourceUrl || '');
   return context.matchId || sourceUrl.match(/dongqiudi\.com\/match\/(\d+)/i)?.[1] || sourceUrl || context.matchName || '';
+}
+
+function contextTeams(context = {}) {
+  const teams = Array.isArray(context.teams) && context.teams.length >= 2
+    ? context.teams
+    : splitMatchTeams(context.matchName);
+  return [teams[0] || context.lineup?.home || '', teams[1] || context.lineup?.away || ''];
+}
+
+function countryFlag(teamName) {
+  const text = String(teamName || '').toLowerCase().replace(/\s+/g, '');
+  const flags = [
+    ['库拉索', '🇨🇼'], ['curacao', '🇨🇼'], ['curaçao', '🇨🇼'],
+    ['科特迪瓦', '🇨🇮'], ['ivorycoast', '🇨🇮'], ['cotedivoire', '🇨🇮'],
+    ['巴拿马', '🇵🇦'], ['panama', '🇵🇦'],
+    ['英格兰', '🏴'], ['england', '🏴'],
+    ['挪威', '🇳🇴'], ['norway', '🇳🇴'],
+    ['法国', '🇫🇷'], ['france', '🇫🇷'],
+    ['厄瓜多尔', '🇪🇨'], ['ecuador', '🇪🇨'],
+    ['德国', '🇩🇪'], ['germany', '🇩🇪'],
+    ['韩国', '🇰🇷'], ['korea', '🇰🇷'],
+    ['墨西哥', '🇲🇽'], ['mexico', '🇲🇽'],
+    ['摩洛哥', '🇲🇦'], ['morocco', '🇲🇦'],
+    ['海地', '🇭🇹'], ['haiti', '🇭🇹'],
+    ['苏格兰', '🏴󠁧󠁢󠁳󠁣󠁴󠁿'], ['scotland', '🏴󠁧󠁢󠁳󠁣󠁴󠁿'],
+    ['巴西', '🇧🇷'], ['brazil', '🇧🇷'],
+    ['波斯尼亚', '🇧🇦'], ['bosnia', '🇧🇦'],
+    ['黑塞哥维那', '🇧🇦'],
+    ['卡塔尔', '🇶🇦'], ['qatar', '🇶🇦'],
+    ['瑞士', '🇨🇭'], ['switzerland', '🇨🇭'],
+    ['加拿大', '🇨🇦'], ['canada', '🇨🇦'],
+    ['克罗地亚', '🇭🇷'], ['croatia', '🇭🇷'],
+    ['加纳', '🇬🇭'], ['ghana', '🇬🇭'],
+    ['哥伦比亚', '🇨🇴'], ['colombia', '🇨🇴'],
+    ['葡萄牙', '🇵🇹'], ['portugal', '🇵🇹'],
+    ['刚果民主共和国', '🇨🇩'], ['drcongo', '🇨🇩'], ['congodr', '🇨🇩'],
+    ['乌兹别克斯坦', '🇺🇿'], ['uzbekistan', '🇺🇿'],
+    ['约旦', '🇯🇴'], ['jordan', '🇯🇴'],
+    ['阿根廷', '🇦🇷'], ['argentina', '🇦🇷'],
+    ['阿尔及利亚', '🇩🇿'], ['algeria', '🇩🇿'],
+    ['奥地利', '🇦🇹'], ['austria', '🇦🇹']
+  ];
+  return flags.find(([name]) => text.includes(name))?.[1] || '🏳';
+}
+
+function formatKickoff(value) {
+  const kickoff = parseKickoffTime(value);
+  if (!kickoff) return value || '时间未知';
+  return kickoff.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function lineupTiming(context = {}) {
+  const kickoff = parseKickoffTime(context.kickoff);
+  if (!kickoff) return { state: 'muted', label: '开赛时间未知：先做前期预测，赛前再刷新阵容' };
+  const diff = kickoff.getTime() - Date.now();
+  const oneHour = 60 * 60 * 1000;
+  const finalWhistle = kickoff.getTime() + (150 * 60 * 1000);
+  if (diff > oneHour) return { state: 'early', label: '请在此前期预测；首发通常赛前 1 小时重点刷新' };
+  if (diff >= 0) return { state: 'hot', label: '赛前 1 小时窗口：高亮检查队员/首发信息' };
+  if (Date.now() < finalWhistle) return { state: 'live', label: '比赛进行中：队员信息优先参考，谨慎重跑' };
+  return { state: 'done', label: '比赛可能已结束：仅适合复盘，不建议预测' };
+}
+
+function modelBrand(modelName = '') {
+  const key = modelBrandKey(modelName);
+  const label = {
+    gpt: 'GPT',
+    claude: 'C',
+    gemini: 'G',
+    deepseek: 'DS',
+    qwen: 'QW',
+    ai: 'AI'
+  }[key] || 'AI';
+  return `<span class="model-brand ${key}" aria-hidden="true">${label}</span>`;
+}
+
+function modelBrandKey(modelName = '') {
+  const text = String(modelName).toLowerCase();
+  if (text.includes('gpt') || text.includes('openai')) return 'gpt';
+  if (text.includes('claude')) return 'claude';
+  if (text.includes('gemini')) return 'gemini';
+  if (text.includes('deepseek')) return 'deepseek';
+  if (text.includes('qwen') || text.includes('通义')) return 'qwen';
+  return 'ai';
 }
 
 async function refreshContextData(event) {
@@ -495,7 +601,8 @@ function renderRankings(rankings, markets) {
       <div class="model-tabs" role="tablist" aria-label="切换已生成的 AI 预测结果">
         ${generated.map((item) => `
           <button class="${item.key === activeRankingModel ? 'active' : ''}" data-model-tab="${escapeHtml(item.key)}" type="button">
-            ${escapeHtml(item.result.modelName)}
+            ${modelBrand(item.result.modelName)}
+            <strong>${escapeHtml(item.result.modelName)}</strong>
             <span>${escapeHtml(new Date(item.ranking.createdAt).toLocaleTimeString())} · Top ${(item.result.picks || []).length}</span>
           </button>
         `).join('')}
@@ -557,7 +664,7 @@ function renderModelRanking(result, marketMap) {
   if (result?.error) {
     return `
       <article class="model-ranking error">
-        <h3>${escapeHtml(result.modelName)} ${result.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}</h3>
+        <h3 class="model-title">${modelBrand(result.modelName)} ${escapeHtml(result.modelName)} ${result.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}</h3>
         <p>${escapeHtml(formatModelError(result.error))}</p>
       </article>
     `;
@@ -568,7 +675,7 @@ function renderModelRanking(result, marketMap) {
     <article class="model-ranking">
       <div class="model-ranking-head">
         <div>
-          <h3>${escapeHtml(result?.modelName || 'AI')}</h3>
+          <h3 class="model-title">${modelBrand(result?.modelName)} ${escapeHtml(result?.modelName || 'AI')}</h3>
           ${result?.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}
           <p>按 AI 预测概率从大到小排序。概率来自模型判断，不是赔率换算。</p>
         </div>

@@ -718,9 +718,15 @@ summary {
   background: #0d1a20;
 }
 
+.context-card-main {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
 .context-card strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .context-card span {
@@ -732,6 +738,90 @@ summary {
   color: var(--teal);
   font-weight: 900;
   text-decoration: none;
+}
+
+.context-teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.context-teams em {
+  color: var(--gold);
+  font-style: normal;
+  font-weight: 900;
+}
+
+.team-flag {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--ink) !important;
+  background: #101823;
+  font-weight: 900;
+}
+
+.team-flag b {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.context-time-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.kickoff-pill,
+.lineup-window {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 900;
+}
+
+.kickoff-pill {
+  border: 1px solid rgba(243, 201, 91, 0.34);
+  color: var(--gold) !important;
+  background: #181815;
+}
+
+.lineup-window {
+  border: 1px solid var(--line);
+  color: var(--muted) !important;
+  background: #101823;
+}
+
+.lineup-window.hot {
+  border-color: rgba(255, 107, 122, 0.58);
+  color: #ffe2e6 !important;
+  background: #241018;
+  box-shadow: 0 0 0 3px rgba(255, 107, 122, 0.10);
+}
+
+.lineup-window.live {
+  border-color: rgba(47, 199, 181, 0.48);
+  color: #ccfff8 !important;
+  background: #0d1f1e;
+}
+
+.lineup-window.early {
+  border-color: rgba(243, 201, 91, 0.34);
+  color: #ffe7a6 !important;
+  background: #1e1a10;
+}
+
+.lineup-window.done {
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #c4ccd8 !important;
+  background: #151923;
 }
 
 .ai-controls {
@@ -825,6 +915,10 @@ summary {
   color: var(--ink);
 }
 
+.model-tabs button strong {
+  font-size: 13px;
+}
+
 .model-tabs button.active {
   border-color: var(--gold);
   background: #24200f;
@@ -902,6 +996,34 @@ summary {
   margin: 0 0 4px;
   font-size: 19px;
 }
+
+.model-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.model-brand {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: #07100c;
+  background: var(--gold);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.model-brand.gpt { background: #29c780; }
+.model-brand.claude { background: #f3c95b; }
+.model-brand.gemini { color: #fff; background: #6f94ff; }
+.model-brand.deepseek { color: #fff; background: #2fc7b5; }
+.model-brand.qwen { color: #fff; background: #b284ff; }
+.model-brand.ai { color: var(--ink); background: #657386; }
 
 .model-ranking-head p {
   margin: 0;
