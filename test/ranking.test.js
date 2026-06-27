@@ -152,6 +152,31 @@ test('ranking parser tolerates fenced JSON and trailing commas', async () => {
   assert.equal(ranking.results[0].picks[0].marketId, 'a');
 });
 
+test('ranking parser repairs missing commas between JSON array items', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 大小球', selection: '大', line: '2.5', odds: 1.8 }),
+    buildMarket({ id: 'b', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2.1 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: '{"picks":[{"marketId":"a","estimatedProbability":0.62,"confidence":0.5,"reason":"over","risks":["pace" "finishing"]} {"marketId":"b","estimatedProbability":0.58,"confidence":0.45,"reason":"home","risks":["rotation"]}],"scorePicks":[{"score":"2:1","estimatedProbability":0.18,"confidence":0.35,"reason":"fits"}]}'
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.equal(ranking.results[0].error, undefined);
+  assert.deepEqual(ranking.results[0].picks.map((pick) => pick.marketId).slice(0, 2), ['a', 'b']);
+});
+
 test('ranking keeps three score predictions separately', async () => {
   const markets = [
     buildMarket({ id: 's10', matchName: 'A v B', marketType: '足球 比分', selection: '1:0', line: '正确比分', odds: 7 }),

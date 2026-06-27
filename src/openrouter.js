@@ -252,17 +252,27 @@ function parseModelJson(content) {
     .replace(/，/g, ',')
     .replace(/：/g, ':')
     .replace(/,\s*([}\]])/g, '$1');
+  const repaired = repairLooseJson(cleaned);
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(repaired);
   } catch (error) {
-    const extracted = extractJsonObject(cleaned);
+    const extracted = extractJsonObject(repaired);
     if (!extracted) throw new Error(`模型返回的 JSON 格式无效: ${error.message}`);
     try {
-      return JSON.parse(extracted.replace(/,\s*([}\]])/g, '$1'));
+      return JSON.parse(repairLooseJson(extracted).replace(/,\s*([}\]])/g, '$1'));
     } catch (innerError) {
       throw new Error(`模型返回的 JSON 格式无效: ${innerError.message}`);
     }
   }
+}
+
+function repairLooseJson(value) {
+  return String(value || '')
+    .replace(/}\s*{/g, '},{')
+    .replace(/]\s*{/g, '],{')
+    .replace(/"\s+"/g, '","')
+    .replace(/(\d)\s+"/g, '$1,"')
+    .replace(/(true|false|null)\s+"/g, '$1,"');
 }
 
 function extractJsonObject(text) {
