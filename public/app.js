@@ -308,6 +308,7 @@ function renderContextExplorer(contexts) {
         renderContexts(window.currentContexts || contexts);
         renderRankings(window.currentRankings || [], window.currentMarkets || []);
         updateRankButtons(window.currentRankings || []);
+        setupRevealAnimations();
       });
     });
   }
@@ -662,6 +663,7 @@ function renderRankings(rankings, markets) {
       event.stopPropagation();
       activeRankingModel = button.dataset.modelTab;
       renderRankings(rankings, markets);
+      setupRevealAnimations();
     });
   });
 }
