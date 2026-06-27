@@ -44,12 +44,32 @@
       <section class="panel match-center reveal">
         <div class="section-title-row">
           <div>
-            <h2>今日开场</h2>
-            <p class="meta">自动抓取懂球帝重要比赛列表。点击场次可以导入详情数据，下面会按模块显示所有已抓到的信息。</p>
+            <h2>明日开场</h2>
+            <p class="meta">默认展示明日世界杯场次。也可以切换到中超、中甲等赛事类型，再点击场次导入详情数据。</p>
           </div>
           <div class="match-center-controls">
             <label>日期 <input id="matchDate" type="date"></label>
-            <button id="loadDongqiudiMatches">刷新今日场次</button>
+            <label>赛事类型
+              <select id="competitionFilter">
+                <option value="125" selected>世界杯</option>
+                <option value="10">重要比赛</option>
+                <option value="5">中超</option>
+                <option value="100">中甲</option>
+                <option value="101">中乙</option>
+                <option value="111">世俱杯</option>
+                <option value="105">亚冠精英</option>
+                <option value="6">英超</option>
+                <option value="7">西甲</option>
+                <option value="8">德甲</option>
+                <option value="9">意甲</option>
+                <option value="30">法甲</option>
+                <option value="31">欧冠</option>
+                <option value="34">欧联</option>
+                <option value="98">澳超</option>
+                <option value="99">沙特联</option>
+              </select>
+            </label>
+            <button id="loadDongqiudiMatches">刷新场次</button>
           </div>
         </div>
         <div id="matchSchedule" class="schedule-grid"></div>

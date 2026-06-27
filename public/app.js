@@ -26,6 +26,8 @@ bind('#loadSample', 'click', async () => {
 
 bind('#refresh', 'click', refresh);
 bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
+bind('#competitionFilter', 'change', loadDongqiudiMatches);
+bind('#matchDate', 'change', loadDongqiudiMatches);
 
 bind('#importDongqiudiUrl', 'click', importDongqiudiUrl);
 
@@ -84,12 +86,7 @@ async function refresh() {
 function initMatchDate() {
   const input = $('#matchDate');
   if (!input) return;
-  input.value = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(new Date());
+  input.value = dateInShanghai(1);
 }
 
 async function loadDongqiudiMatches(event) {
@@ -100,9 +97,10 @@ async function loadDongqiudiMatches(event) {
       button.disabled = true;
       button.textContent = '抓取中...';
     }
-    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">正在抓取懂球帝今日比赛列表...</p>';
+    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">正在抓取懂球帝比赛列表...</p>';
     const date = $('#matchDate')?.value || '';
-    const schedule = await api(`/api/dongqiudi/matches?competitionId=10${date ? `&date=${encodeURIComponent(date)}` : ''}`);
+    const competitionId = $('#competitionFilter')?.value || '125';
+    const schedule = await api(`/api/dongqiudi/matches?competitionId=${encodeURIComponent(competitionId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`);
     renderMatchSchedule(schedule);
   } catch (error) {
     if (matchScheduleEl) matchScheduleEl.innerHTML = `<p class="meta error-text">${escapeHtml(error.message)}</p>`;
@@ -116,15 +114,15 @@ async function loadDongqiudiMatches(event) {
 
 function renderMatchSchedule(schedule) {
   if (!matchScheduleEl) return;
-  const today = schedule.todayMatches || [];
-  const matches = today.length ? today : (schedule.matches || []).slice(0, 24);
+  const selectedDate = schedule.todayMatches || [];
+  const matches = selectedDate.length ? selectedDate : (schedule.matches || []).slice(0, 24);
   if (!matches.length) {
     matchScheduleEl.innerHTML = '<p class="meta">没有抓到比赛列表。可以继续用上方懂球帝 URL 手动导入。</p>';
     return;
   }
 
-  const notice = today.length
-    ? `${escapeHtml(schedule.date)} 共 ${today.length} 场`
+  const notice = selectedDate.length
+    ? `${escapeHtml(schedule.date)} 共 ${selectedDate.length} 场`
     : `没有匹配 ${escapeHtml(schedule.date)} 的场次，显示最近 ${matches.length} 场抓取结果`;
 
   matchScheduleEl.innerHTML = `
@@ -138,6 +136,18 @@ function renderMatchSchedule(schedule) {
   matchScheduleEl.querySelectorAll('[data-import-match]').forEach((button) => {
     button.addEventListener('click', () => importScheduleMatch(button.dataset.importMatch, button));
   });
+}
+
+function dateInShanghai(offsetDays = 0) {
+  const now = new Date();
+  const shanghaiNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+  shanghaiNow.setDate(shanghaiNow.getDate() + offsetDays);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(shanghaiNow);
 }
 
 function renderScheduleCard(match) {
