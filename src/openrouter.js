@@ -16,8 +16,8 @@ function gptProvider(env = process.env) {
 }
 
 export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
-  if (!env.OPENROUTER_API_KEY && !env.OPENAI_API_KEY) {
-    throw new Error('缺少 OPENROUTER_API_KEY，请在 .env 中配置');
+  if (!hasAnyApiKey(env)) {
+    throw new Error('缺少模型 API Key，请配置 OPENROUTER_API_KEY / OPENAI_API_KEY / APIMART_API_KEY');
   }
 
   const models = configuredModels(env);
@@ -40,8 +40,8 @@ export async function predictMarket(market, env = process.env, fetchImpl = fetch
 }
 
 export async function rankMarkets(markets, modelLabel = 'all', env = process.env, fetchImpl = fetch, matchContext = null) {
-  if (!env.OPENROUTER_API_KEY && !env.OPENAI_API_KEY) {
-    throw new Error('缺少 OPENROUTER_API_KEY，请在 .env 中配置');
+  if (!hasAnyApiKey(env)) {
+    throw new Error('缺少模型 API Key，请配置 OPENROUTER_API_KEY / OPENAI_API_KEY / APIMART_API_KEY');
   }
 
   const models = configuredModels(env);
@@ -187,7 +187,12 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
 }
 
 function providerLabel(provider = 'openrouter') {
+  if (provider === 'apimart') return 'APIMart';
   return provider === 'openai' ? 'OpenAI' : 'OpenRouter';
+}
+
+function hasAnyApiKey(env = process.env) {
+  return Boolean(env.OPENROUTER_API_KEY || env.OPENAI_API_KEY || env.APIMART_API_KEY);
 }
 
 function stripJsonFence(content) {
@@ -195,6 +200,16 @@ function stripJsonFence(content) {
 }
 
 function modelClient(provider = 'openrouter', env = process.env) {
+  if (provider === 'apimart') {
+    if (!env.APIMART_API_KEY) throw new Error('缺少 APIMART_API_KEY，GPT 模型无法通过 APIMart 调用');
+    return {
+      name: 'APIMart',
+      baseUrl: String(env.APIMART_BASE_URL || 'https://api.apimart.ai/v1').replace(/\/$/, ''),
+      apiKey: env.APIMART_API_KEY,
+      extraHeaders: {}
+    };
+  }
+
   if (provider === 'openai') {
     if (!env.OPENAI_API_KEY) throw new Error('缺少 OPENAI_API_KEY，GPT 模型无法直连 OpenAI');
     return {

@@ -256,6 +256,38 @@ test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   assert.equal(ranking.results[0].provider, 'OpenAI');
 });
 
+test('explicit GPT provider can route through APIMart', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let requestedUrl = '';
+  const fakeFetch = async (url) => {
+    requestedUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.6, confidence: 0.5, reason: 'home', risks: [] }]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    APIMART_API_KEY: 'test-apimart',
+    APIMART_BASE_URL: 'https://api.apimart.ai/v1',
+    MODEL_GPT: 'gpt-5.5',
+    MODEL_GPT_PROVIDER: 'apimart'
+  }, fakeFetch);
+
+  assert.match(requestedUrl, /^https:\/\/api\.apimart\.ai\/v1\/chat\/completions$/);
+  assert.equal(ranking.results[0].provider, 'APIMart');
+});
+
 test('non-gpt model id still uses OpenRouter provider', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
