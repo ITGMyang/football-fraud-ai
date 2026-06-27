@@ -717,13 +717,35 @@ summary {
 
 .ai-context-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(243, 201, 91, 0.65) rgba(255, 255, 255, 0.08);
+}
+
+.ai-context-tabs::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ai-context-tabs::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ai-context-tabs::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(243, 201, 91, 0.65);
 }
 
 .ai-context-tabs button {
   display: grid;
+  flex: 0 0 230px;
   gap: 5px;
   min-width: 190px;
   max-width: 280px;
@@ -731,6 +753,7 @@ summary {
   background: var(--surface-2);
   color: var(--ink);
   text-align: left;
+  scroll-snap-align: start;
 }
 
 .ai-context-tabs button.active {
