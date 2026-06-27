@@ -4,6 +4,8 @@ const marketsEl = $('#markets');
 const reportsEl = $('#reports');
 const rankingsEl = $('#rankings');
 const contextsEl = $('#contexts');
+const matchScheduleEl = $('#matchSchedule');
+const contextExplorerEl = $('#contextExplorer');
 const matchPanel = $('#matchPanel');
 const matchDetailEl = $('#matchDetail');
 
@@ -23,6 +25,7 @@ bind('#loadSample', 'click', async () => {
 });
 
 bind('#refresh', 'click', refresh);
+bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
 
 bind('#importDongqiudiUrl', 'click', importDongqiudiUrl);
 
@@ -51,7 +54,9 @@ bind('#manualForm', 'submit', async (event) => {
 });
 
 window.addEventListener('popstate', refresh);
+initMatchDate();
 refresh();
+loadDongqiudiMatches();
 
 function bind(selector, event, handler) {
   const element = $(selector);
@@ -68,11 +73,116 @@ async function refresh() {
 
   window.currentMarkets = markets;
   renderContexts(contexts);
+  renderContextExplorer(contexts);
   renderMarkets(markets);
   renderRankings(rankings, markets);
   renderReports(reports);
   renderRoute(markets, reports);
   setupRevealAnimations();
+}
+
+function initMatchDate() {
+  const input = $('#matchDate');
+  if (!input) return;
+  input.value = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+async function loadDongqiudiMatches(event) {
+  const button = event?.currentTarget || $('#loadDongqiudiMatches');
+  const original = button?.textContent;
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = '抓取中...';
+    }
+    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">正在抓取懂球帝今日比赛列表...</p>';
+    const date = $('#matchDate')?.value || '';
+    const schedule = await api(`/api/dongqiudi/matches?competitionId=10${date ? `&date=${encodeURIComponent(date)}` : ''}`);
+    renderMatchSchedule(schedule);
+  } catch (error) {
+    if (matchScheduleEl) matchScheduleEl.innerHTML = `<p class="meta error-text">${escapeHtml(error.message)}</p>`;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+}
+
+function renderMatchSchedule(schedule) {
+  if (!matchScheduleEl) return;
+  const today = schedule.todayMatches || [];
+  const matches = today.length ? today : (schedule.matches || []).slice(0, 24);
+  if (!matches.length) {
+    matchScheduleEl.innerHTML = '<p class="meta">没有抓到比赛列表。可以继续用上方懂球帝 URL 手动导入。</p>';
+    return;
+  }
+
+  const notice = today.length
+    ? `${escapeHtml(schedule.date)} 共 ${today.length} 场`
+    : `没有匹配 ${escapeHtml(schedule.date)} 的场次，显示最近 ${matches.length} 场抓取结果`;
+
+  matchScheduleEl.innerHTML = `
+    <div class="schedule-summary">
+      <strong>${notice}</strong>
+      <span>来源：${escapeHtml(shortUrl(schedule.sourceUrl))} · 抓取时间 ${escapeHtml(new Date(schedule.fetchedAt).toLocaleTimeString())}</span>
+    </div>
+    ${matches.map(renderScheduleCard).join('')}
+  `;
+
+  matchScheduleEl.querySelectorAll('[data-import-match]').forEach((button) => {
+    button.addEventListener('click', () => importScheduleMatch(button.dataset.importMatch, button));
+  });
+}
+
+function renderScheduleCard(match) {
+  return `
+    <article class="schedule-card">
+      <div class="team-logo-row">
+        <div><img src="${escapeHtml(match.homeLogo || '')}" alt=""><span>${escapeHtml(match.home || '')}</span></div>
+        <strong>${escapeHtml(match.score || match.time || 'vs')}</strong>
+        <div><img src="${escapeHtml(match.awayLogo || '')}" alt=""><span>${escapeHtml(match.away || '')}</span></div>
+      </div>
+      <div class="schedule-meta">
+        <span>${escapeHtml(match.date || '')} ${escapeHtml(match.time || '')}</span>
+        <b>${escapeHtml(match.competition || '')}</b>
+      </div>
+      <div class="schedule-actions">
+        <a href="${escapeHtml(match.sourceUrl)}" target="_blank" rel="noreferrer">打开源页</a>
+        <button data-import-match="${escapeHtml(match.sourceUrl)}">导入并分析</button>
+      </div>
+    </article>
+  `;
+}
+
+async function importScheduleMatch(sourceUrl, button) {
+  const original = button?.textContent;
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = '导入中...';
+    }
+    $('#dongqiudiUrl').value = sourceUrl;
+    const { context } = await api('/api/import/dongqiudi-url', {
+      method: 'POST',
+      body: JSON.stringify({ sourceUrl })
+    });
+    await refresh();
+    $('#ai-panel')?.scrollIntoView({ block: 'start' });
+    alert(`已导入：${context.matchName || sourceUrl}`);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
 }
 
 function renderContexts(contexts) {
@@ -91,6 +201,79 @@ function renderContexts(contexts) {
       <a href="${escapeHtml(latest.sourceUrl || '#')}" target="_blank" rel="noreferrer">来源</a>
     </div>
   `;
+}
+
+function renderContextExplorer(contexts) {
+  if (!contextExplorerEl) return;
+  if (!contexts?.length) {
+    contextExplorerEl.innerHTML = '<p class="meta">还没有抓取比赛详情。先在“今日开场”里选择一场导入。</p>';
+    return;
+  }
+
+  contextExplorerEl.innerHTML = contexts.map((context, index) => `
+    <article class="data-match-card ${index === 0 ? 'featured' : ''}">
+      <div class="data-match-head">
+        <div>
+          <span>${index === 0 ? '最新导入' : '历史抓取'}</span>
+          <h3>${escapeHtml(context.matchName || '比赛')}</h3>
+          <p>${escapeHtml(context.competition || '')} · ${escapeHtml(context.kickoff || '')}</p>
+        </div>
+        <a href="${escapeHtml(context.sourceUrl || '#')}" target="_blank" rel="noreferrer">源页</a>
+      </div>
+      <div class="data-snapshot">
+        ${renderInfoTile('天气/场地', context.live?.join(' · ') || context.lineup?.notes?.join(' · ') || '未抓到')}
+        ${renderInfoTile('阵型', context.lineup?.formation || '未抓到')}
+        ${renderInfoTile('指数标签', context.index?.tabs?.join(' / ') || '未抓到')}
+        ${renderInfoTile('专家信息', `${context.experts?.length || 0} 条公开标题`)}
+      </div>
+      <div class="data-modules">
+        ${renderDataModule('首发/球员', context.lineup?.players || [], 'players')}
+        ${renderDataModule('近期战绩', flattenRecent(context.analysis?.recent), 'recent')}
+        ${renderDataModule('积分/排名', context.analysis?.standings || [], 'standings')}
+        ${renderDataModule('指数摘要', context.index?.handicapRows || [], 'odds')}
+        ${renderExpertModule(context.experts || [])}
+      </div>
+    </article>
+  `).join('');
+}
+
+function renderInfoTile(label, value) {
+  return `
+    <div class="info-tile">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || '未抓到')}</strong>
+    </div>
+  `;
+}
+
+function renderDataModule(title, rows, type) {
+  const visible = (rows || []).slice(0, type === 'players' ? 30 : 10);
+  return `
+    <section class="data-module ${type}">
+      <h4>${escapeHtml(title)} <span>${visible.length}</span></h4>
+      ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p class="meta">未抓到这类数据。</p>'}
+    </section>
+  `;
+}
+
+function renderExpertModule(experts) {
+  const visible = (experts || []).slice(0, 8);
+  return `
+    <section class="data-module experts">
+      <h4>专家公开信息 <span>${visible.length}</span></h4>
+      ${visible.length ? visible.map((item) => `
+        <article class="expert-row">
+          <strong>${escapeHtml(item.author || '未知')}</strong>
+          <p>${escapeHtml(item.title || '')}</p>
+          <span>${escapeHtml([item.market, ...(item.tags || [])].filter(Boolean).join(' · '))}</span>
+        </article>
+      `).join('') : '<p class="meta">未抓到专家公开信息。</p>'}
+    </section>
+  `;
+}
+
+function flattenRecent(recent = {}) {
+  return Object.entries(recent).flatMap(([team, rows]) => (rows || []).slice(0, 6).map((row) => `${team}: ${row}`));
 }
 
 async function importStakeText() {

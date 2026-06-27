@@ -4,7 +4,7 @@ import path from 'node:path';
 import { loadEnv } from './env.js';
 import { buildMarket } from './domain.js';
 import { parseDongqiudiSections } from './dongqiudi.js';
-import { fetchDongqiudiContext } from './dongqiudi-fetcher.js';
+import { fetchDongqiudiContext, fetchDongqiudiMatches } from './dongqiudi-fetcher.js';
 import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
@@ -41,6 +41,14 @@ async function route(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/reports') return json(res, 200, { reports: readDb().reports });
   if (req.method === 'GET' && url.pathname === '/api/rankings') return json(res, 200, { rankings: readDb().rankings || [] });
   if (req.method === 'GET' && url.pathname === '/api/contexts') return json(res, 200, { contexts: readDb().matchContexts || [] });
+
+  if (req.method === 'GET' && url.pathname === '/api/dongqiudi/matches') {
+    const competitionId = url.searchParams.get('competitionId') || '10';
+    const date = url.searchParams.get('date') || undefined;
+    const sourceUrl = url.searchParams.get('sourceUrl') || '';
+    const result = await fetchDongqiudiMatches({ competitionId, date, sourceUrl }, fetch);
+    return json(res, 200, result);
+  }
 
   if (req.method === 'POST' && url.pathname === '/api/markets/clear') {
     clearMarkets();

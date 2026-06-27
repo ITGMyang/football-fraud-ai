@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractDongqiudiMatchId, fetchDongqiudiContext } from '../src/dongqiudi-fetcher.js';
+import { extractDongqiudiMatchId, fetchDongqiudiContext, parseDongqiudiMatchList } from '../src/dongqiudi-fetcher.js';
 
 test('extracts Dongqiudi match id from url', () => {
   assert.equal(extractDongqiudiMatchId('https://www.dongqiudi.com/match/54329995'), '54329995');
@@ -25,6 +25,37 @@ test('fetches and normalizes Dongqiudi public match APIs', async () => {
   assert.ok(context.analysis.standings[0].includes('德国'));
   assert.equal(context.lineup.formation, '5-3-2 vs 4-4-2');
   assert.equal(context.experts[0].author, '老郑聊球');
+});
+
+test('parses Dongqiudi mobile match list cards', () => {
+  const html = `
+    <ul class="match-list">
+      <li id="id54329964" class="match-calendar-item">
+        <h3 class="match-title">2026-06-27 星期六</h3>
+        <div class="match-list-item">
+          <div class="match-item-a"><img src="home.png"><p>挪威</p></div>
+          <div class="match-item-c"><p>03:00 世界杯 <!----></p><p class="spec">1 - 4</p></div>
+          <div class="match-item-b"><img src="away.png"><p>法国</p></div>
+        </div>
+      </li>
+      <li id="id54330012" class="match-calendar-item">
+        <div class="match-list-item">
+          <div class="match-item-a"><img src="h2.png"><p>塞内加尔</p></div>
+          <div class="match-item-c"><p>03:00 世界杯 <!----></p></div>
+          <div class="match-item-b"><img src="a2.png"><p>伊拉克</p></div>
+        </div>
+      </li>
+    </ul>
+  `;
+
+  const matches = parseDongqiudiMatchList(html);
+  assert.equal(matches.length, 2);
+  assert.equal(matches[0].matchId, '54329964');
+  assert.equal(matches[0].matchName, '挪威 v 法国');
+  assert.equal(matches[0].competition, '世界杯');
+  assert.equal(matches[0].score, '1 - 4');
+  assert.equal(matches[1].date, '2026-06-27');
+  assert.equal(matches[1].sourceUrl, 'https://www.dongqiudi.com/match/54330012');
 });
 
 function responseForUrl(url) {

@@ -41,6 +41,30 @@
         <p class="meta">当前模式不再依赖 Stake 赔率。AI 会基于懂球帝公开比赛数据生成候选方向并排序。</p>
       </section>
 
+      <section class="panel match-center reveal">
+        <div class="section-title-row">
+          <div>
+            <h2>今日开场</h2>
+            <p class="meta">自动抓取懂球帝重要比赛列表。点击场次可以导入详情数据，下面会按模块显示所有已抓到的信息。</p>
+          </div>
+          <div class="match-center-controls">
+            <label>日期 <input id="matchDate" type="date"></label>
+            <button id="loadDongqiudiMatches">刷新今日场次</button>
+          </div>
+        </div>
+        <div id="matchSchedule" class="schedule-grid"></div>
+      </section>
+
+      <section class="panel data-viewer reveal">
+        <div class="section-title-row">
+          <div>
+            <h2>已抓取比赛数据</h2>
+            <p class="meta">按场次展示阵容、天气、场地、近期战绩、积分、指数和专家公开信息。</p>
+          </div>
+        </div>
+        <div id="contextExplorer" class="context-explorer"></div>
+      </section>
+
       <section class="toolbar reveal">
         <details>
           <summary>高级方式：手动导入旧盘口</summary>

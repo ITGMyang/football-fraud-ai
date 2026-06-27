@@ -1,6 +1,6 @@
 import { buildMarket } from '../src/domain.js';
 import { parseDongqiudiSections } from '../src/dongqiudi.js';
-import { fetchDongqiudiContext } from '../src/dongqiudi-fetcher.js';
+import { fetchDongqiudiContext, fetchDongqiudiMatches } from '../src/dongqiudi-fetcher.js';
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
@@ -213,6 +213,13 @@ async function routeApi(request, env) {
   }
   if (request.method === 'GET' && url.pathname === '/api/contexts') {
     return json({ contexts: (await storage.readDb()).matchContexts || [] });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/dongqiudi/matches') {
+    const competitionId = url.searchParams.get('competitionId') || '10';
+    const date = url.searchParams.get('date') || undefined;
+    const sourceUrl = url.searchParams.get('sourceUrl') || '';
+    return json(await fetchDongqiudiMatches({ competitionId, date, sourceUrl }, workerFetch));
   }
 
   if (request.method === 'POST' && url.pathname === '/api/markets/clear') {
