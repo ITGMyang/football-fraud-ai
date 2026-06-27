@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>足球诈骗</title>
-    <link rel="stylesheet" href="/styles.css?v=20260626-0505">
+    <link rel="stylesheet" href="/styles.css?v=20260628-0101">
   </head>
   <body>
     <header class="hero">
@@ -13,7 +13,6 @@
         <h1>足球诈骗</h1>
         <p class="hero-copy">多模型复盘公开比赛信息，输出可追踪的 Top 4 概率卡片。只做分析，不自动下注，不承诺盈利。</p>
         <div class="hero-actions">
-          <a class="button" href="#ai-panel">开始预测</a>
           <a class="button secondary" href="/data">已抓取数据</a>
           <a class="button secondary" href="#historyPanel">查看历史</a>
         </div>
@@ -58,10 +57,10 @@
       <section id="dataPage" class="panel data-viewer reveal" hidden>
         <div class="section-title-row">
           <div>
-            <h2>已抓取比赛数据</h2>
+            <h2>当日已抓取数据</h2>
             <p class="meta">按场次展示阵容、天气、场地、近期战绩、积分、指数和专家公开信息。</p>
           </div>
-          <a class="button secondary" href="/">返回首页</a>
+          <a id="dataBackHome" class="button secondary" href="/">返回首页</a>
         </div>
         <div id="contextTabs" class="context-tabs"></div>
         <div id="contextExplorer" class="context-explorer"></div>
@@ -97,6 +96,6 @@
       </section>
     </main>
 
-    <script src="/app.js?v=20260626-0505"></script>
+    <script src="/app.js?v=20260628-0101"></script>
   </body>
 </html>

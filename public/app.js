@@ -184,7 +184,6 @@ async function importScheduleMatch(sourceUrl, button) {
       body: JSON.stringify({ sourceUrl })
     });
     activeContextId = contextKey(context);
-    if (alreadyImported) history.pushState({}, '', '/data');
     await refresh();
     if (alreadyImported) {
       alert(`该场次已导入：${context.matchName || sourceUrl}`);
@@ -700,12 +699,15 @@ async function runRanking(model, button) {
 function renderRoute(markets, reports, contexts = []) {
   const match = location.pathname.match(/^\/match\/([^/]+)$/);
   const dataPage = $('#dataPage');
+  const dataBackHome = $('#dataBackHome');
   const matchCenter = $('.match-center');
   const aiPanel = $('#ai-panel');
   const historyPanel = $('#historyPanel');
+  const isHome = location.pathname === '/';
 
   if (matchPanel) matchPanel.hidden = true;
-  if (dataPage) dataPage.hidden = location.pathname !== '/data';
+  if (dataPage) dataPage.hidden = !(location.pathname === '/data' || (isHome && contexts.length));
+  if (dataBackHome) dataBackHome.hidden = isHome;
   if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
   if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
   if (historyPanel) historyPanel.hidden = location.pathname === '/data' || Boolean(match);
