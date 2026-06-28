@@ -180,12 +180,42 @@ function formatPlayers(players, team) {
 function normalizeOdds(odds) {
   return {
     tabs: ['欧指', '让球', '进球数'].filter((name, index) => [odds?.euro, odds?.asia, odds?.size][index]?.length),
+    live: {
+      asia: formatLiveOddsRows(odds?.asia, '让球'),
+      euro: formatLiveOddsRows(odds?.euro, '欧指'),
+      size: formatLiveOddsRows(odds?.size, '进球数')
+    },
     handicapRows: [
       ...formatOddsRows(odds?.asia, '让球'),
       ...formatOddsRows(odds?.euro, '欧指'),
       ...formatOddsRows(odds?.size, '进球数')
     ].slice(0, 24)
   };
+}
+
+function formatLiveOddsRows(rows, market) {
+  return (rows || []).slice(0, 12).map((row) => {
+    if (Array.isArray(row)) {
+      return {
+        market,
+        company: '',
+        home: row[0] ?? '',
+        line: row[1] ?? '',
+        away: row[2] ?? '',
+        updatedAt: ''
+      };
+    }
+    const source = row?.now && typeof row.now === 'object' ? row.now : row || {};
+    return {
+      market,
+      company: firstText(row?.name, row?.company, row?.area, row?.abbr),
+      home: source.homeWin ?? source.home ?? '',
+      line: source.draw ?? source.handicap ?? '',
+      lineValue: source.draw_value ?? '',
+      away: source.awayWin ?? source.away ?? '',
+      updatedAt: source.ts || ''
+    };
+  }).filter((row) => row.home || row.line || row.away);
 }
 
 function formatOddsRows(rows, label) {

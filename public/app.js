@@ -668,7 +668,7 @@ function renderContextDetailCard(context, activeIndex = 0) {
         ${renderDataModule('首发/球员', context.lineup?.players || [], 'players')}
         ${renderDataModule('近期战绩', flattenRecent(context.analysis?.recent), 'recent')}
         ${renderDataModule('积分/排名', context.analysis?.standings || [], 'standings')}
-        ${renderDataModule('指数摘要', context.index?.handicapRows || [], 'odds')}
+        ${renderOddsModule(context.index)}
         ${renderExpertModule(context.experts || [])}
       </div>
     </article>
@@ -929,11 +929,53 @@ function renderInfoTile(label, value) {
 }
 
 function renderDataModule(title, rows, type) {
+  if (type === 'odds' && rows?.live) return renderOddsModule(rows);
   const visible = (rows || []).slice(0, type === 'players' ? 30 : 10);
   return `
     <section class="data-module ${type}">
       <h4>${escapeHtml(title)} <span>${visible.length}</span></h4>
       ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p class="meta">未抓到这类数据。</p>'}
+    </section>
+  `;
+}
+
+function renderOddsModule(index = {}) {
+  const live = index.live || {};
+  const groups = [
+    { key: 'asia', title: '即时让球', empty: '未抓到即时让球盘。' },
+    { key: 'size', title: '即时大小球', empty: '未抓到即时大小球。' },
+    { key: 'euro', title: '即时欧指', empty: '未抓到即时欧指。' }
+  ].map((group) => ({ ...group, rows: live[group.key] || [] }));
+  const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
+  if (!total) return renderDataModule('指数摘要', index.handicapRows || [], 'odds-fallback');
+  return `
+    <section class="data-module odds live-odds">
+      <h4>即时盘口 <span>${total}</span></h4>
+      ${groups.map((group) => `
+        <div class="odds-group">
+          <div class="odds-group-title">${escapeHtml(group.title)} <span>${group.rows.length}</span></div>
+          ${group.rows.length ? `
+            <div class="odds-table-wrap">
+              <table class="odds-table">
+                <thead>
+                  <tr><th>公司</th><th>主</th><th>${group.key === 'euro' ? '平' : '盘口'}</th><th>客</th><th>更新</th></tr>
+                </thead>
+                <tbody>
+                  ${group.rows.slice(0, 10).map((row) => `
+                    <tr>
+                      <td>${escapeHtml(row.company || '-')}</td>
+                      <td>${escapeHtml(row.home || '-')}</td>
+                      <td>${escapeHtml([row.line, row.lineValue ? `(${row.lineValue})` : ''].filter(Boolean).join(' ') || '-')}</td>
+                      <td>${escapeHtml(row.away || '-')}</td>
+                      <td>${escapeHtml(row.updatedAt || '-')}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : `<p class="meta">${escapeHtml(group.empty)}</p>`}
+        </div>
+      `).join('')}
     </section>
   `;
 }

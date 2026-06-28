@@ -520,6 +520,63 @@ h3 {
   line-height: 1.45;
 }
 
+.live-odds {
+  grid-column: 1 / -1;
+}
+
+.odds-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.odds-group:first-of-type {
+  margin-top: 0;
+}
+
+.odds-group-title {
+  display: flex;
+  justify-content: space-between;
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.odds-group-title span {
+  color: var(--muted);
+}
+
+.odds-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+}
+
+.odds-table {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: collapse;
+}
+
+.odds-table th,
+.odds-table td {
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.odds-table th {
+  color: var(--muted);
+  background: rgba(255,255,255,0.03);
+}
+
+.odds-table td:nth-child(2),
+.odds-table td:nth-child(4) {
+  color: var(--gold);
+  font-weight: 900;
+}
+
 .expert-row {
   display: grid;
   gap: 4px;
