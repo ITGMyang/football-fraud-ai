@@ -423,20 +423,85 @@ function contextCandidateMarkets(context) {
   const [home, away] = context.teams;
   const matchName = context.matchName || `${home} v ${away}`;
   const scores = ['0:0', '0:1', '1:1', '1:2', '0:2', '1:0', '2:1', '2:2', '3:0', '0:3', '3:1', '1:3', '4:0', '0:4'];
-  return [
-    { id: 'ctx-moneyline-home', matchName, marketType: '足球 胜平负', selection: home, line: '胜平负', odds: null },
-    { id: 'ctx-moneyline-draw', matchName, marketType: '足球 胜平负', selection: '平局', line: '胜平负', odds: null },
-    { id: 'ctx-moneyline-away', matchName, marketType: '足球 胜平负', selection: away, line: '胜平负', odds: null },
-    { id: 'ctx-handicap-home-plus-0.5', matchName, marketType: '足球 亚洲让分盘', selection: home, line: '+0.5', odds: null },
-    { id: 'ctx-handicap-away-minus-0.5', matchName, marketType: '足球 亚洲让分盘', selection: away, line: '-0.5', odds: null },
-    { id: 'ctx-handicap-home-plus-1', matchName, marketType: '足球 亚洲让分盘', selection: home, line: '+1', odds: null },
-    { id: 'ctx-handicap-away-minus-1', matchName, marketType: '足球 亚洲让分盘', selection: away, line: '-1', odds: null },
-    { id: 'ctx-total-over-2.5', matchName, marketType: '足球 大小球', selection: '大', line: '2.5', odds: null },
-    { id: 'ctx-total-under-2.5', matchName, marketType: '足球 大小球', selection: '小', line: '2.5', odds: null },
-    { id: 'ctx-total-over-3.5', matchName, marketType: '足球 大小球', selection: '大', line: '3.5', odds: null },
-    { id: 'ctx-total-under-3.5', matchName, marketType: '足球 大小球', selection: '小', line: '3.5', odds: null },
-    ...scores.map((score) => ({ id: `ctx-score-${score}`, matchName, marketType: '足球 比分', selection: score, line: '正确比分', odds: null }))
+  const liveHandicapMarkets = liveHandicapMarketsFromContext(context, home, away, matchName);
+  const fallbackHandicapMarkets = [
+    { id: 'ctx-handicap-home-plus-0.5', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: home, line: '+0.5', odds: null },
+    { id: 'ctx-handicap-away-minus-0.5', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: away, line: '-0.5', odds: null },
+    { id: 'ctx-handicap-home-plus-1', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: home, line: '+1', odds: null },
+    { id: 'ctx-handicap-away-minus-1', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: away, line: '-1', odds: null }
   ];
+  return [
+    { id: 'ctx-moneyline-home', matchName, marketType: '\u8db3\u7403 \u80dc\u5e73\u8d1f', selection: home, line: '\u80dc\u5e73\u8d1f', odds: null },
+    { id: 'ctx-moneyline-draw', matchName, marketType: '\u8db3\u7403 \u80dc\u5e73\u8d1f', selection: '\u5e73\u5c40', line: '\u80dc\u5e73\u8d1f', odds: null },
+    { id: 'ctx-moneyline-away', matchName, marketType: '\u8db3\u7403 \u80dc\u5e73\u8d1f', selection: away, line: '\u80dc\u5e73\u8d1f', odds: null },
+    ...(liveHandicapMarkets.length ? liveHandicapMarkets : fallbackHandicapMarkets),
+    { id: 'ctx-total-over-2.5', matchName, marketType: '\u8db3\u7403 \u5927\u5c0f\u7403', selection: '\u5927', line: '2.5', odds: null },
+    { id: 'ctx-total-under-2.5', matchName, marketType: '\u8db3\u7403 \u5927\u5c0f\u7403', selection: '\u5c0f', line: '2.5', odds: null },
+    { id: 'ctx-total-over-3.5', matchName, marketType: '\u8db3\u7403 \u5927\u5c0f\u7403', selection: '\u5927', line: '3.5', odds: null },
+    { id: 'ctx-total-under-3.5', matchName, marketType: '\u8db3\u7403 \u5927\u5c0f\u7403', selection: '\u5c0f', line: '3.5', odds: null },
+    ...scores.map((score) => ({ id: `ctx-score-${score}`, matchName, marketType: '\u8db3\u7403 \u6bd4\u5206', selection: score, line: '\u6b63\u786e\u6bd4\u5206', odds: null }))
+  ];
+}
+
+function liveHandicapMarketsFromContext(context, home, away, matchName) {
+  const rows = context?.index?.live?.asia || [];
+  const seen = new Set();
+  const markets = [];
+  for (const row of rows) {
+    const lineInfo = handicapLinesFromLiveRow(row);
+    if (!lineInfo) continue;
+    const homeKey = `home:${lineInfo.homeLine}`;
+    if (!seen.has(homeKey)) {
+      seen.add(homeKey);
+      markets.push({
+        id: `ctx-live-handicap-home-${slugLine(lineInfo.homeLine)}`,
+        matchName,
+        marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8',
+        selection: home,
+        line: lineInfo.homeLine,
+        odds: numericOrNull(row.home)
+      });
+    }
+    const awayKey = `away:${lineInfo.awayLine}`;
+    if (!seen.has(awayKey)) {
+      seen.add(awayKey);
+      markets.push({
+        id: `ctx-live-handicap-away-${slugLine(lineInfo.awayLine)}`,
+        matchName,
+        marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8',
+        selection: away,
+        line: lineInfo.awayLine,
+        odds: numericOrNull(row.away)
+      });
+    }
+    if (markets.length >= 6) break;
+  }
+  return markets;
+}
+
+function handicapLinesFromLiveRow(row = {}) {
+  const absLine = Math.abs(Number(row.lineValue));
+  if (!Number.isFinite(absLine) || absLine <= 0) return null;
+  const text = String(row.line || '');
+  if (/\u53d7/.test(text)) return { homeLine: formatSignedLine(absLine), awayLine: formatSignedLine(-absLine) };
+  if (/\u8ba9/.test(text)) return { homeLine: formatSignedLine(-absLine), awayLine: formatSignedLine(absLine) };
+  const signed = Number(row.lineValue);
+  return { homeLine: formatSignedLine(signed), awayLine: formatSignedLine(-signed) };
+}
+
+function formatSignedLine(value) {
+  const rounded = Math.round(Number(value) * 100) / 100;
+  const text = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, '').replace(/\.$/, '');
+  return rounded > 0 ? `+${text}` : text;
+}
+
+function slugLine(line) {
+  return String(line).replace('+', 'plus-').replace('-', 'minus-').replace('.', '-');
+}
+
+function numericOrNull(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
 }
 
 function buildRankingMarkets(markets, context) {

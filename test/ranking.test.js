@@ -119,12 +119,23 @@ test('ranking can use Dongqiudi context without imported odds markets', async ()
   }, fakeFetch, {
     teams: ['厄瓜多尔', '德国'],
     matchName: '厄瓜多尔 v 德国',
-    kickoff: '2026-06-26 04:00'
+    kickoff: '2026-06-26 04:00',
+    index: {
+      live: {
+        asia: [
+          { company: '澳门', home: '0.98', line: '受半/一', lineValue: '-0.75', away: '0.86' }
+        ]
+      }
+    }
   });
 
   assert.ok(sentMarkets.length > 0);
   assert.equal(ranking.results[0].picks.length, 4);
   assert.ok(sentMarkets.every((market) => market.id.startsWith('ctx-')));
+  const handicapLines = sentMarkets
+    .filter((market) => /handicap/.test(market.id))
+    .map((market) => market.line);
+  assert.deepEqual(handicapLines, ['+0.75', '-0.75']);
 });
 
 test('ranking parser tolerates fenced JSON and trailing commas', async () => {
