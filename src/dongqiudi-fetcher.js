@@ -191,7 +191,13 @@ function normalizeOdds(odds) {
 function formatOddsRows(rows, label) {
   return (rows || []).slice(0, 8).map((row) => {
     if (Array.isArray(row)) return `${label}: ${row.join(' ')}`;
-    return `${label}: ${Object.values(row || {}).filter((value) => ['string', 'number'].includes(typeof value)).slice(0, 8).join(' ')}`;
+    const source = row?.now && typeof row.now === 'object' ? row.now : row || {};
+    const company = firstText(row?.name, row?.company, row?.area, row?.abbr);
+    const values = label === 'æ¬§æŒ‡'
+      ? [source.homeWin, source.draw, source.awayWin]
+      : [source.homeWin ?? source.home, source.draw ?? source.handicap, source.awayWin ?? source.away];
+    const time = source.ts ? `æ›´æ–°:${source.ts}` : '';
+    return `${label}: ${[company, ...values, time].filter((value) => value !== '' && value !== null && value !== undefined).join(' ')}`;
   });
 }
 
