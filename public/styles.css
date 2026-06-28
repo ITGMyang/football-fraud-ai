@@ -122,18 +122,9 @@ textarea:focus-visible {
   background: #090f18;
 }
 
-.hero-video,
 .hero-shade {
   position: absolute;
   inset: 0;
-}
-
-.hero-video {
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.5;
 }
 
 .hero-shade {
@@ -2112,8 +2103,5 @@ pre {
   .reveal {
     opacity: 1;
     transform: none;
-  }
-  .hero-video {
-    display: none;
   }
 }
