@@ -1,5 +1,8 @@
 import { aggregateReport, validatePrediction } from './domain.js';
 
+const SCORE_PICK_COUNT = 4;
+const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
+
 export function configuredModels(env = process.env) {
   return [
     [cleanEnvValue(env.MODEL_GPT_LABEL) || 'GPT', cleanEnvValue(env.MODEL_GPT), 'GPT', gptProvider(env)],
@@ -152,7 +155,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       body: JSON.stringify({
         model,
         temperature: retry ? 0 : 0.15,
-        max_tokens: 1800,
+        max_tokens: 2200,
         messages: [
           { role: 'system', content: rankingSystemPrompt() },
           { role: 'user', content: rankingUserPromptV2(markets, matchContext, retry) }
@@ -171,7 +174,11 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
     if (!content) throw new Error('模型没有返回 content');
     const parsed = parseModelJson(content);
     const rawPicks = validateRankingPicks(parsed, markets);
-    const scorePicks = alignScorePicksWithTotals(validateScorePicks(parsed, markets), rawPicks, markets).slice(0, 3);
+    const scorePicks = ensureScorePickCount(
+      alignScorePicksWithTotals(validateScorePicks(parsed, markets), rawPicks, markets),
+      rawPicks,
+      markets
+    ).slice(0, SCORE_PICK_COUNT);
     const picks = completeRankingPicks(rawPicks, scorePicks, markets).slice(0, 4);
     return {
       modelName: label,
@@ -354,8 +361,8 @@ function rankingUserPrompt(markets, matchContext, retry) {
 function rankingUserPromptV2(markets, matchContext, retry) {
   return JSON.stringify({
     task: retry
-      ? 'Return a strict JSON object. Choose up to 4 top markets and exactly 3 correct score predictions.'
-      : 'Rank the best 4 market choices by estimatedProbability and also provide exactly 3 correct score predictions.',
+      ? 'Return a strict JSON object. Choose up to 4 top markets and exactly 4 correct score predictions.'
+      : 'Rank the best 4 market choices by estimatedProbability and also provide exactly 4 correct score predictions: 2 mainline scores, 1 market-fit score, and 1 aggressive score.',
     markets,
     matchContext: compactMatchContext(matchContext),
     requiredShape: {
@@ -372,6 +379,7 @@ function rankingUserPromptV2(markets, matchContext, retry) {
         {
           marketId: 'must be a score market id from markets[] when available',
           score: '2:1',
+          scoreType: 'mainline | market_fit | aggressive',
           estimatedProbability: 0.18,
           confidence: 0.36,
           reason: 'one short reason'
@@ -383,7 +391,8 @@ function rankingUserPromptV2(markets, matchContext, retry) {
       'picks must contain 3 to 4 non-score market choices and must use ids from markets[].id.',
       'picks should cover normal betting categories when possible: one 胜平负/moneyline, one 亚洲让分盘/handicap, one 大小球/total, then one strongest extra choice.',
       'Do not put correct-score markets in picks unless there are no other markets. Correct scores belong in scorePicks only.',
-      'scorePicks must have exactly 3 items.',
+      'scorePicks must have exactly 4 items: first two scoreType=mainline, third scoreType=market_fit, fourth scoreType=aggressive.',
+      'mainline scores are the two most realistic scorelines. market_fit must match your handicap/total direction. aggressive should be a higher-variance scoreline when the match profile allows it.',
       'Predict total goals direction before exact scores. scorePicks must be consistent with your strongest 大小球/total pick in picks.',
       'If picks chooses 大/over 2.5, every scorePick must have total goals >= 3. If picks chooses 小/under 2.5, every scorePick must have total goals <= 2.',
       'If picks chooses 大/over 3.5, every scorePick must have total goals >= 4. If picks chooses 小/under 3.5, every scorePick must have total goals <= 3.',
@@ -413,7 +422,7 @@ function contextCandidateMarkets(context) {
   if (!context?.teams?.length) return [];
   const [home, away] = context.teams;
   const matchName = context.matchName || `${home} v ${away}`;
-  const scores = ['0:0', '0:1', '1:1', '1:2', '0:2', '1:0', '2:1', '2:2'];
+  const scores = ['0:0', '0:1', '1:1', '1:2', '0:2', '1:0', '2:1', '2:2', '3:0', '0:3', '3:1', '1:3', '4:0', '0:4'];
   return [
     { id: 'ctx-moneyline-home', matchName, marketType: '足球 胜平负', selection: home, line: '胜平负', odds: null },
     { id: 'ctx-moneyline-draw', matchName, marketType: '足球 胜平负', selection: '平局', line: '胜平负', odds: null },
@@ -572,16 +581,34 @@ function alignScorePicksWithTotals(scorePicks, picks, markets) {
       return true;
     });
 
-  if (aligned.length >= 3) return aligned.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+  if (aligned.length >= SCORE_PICK_COUNT) {
+    return aligned.slice(0, SCORE_PICK_COUNT).map((pick, index) => ({ ...pick, scoreType: normalizeScoreType(pick.scoreType, index) }));
+  }
 
   for (const score of fallbackScoresForTotalPick(totalPick, markets)) {
     if (seen.has(score)) continue;
     seen.add(score);
-    aligned.push(syntheticScorePick(score, totalPick, markets));
-    if (aligned.length >= 3) break;
+    aligned.push(syntheticScorePick(score, totalPick, markets, aligned.length));
+    if (aligned.length >= SCORE_PICK_COUNT) break;
   }
 
-  return aligned.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+  return aligned.map((pick, index) => ({ ...pick, scoreType: normalizeScoreType(pick.scoreType, index) }));
+}
+
+function ensureScorePickCount(scorePicks, picks, markets) {
+  const totalPick = strongestTotalPick(picks);
+  const result = [...(scorePicks || [])].map((pick, index) => ({ ...pick, scoreType: normalizeScoreType(pick.scoreType, index) }));
+  const seen = new Set(result.map((pick) => pick.score));
+  const fallback = totalPick
+    ? fallbackScoresForTotalPick(totalPick, markets)
+    : fallbackScoresForAnyMatch(markets);
+  for (const score of fallback) {
+    if (result.length >= SCORE_PICK_COUNT) break;
+    if (seen.has(score)) continue;
+    seen.add(score);
+    result.push(syntheticScorePick(score, totalPick || picks?.[0], markets, result.length));
+  }
+  return result.slice(0, SCORE_PICK_COUNT).map((pick, index) => ({ ...pick, scoreType: normalizeScoreType(pick.scoreType, index) }));
 }
 
 function strongestTotalPick(picks = []) {
@@ -628,13 +655,24 @@ function fallbackScoresForTotalPick(totalPick, markets) {
     .slice(0, 8);
 }
 
-function syntheticScorePick(score, totalPick, markets) {
+function fallbackScoresForAnyMatch(markets) {
+  const scoreMarkets = markets
+    .filter(isScoreMarket)
+    .map((market) => normalizeScore(market.selection))
+    .filter(Boolean);
+  return [...scoreMarkets, '1:0', '0:1', '1:1', '2:1', '1:2', '2:0', '0:2', '3:1', '1:3']
+    .filter((score, index, list) => list.indexOf(score) === index)
+    .slice(0, 12);
+}
+
+function syntheticScorePick(score, totalPick, markets, index = 0) {
   const market = markets.find((item) => normalizeScore(item.selection) === score && isScoreMarket(item))
     || syntheticScoreMarket(score, markets);
   return {
     marketId: market.id,
     market,
     score,
+    scoreType: normalizeScoreType(null, index),
     estimatedProbability: Math.max(0.08, Math.min(0.22, Number(totalPick?.estimatedProbability || 0.5) * 0.25)),
     confidence: Math.max(0.2, Math.min(0.45, Number(totalPick?.confidence || 0.35) * 0.75)),
     reason: '根据大小球主判断补齐的兼容比分'
@@ -744,13 +782,14 @@ function validateScorePicks(parsed, markets) {
       marketId: scoreMarket.id,
       market: scoreMarket,
       score,
+      scoreType: normalizeScoreType(raw?.scoreType, picks.length),
       estimatedProbability,
       confidence,
       reason: String(raw?.reason || '').trim().slice(0, 180)
     });
   }
 
-  if (picks.length >= 3) return picks.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
+  if (picks.length >= SCORE_PICK_COUNT) return picks.slice(0, SCORE_PICK_COUNT);
 
   const fallback = validateRankingPicks(parsed, markets)
     .filter((pick) => isScoreMarket(pick.market))
@@ -758,6 +797,7 @@ function validateScorePicks(parsed, markets) {
       marketId: pick.marketId,
       market: pick.market,
       score: normalizeScore(pick.market.selection),
+      scoreType: normalizeScoreType(null, picks.length),
       estimatedProbability: pick.estimatedProbability,
       confidence: pick.confidence,
       reason: pick.reason
@@ -765,8 +805,16 @@ function validateScorePicks(parsed, markets) {
     .filter((pick) => pick.score && !seen.has(pick.score));
 
   return [...picks, ...fallback]
-    .sort((a, b) => b.estimatedProbability - a.estimatedProbability)
-    .slice(0, 3);
+    .slice(0, SCORE_PICK_COUNT)
+    .map((pick, index) => ({ ...pick, scoreType: normalizeScoreType(pick.scoreType, index) }));
+}
+
+function normalizeScoreType(value, index = 0) {
+  const text = String(value || '').toLowerCase().replace(/[\s-]+/g, '_');
+  if (['mainline', 'main', 'primary'].includes(text)) return 'mainline';
+  if (['market_fit', 'market', '盘口', 'fit'].includes(text)) return 'market_fit';
+  if (['aggressive', 'high_variance', 'bold', 'upside'].includes(text)) return 'aggressive';
+  return SCORE_PICK_TYPES[Math.min(index, SCORE_PICK_TYPES.length - 1)] || 'mainline';
 }
 
 function syntheticScoreMarket(score, markets) {

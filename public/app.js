@@ -1250,25 +1250,33 @@ function renderModelRanking(result, marketMap) {
 }
 
 function renderScorePredictions(scorePicks) {
-  const picks = (scorePicks || []).slice(0, 3);
+  const picks = (scorePicks || []).slice(0, 4);
   return `
     <section class="score-predictions">
       <div class="score-head">
         <strong>比分预测</strong>
-        <span>每个模型单独给出 3 个比分候选</span>
+        <span>2 mainline + 1 market-fit + 1 aggressive</span>
       </div>
       <div class="score-grid">
         ${picks.length ? picks.map((pick, index) => `
           <article class="score-card">
             <span>#${index + 1}</span>
+            <em>${escapeHtml(scoreTypeLabel(pick.scoreType, index))}</em>
             <strong>${escapeHtml(pick.score || pick.market?.selection || '')}</strong>
             <div>AI 概率 ${percent(pick.estimatedProbability)}</div>
             <p>${escapeHtml(pick.reason || '无理由')}</p>
           </article>
-        `).join('') : '<p class="meta">这个模型暂时没有给出比分预测。重跑后会尝试生成 3 个比分。</p>'}
+        `).join('') : '<p class="meta">??????????????????????? 4 ????</p>'}
       </div>
     </section>
   `;
+}
+
+function scoreTypeLabel(type, index = 0) {
+  const normalized = String(type || '').toLowerCase();
+  if (normalized === 'market_fit') return '盘口比分';
+  if (normalized === 'aggressive') return '激进比分';
+  return index <= 1 ? `主线比分 ${index + 1}` : index === 2 ? '盘口比分' : '激进比分';
 }
 
 function renderRankingPick(pick, marketMap, index) {

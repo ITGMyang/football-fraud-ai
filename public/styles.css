@@ -1459,7 +1459,7 @@ summary {
 
 .score-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1481,6 +1481,18 @@ summary {
 
 .score-card span {
   color: var(--violet);
+  font-weight: 900;
+}
+
+.score-card em {
+  width: fit-content;
+  border: 1px solid rgba(243, 201, 91, 0.34);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--gold);
+  background: rgba(243, 201, 91, 0.08);
+  font-size: 11px;
+  font-style: normal;
   font-weight: 900;
 }
 

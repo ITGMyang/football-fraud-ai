@@ -177,7 +177,7 @@ test('ranking parser repairs missing commas between JSON array items', async () 
   assert.deepEqual(ranking.results[0].picks.map((pick) => pick.marketId).slice(0, 2), ['a', 'b']);
 });
 
-test('ranking keeps three score predictions separately', async () => {
+test('ranking keeps four score predictions separately', async () => {
   const markets = [
     buildMarket({ id: 's10', matchName: 'A v B', marketType: '足球 比分', selection: '1:0', line: '正确比分', odds: 7 }),
     buildMarket({ id: 's11', matchName: 'A v B', marketType: '足球 比分', selection: '1:1', line: '正确比分', odds: 6 }),
@@ -209,7 +209,8 @@ test('ranking keeps three score predictions separately', async () => {
     MODEL_GPT: 'openai/test'
   }, fakeFetch);
 
-  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['1:0', '2:1', '1:1']);
+  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['1:0', '2:1', '1:1', '0:1']);
+  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.scoreType), ['mainline', 'mainline', 'market_fit', 'aggressive']);
 });
 
 test('ranking keeps score predictions even when model omits score market ids', async () => {
@@ -241,7 +242,7 @@ test('ranking keeps score predictions even when model omits score market ids', a
     MODEL_GPT: 'openai/test'
   }, fakeFetch);
 
-  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['1:0', '2:1', '1:1']);
+  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['1:0', '2:1', '1:1', '0:1']);
   assert.ok(ranking.results[0].scorePicks.every((pick) => pick.marketId.startsWith('ai-score-')));
 });
 
@@ -276,7 +277,7 @@ test('ranking infers main picks when model only returns score predictions', asyn
     MODEL_GPT: 'openai/test'
   }, fakeFetch);
 
-  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['0:2', '0:1', '1:2']);
+  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['0:2', '0:1', '1:2', '1:0']);
   assert.ok(ranking.results[0].picks.length >= 2);
   assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'away'));
   assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'under25'));
@@ -316,7 +317,7 @@ test('ranking score predictions stay consistent with over total pick', async () 
     MODEL_GPT: 'openai/test'
   }, fakeFetch);
 
-  assert.equal(ranking.results[0].scorePicks.length, 3);
+  assert.equal(ranking.results[0].scorePicks.length, 4);
   assert.ok(ranking.results[0].scorePicks.every((pick) => {
     const [home, away] = pick.score.split(':').map(Number);
     return home + away >= 3;
@@ -357,7 +358,7 @@ test('ranking score predictions stay consistent with under total pick', async ()
     MODEL_GPT: 'openai/test'
   }, fakeFetch);
 
-  assert.equal(ranking.results[0].scorePicks.length, 3);
+  assert.equal(ranking.results[0].scorePicks.length, 4);
   assert.ok(ranking.results[0].scorePicks.every((pick) => {
     const [home, away] = pick.score.split(':').map(Number);
     return home + away <= 2;
