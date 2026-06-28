@@ -5,6 +5,7 @@ import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
 import { contextKey, findExistingContext } from '../src/context-utils.js';
+import { buildAnalytics } from '../src/evaluation.js';
 
 export default {
   async fetch(request, env) {
@@ -214,6 +215,10 @@ async function routeApi(request, env) {
   }
   if (request.method === 'GET' && url.pathname === '/api/contexts') {
     return json({ contexts: (await storage.readDb()).matchContexts || [] });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/analytics') {
+    const db = await storage.readDb();
+    return json({ analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
   }
 
   if (request.method === 'GET' && url.pathname === '/api/dongqiudi/matches') {

@@ -64,6 +64,7 @@ function normalizeDongqiudiContext({ sourceUrl, matchId, detail, pre, lineup, od
   const teams = [home, away].filter(Boolean);
   const matchName = teams.length === 2 ? `${teams[0]} v ${teams[1]}` : `懂球帝比赛 ${matchId}`;
   const kickoff = firstText(pre?.start_time, sample.start_play);
+  const actualScore = extractActualScore(sample, pre, lineup);
 
   return {
     id: sourceUrl || `dongqiudi:${matchId}`,
@@ -73,6 +74,8 @@ function normalizeDongqiudiContext({ sourceUrl, matchId, detail, pre, lineup, od
     matchName,
     teams,
     kickoff,
+    actualScore,
+    status: actualScore ? 'finished' : firstText(sample.status, sample.status_name, pre?.status) || '',
     competition: firstText(sample.competition_name, pre?.competition_name),
     analysis: normalizeAnalysis(pre, teams),
     lineup: normalizeLineup(lineup, teams),
@@ -81,6 +84,41 @@ function normalizeDongqiudiContext({ sourceUrl, matchId, detail, pre, lineup, od
     live: normalizeLive(lineup),
     capturedAt: new Date().toISOString()
   };
+}
+
+function extractActualScore(sample = {}, pre = {}, lineup = {}) {
+  const direct = [
+    sample.score,
+    sample.final_score,
+    sample.full_score,
+    sample.fs,
+    pre.score,
+    lineup?.base?.score
+  ].map(normalizeScoreText).find(Boolean);
+  if (direct) return direct;
+
+  const pairs = [
+    [sample.team_A_score, sample.team_B_score],
+    [sample.team_a_score, sample.team_b_score],
+    [sample.home_score, sample.away_score],
+    [sample.fs_A, sample.fs_B],
+    [sample.score_A, sample.score_B],
+    [pre.team_A_score, pre.team_B_score],
+    [pre.home_score, pre.away_score]
+  ];
+  for (const [home, away] of pairs) {
+    if (isScoreNumber(home) && isScoreNumber(away)) return `${Number(home)}:${Number(away)}`;
+  }
+  return '';
+}
+
+function normalizeScoreText(value) {
+  const match = String(value || '').replace(/[：\-–—]/g, ':').match(/(\d+)\s*:\s*(\d+)/);
+  return match ? `${Number(match[1])}:${Number(match[2])}` : '';
+}
+
+function isScoreNumber(value) {
+  return value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value));
 }
 
 function normalizeAnalysis(pre, teams) {

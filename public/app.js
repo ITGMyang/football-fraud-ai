@@ -4,6 +4,7 @@ const marketsEl = $('#markets');
 const reportsEl = $('#reports');
 const rankingsEl = $('#rankings');
 const contextsEl = $('#contexts');
+const analyticsContentEl = $('#analyticsContent');
 const matchScheduleEl = $('#matchSchedule');
 const contextTabsEl = $('#contextTabs');
 const contextExplorerEl = $('#contextExplorer');
@@ -42,6 +43,7 @@ bind('#loadSample', 'click', async () => {
 });
 
 bind('#refresh', 'click', refresh);
+bind('#refreshAnalytics', 'click', refresh);
 bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
 bind('#competitionFilter', 'change', loadDongqiudiMatches);
 bind('#matchDate', 'change', loadDongqiudiMatches);
@@ -163,11 +165,12 @@ function timestampOf(value) {
 }
 
 async function refresh() {
-  const [{ markets }, { reports }, { rankings }, { contexts }] = await Promise.all([
+  const [{ markets }, { reports }, { rankings }, { contexts }, analyticsResponse] = await Promise.all([
     api('/api/markets'),
     api('/api/reports'),
     api('/api/rankings'),
-    api('/api/contexts')
+    api('/api/contexts'),
+    api('/api/analytics').catch(() => ({ analytics: null }))
   ]);
   const orderedContexts = sortContextsForDisplay(contexts);
   if (activeContextId && !orderedContexts.some((context) => contextKey(context) === activeContextId)) {
@@ -184,6 +187,7 @@ async function refresh() {
   renderRankings(rankings, markets);
   updateRankButtons(rankings);
   renderReports(reports);
+  renderAnalytics(analyticsResponse.analytics);
   setupRevealAnimations();
 }
 
@@ -1262,6 +1266,137 @@ function renderReports(reports) {
   }
 }
 
+function renderAnalytics(analytics) {
+  if (!analyticsContentEl) return;
+  if (!analytics || !analytics.evaluatedCount) {
+    analyticsContentEl.innerHTML = `
+      <div class="empty-analytics">
+        <strong>暂无可计算准确率的数据</strong>
+        <p class="meta">需要先刷新已结束比赛，让懂球帝详情里带上完场比分，然后系统会自动评估历史预测。</p>
+      </div>
+    `;
+    return;
+  }
+
+  analyticsContentEl.innerHTML = `
+    <div class="analytics-stats">
+      <article><span>已评估预测</span><strong>${analytics.evaluatedCount}</strong></article>
+      <article><span>完场比赛</span><strong>${analytics.matchCount}</strong></article>
+      <article><span>模型数</span><strong>${analytics.models.length}</strong></article>
+    </div>
+    <div class="analytics-grid">
+      <section class="analytics-card">
+        <div class="section-heading compact-heading">
+          <h3>模型准确率</h3>
+          <span class="count">${analytics.models.length}</span>
+        </div>
+        <div class="accuracy-bars">
+          ${analytics.models.map(renderAccuracyBar).join('')}
+        </div>
+      </section>
+      <section class="analytics-card">
+        <div class="section-heading compact-heading">
+          <h3>玩法准确率</h3>
+          <span class="count">${analytics.categories.length}</span>
+        </div>
+        <div class="accuracy-bars">
+          ${analytics.categories.map((row) => renderAccuracyBar({ ...row, key: categoryName(row.key) })).join('')}
+        </div>
+      </section>
+      <section class="analytics-card wide">
+        <div class="section-heading compact-heading">
+          <h3>准确率走势</h3>
+          <p>按比赛日期聚合</p>
+        </div>
+        ${renderTrendChart(analytics.trend || [])}
+      </section>
+      <section class="analytics-card wide">
+        <div class="section-heading compact-heading">
+          <h3>赛后复盘明细</h3>
+          <span class="count">${analytics.evaluations.length}</span>
+        </div>
+        <div class="analytics-table-wrap">
+          <table class="analytics-table">
+            <thead>
+              <tr><th>比赛</th><th>模型</th><th>玩法</th><th>预测</th><th>赛果</th><th>结果</th></tr>
+            </thead>
+            <tbody>
+              ${analytics.evaluations.slice(0, 80).map(renderEvaluationRow).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderAccuracyBar(row) {
+  const pct = Math.round((row.accuracy || 0) * 100);
+  return `
+    <div class="accuracy-row">
+      <div>
+        <strong>${escapeHtml(row.key)}</strong>
+        <span>${row.hits}/${row.total}</span>
+      </div>
+      <div class="accuracy-track"><i style="width:${pct}%"></i></div>
+      <b>${pct}%</b>
+    </div>
+  `;
+}
+
+function renderTrendChart(trend) {
+  if (!trend.length) return '<p class="meta">暂无走势数据。</p>';
+  const points = trend.slice(-24);
+  const width = 900;
+  const height = 260;
+  const pad = 34;
+  const maxIndex = Math.max(1, points.length - 1);
+  const polyline = points.map((point, index) => {
+    const x = pad + (index / maxIndex) * (width - pad * 2);
+    const y = height - pad - (point.accuracy || 0) * (height - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `
+    <div class="trend-chart">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="准确率走势">
+        <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line>
+        <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}"></line>
+        <polyline points="${polyline}"></polyline>
+        ${points.map((point, index) => {
+          const x = pad + (index / maxIndex) * (width - pad * 2);
+          const y = height - pad - (point.accuracy || 0) * (height - pad * 2);
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"><title>${escapeHtml(point.date)} ${escapeHtml(point.modelName)} ${Math.round(point.accuracy * 100)}%</title></circle>`;
+        }).join('')}
+      </svg>
+      <div class="trend-legend">
+        ${points.slice(-8).map((point) => `<span>${escapeHtml(point.date)} · ${escapeHtml(point.modelName)} · ${Math.round(point.accuracy * 100)}%</span>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderEvaluationRow(item) {
+  return `
+    <tr>
+      <td>${escapeHtml(item.contextName)}</td>
+      <td>${escapeHtml(item.modelName)}</td>
+      <td>${escapeHtml(categoryName(item.category))}</td>
+      <td>${escapeHtml(item.selection)}</td>
+      <td>${escapeHtml(item.actualScore)}</td>
+      <td><b class="${item.counted ? item.hit ? 'hit' : 'miss' : 'push'}">${item.counted ? item.hit ? '命中' : '未中' : '走水'}</b></td>
+    </tr>
+  `;
+}
+
+function categoryName(category) {
+  return {
+    moneyline: '胜平负',
+    handicap: '亚洲让分盘',
+    total: '大小球',
+    score: '比分'
+  }[category] || category;
+}
+
 async function predict(id) {
   try {
     const { report } = await api(`/api/predict/${encodeURIComponent(id)}`, { method: 'POST' });
@@ -1303,14 +1438,17 @@ function renderRoute(markets, reports, contexts = []) {
   const matchCenter = $('.match-center');
   const aiPanel = $('#ai-panel');
   const historyPanel = $('#historyPanel');
+  const analyticsPanel = $('#analyticsPanel');
   const isHome = location.pathname === '/';
+  const isAnalytics = location.pathname === '/analytics';
 
   if (matchPanel) matchPanel.hidden = true;
   if (dataPage) dataPage.hidden = location.pathname !== '/data';
   if (dataBackHome) dataBackHome.hidden = isHome;
-  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
-  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || Boolean(match);
-  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || Boolean(match);
+  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || Boolean(match);
+  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || Boolean(match);
+  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || isAnalytics || Boolean(match);
+  if (analyticsPanel) analyticsPanel.hidden = !isAnalytics;
 
   if (location.pathname === '/data') {
     renderContextExplorer(contexts);
@@ -1319,6 +1457,10 @@ function renderRoute(markets, reports, contexts = []) {
   }
   if (location.pathname === '/history') {
     $('#historyPanel')?.scrollIntoView({ block: 'start' });
+    return;
+  }
+  if (isAnalytics) {
+    analyticsPanel?.scrollIntoView({ block: 'start' });
     return;
   }
   if (!match) return;

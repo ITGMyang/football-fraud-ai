@@ -12,6 +12,7 @@
       <div class="nav-links">
         <a href="#matchSchedule">如果使用</a>
         <a href="/data">已抓取数据</a>
+        <a href="/analytics">赛后准确率</a>
         <a href="#historyPanel">查看历史</a>
         <a href="#subscriptionPanel">订阅费</a>
       </div>
@@ -138,6 +139,17 @@
         <div id="reports" class="cards"></div>
       </section>
 
+      <section id="analyticsPanel" class="panel analytics-panel reveal" hidden>
+        <div class="section-title-row">
+          <div>
+            <h2>赛后准确率</h2>
+            <p class="meta">只统计已经抓到完场比分的比赛；未完场、无比分、走水不计入准确率。</p>
+          </div>
+          <button id="refreshAnalytics" class="secondary" type="button">刷新统计</button>
+        </div>
+        <div id="analyticsContent"></div>
+      </section>
+
       <section id="subscriptionPanel" class="panel subscription-panel reveal">
         <div>
           <h2>订阅费</h2>
@@ -164,6 +176,6 @@
       </section>
     </div>
 
-    <script src="/app.js?v=20260628-1335"></script>
+    <script src="/app.js?v=20260628-1400"></script>
   </body>
 </html>

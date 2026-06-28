@@ -9,6 +9,7 @@ import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
 import { contextKey, findExistingContext } from './context-utils.js';
+import { buildAnalytics } from './evaluation.js';
 import { clearMarkets, readDb, saveRanking, saveReport, upsertMarkets, upsertMatchContext } from './storage.js';
 
 loadEnv();
@@ -42,6 +43,10 @@ async function route(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/reports') return json(res, 200, { reports: readDb().reports });
   if (req.method === 'GET' && url.pathname === '/api/rankings') return json(res, 200, { rankings: readDb().rankings || [] });
   if (req.method === 'GET' && url.pathname === '/api/contexts') return json(res, 200, { contexts: readDb().matchContexts || [] });
+  if (req.method === 'GET' && url.pathname === '/api/analytics') {
+    const db = readDb();
+    return json(res, 200, { analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/dongqiudi/matches') {
     const competitionId = url.searchParams.get('competitionId') || '10';
