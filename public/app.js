@@ -28,6 +28,14 @@ let activeContextId = readStoredActiveContextId();
 let activeAiContextDate = readStoredValue(AI_CONTEXT_DATE_STORAGE_KEY);
 let activeAiContextRange = readStoredValue(AI_CONTEXT_RANGE_STORAGE_KEY) || 'week';
 let activeAiContextSort = readStoredValue(AI_CONTEXT_SORT_STORAGE_KEY) || 'imported';
+const analyticsState = {
+  raw: null,
+  date: '',
+  category: 'all',
+  match: 'all',
+  model: 'all',
+  hitsOnly: false
+};
 
 const MARKET_GROUPS = [
   { key: 'moneyline', label: '胜平负', help: '主胜、平局、客胜这类 1X2 市场。' },
@@ -68,6 +76,23 @@ document.querySelectorAll('[data-close-context-modal]').forEach((element) => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') closeContextModal();
+});
+
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (!target?.matches?.('[data-analytics-filter]')) return;
+  analyticsState[target.dataset.analyticsFilter] = target.value;
+  if (target.dataset.analyticsFilter === 'date') {
+    analyticsState.match = 'all';
+  }
+  renderAnalyticsView();
+});
+
+document.addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-analytics-hit-toggle]');
+  if (!button) return;
+  analyticsState.hitsOnly = !analyticsState.hitsOnly;
+  renderAnalyticsView();
 });
 
 bind('#importText', 'click', async () => {
@@ -1268,6 +1293,10 @@ function renderReports(reports) {
 
 function renderAnalytics(analytics) {
   if (!analyticsContentEl) return;
+  analyticsState.raw = analytics;
+  normalizeAnalyticsFilters();
+  renderAnalyticsView();
+  return;
   if (!analytics || !analytics.evaluatedCount) {
     analyticsContentEl.innerHTML = `
       <div class="empty-analytics">
@@ -1330,6 +1359,188 @@ function renderAnalytics(analytics) {
   `;
 }
 
+function renderAnalyticsView() {
+  if (!analyticsContentEl) return;
+  const analytics = analyticsState.raw;
+  if (!analytics || !analytics.evaluatedCount) {
+    analyticsContentEl.innerHTML = `
+      <div class="empty-analytics">
+        <strong>暂无可计算准确率的数据</strong>
+        <p class="meta">已导入 ${analytics?.contextCount || 0} 场；已有赛果 ${analytics?.scoredContextCount || 0} 场；疑似完赛但缺比分 ${analytics?.finishedWithoutScoreCount || 0} 场。点击“刷新赛后数据”会重新抓这些完赛场次。</p>
+      </div>
+    `;
+    return;
+  }
+
+  const allEvaluations = (analytics.evaluations || []).filter((item) => item.counted);
+  const dateOptions = buildOptionRows(allEvaluations, (item) => evaluationDate(item), true);
+  const baseByDate = filterAnalyticsRows(allEvaluations, { category: 'all', match: 'all', model: 'all', hitsOnly: false });
+  const matchOptions = buildOptionRows(baseByDate, (item) => item.contextName || item.contextId);
+  const modelOptions = buildOptionRows(baseByDate, (item) => item.modelName || 'AI');
+  const categoryOptions = buildOptionRows(baseByDate, (item) => item.category || 'other');
+  const filtered = filterAnalyticsRows(allEvaluations);
+  const models = summarizeAnalyticsRows(filtered, (item) => item.modelName || 'AI');
+  const categories = summarizeAnalyticsRows(filtered, (item) => item.category || 'other');
+  const trend = buildAnalyticsTrend(filtered);
+  const matchCount = new Set(filtered.map((item) => item.contextId)).size;
+
+  analyticsContentEl.innerHTML = `
+    <div class="analytics-filters">
+      <label>
+        <span>比赛日期</span>
+        <select data-analytics-filter="date">
+          <option value="all"${analyticsState.date === 'all' ? ' selected' : ''}>全部日期（${allEvaluations.length} 条）</option>
+          ${dateOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.date === row.key ? ' selected' : ''}>${escapeHtml(row.key)}（${row.count} 条）</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        <span>玩法</span>
+        <select data-analytics-filter="category">
+          <option value="all"${analyticsState.category === 'all' ? ' selected' : ''}>全部玩法</option>
+          ${categoryOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.category === row.key ? ' selected' : ''}>${escapeHtml(categoryName(row.key))}（${row.count}）</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        <span>比赛</span>
+        <select data-analytics-filter="match">
+          <option value="all"${analyticsState.match === 'all' ? ' selected' : ''}>全部比赛</option>
+          ${matchOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.match === row.key ? ' selected' : ''}>${escapeHtml(row.key)}（${row.count}）</option>`).join('')}
+        </select>
+      </label>
+      <label>
+        <span>模型</span>
+        <select data-analytics-filter="model">
+          <option value="all"${analyticsState.model === 'all' ? ' selected' : ''}>全部模型</option>
+          ${modelOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.model === row.key ? ' selected' : ''}>${escapeHtml(row.key)}（${row.count}）</option>`).join('')}
+        </select>
+      </label>
+      <button class="analytics-hit-toggle ${analyticsState.hitsOnly ? 'active' : ''}" type="button" data-analytics-hit-toggle>
+        ${analyticsState.hitsOnly ? '只看命中' : '全部结果'}
+      </button>
+    </div>
+    <div class="analytics-stats">
+      <article><span>已评估预测</span><strong>${filtered.length}</strong></article>
+      <article><span>完场比赛</span><strong>${matchCount}</strong></article>
+      <article><span>模型数</span><strong>${models.length}</strong></article>
+    </div>
+    <div class="analytics-grid">
+      <section class="analytics-card">
+        <div class="section-heading compact-heading">
+          <h3>模型准确率</h3>
+          <span class="count">${models.length}</span>
+        </div>
+        <div class="accuracy-bars">
+          ${models.length ? models.map(renderAccuracyBar).join('') : '<p class="meta">当前筛选无模型数据。</p>'}
+        </div>
+      </section>
+      <section class="analytics-card">
+        <div class="section-heading compact-heading">
+          <h3>玩法准确率</h3>
+          <span class="count">${categories.length}</span>
+        </div>
+        <div class="accuracy-bars">
+          ${categories.length ? categories.map((row) => renderAccuracyBar({ ...row, key: categoryName(row.key) })).join('') : '<p class="meta">当前筛选无玩法数据。</p>'}
+        </div>
+      </section>
+      <section class="analytics-card wide">
+        <div class="section-heading compact-heading">
+          <h3>准确率走势</h3>
+          <p>按比赛日期和模型聚合；点位使用模型图标。</p>
+        </div>
+        ${renderTrendChart(trend)}
+      </section>
+      <section class="analytics-card wide">
+        <div class="section-heading compact-heading">
+          <h3>赛后复盘明细</h3>
+          <span class="count">${filtered.length}</span>
+        </div>
+        <div class="analytics-table-wrap">
+          <table class="analytics-table">
+            <thead>
+              <tr><th>比赛</th><th>日期</th><th>模型</th><th>玩法</th><th>预测</th><th>赛果</th><th>结果</th></tr>
+            </thead>
+            <tbody>
+              ${filtered.slice(0, 160).map(renderEvaluationRowV2).join('') || '<tr><td colspan="7">当前筛选暂无明细。</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function normalizeAnalyticsFilters() {
+  const rows = (analyticsState.raw?.evaluations || []).filter((item) => item.counted);
+  const dates = buildOptionRows(rows, (item) => evaluationDate(item), true).map((row) => row.key);
+  if (!analyticsState.date || (analyticsState.date !== 'all' && !dates.includes(analyticsState.date))) {
+    analyticsState.date = dates[0] || 'all';
+  }
+  const dateRows = filterAnalyticsRows(rows, { category: 'all', match: 'all', model: 'all', hitsOnly: false });
+  const matches = new Set(dateRows.map((item) => item.contextName || item.contextId));
+  const models = new Set(dateRows.map((item) => item.modelName || 'AI'));
+  const categories = new Set(dateRows.map((item) => item.category || 'other'));
+  if (analyticsState.match !== 'all' && !matches.has(analyticsState.match)) analyticsState.match = 'all';
+  if (analyticsState.model !== 'all' && !models.has(analyticsState.model)) analyticsState.model = 'all';
+  if (analyticsState.category !== 'all' && !categories.has(analyticsState.category)) analyticsState.category = 'all';
+}
+
+function filterAnalyticsRows(rows, overrides = {}) {
+  const filters = { ...analyticsState, ...overrides };
+  return rows.filter((item) => {
+    if (filters.date !== 'all' && evaluationDate(item) !== filters.date) return false;
+    if (filters.category !== 'all' && item.category !== filters.category) return false;
+    if (filters.match !== 'all' && (item.contextName || item.contextId) !== filters.match) return false;
+    if (filters.model !== 'all' && (item.modelName || 'AI') !== filters.model) return false;
+    if (filters.hitsOnly && !item.hit) return false;
+    return true;
+  });
+}
+
+function buildOptionRows(rows, keyFn, desc = false) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = keyFn(row) || 'unknown';
+    map.set(key, (map.get(key) || 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => desc ? String(b.key).localeCompare(String(a.key)) : String(a.key).localeCompare(String(b.key)));
+}
+
+function summarizeAnalyticsRows(rows, keyFn) {
+  const map = new Map();
+  for (const item of rows) {
+    if (!item.counted) continue;
+    const key = keyFn(item) || 'unknown';
+    const row = map.get(key) || { key, total: 0, hits: 0, accuracy: 0 };
+    row.total += 1;
+    if (item.hit) row.hits += 1;
+    row.accuracy = row.total ? row.hits / row.total : 0;
+    map.set(key, row);
+  }
+  return [...map.values()].sort((a, b) => b.accuracy - a.accuracy || b.total - a.total);
+}
+
+function buildAnalyticsTrend(rows) {
+  const map = new Map();
+  for (const item of rows) {
+    if (!item.counted) continue;
+    const date = evaluationDate(item);
+    const modelName = item.modelName || 'AI';
+    const key = `${date}|${modelName}`;
+    const row = map.get(key) || { date, modelName, total: 0, hits: 0, accuracy: 0 };
+    row.total += 1;
+    if (item.hit) row.hits += 1;
+    row.accuracy = row.total ? row.hits / row.total : 0;
+    map.set(key, row);
+  }
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date) || a.modelName.localeCompare(b.modelName));
+}
+
+function evaluationDate(item) {
+  return item.matchDate || String(item.kickoff || item.predictedAt || '').slice(0, 10) || 'unknown';
+}
+
 async function refreshAnalyticsData(event) {
   const button = event?.currentTarget;
   const original = button?.textContent;
@@ -1366,7 +1577,7 @@ function renderAccuracyBar(row) {
   `;
 }
 
-function renderTrendChart(trend) {
+function renderTrendChartWithIcons(trend) {
   if (!trend.length) return '<p class="meta">暂无走势数据。</p>';
   const points = trend.slice(-24);
   const width = 900;
@@ -1387,7 +1598,14 @@ function renderTrendChart(trend) {
         ${points.map((point, index) => {
           const x = pad + (index / maxIndex) * (width - pad * 2);
           const y = height - pad - (point.accuracy || 0) * (height - pad * 2);
-          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5"><title>${escapeHtml(point.date)} ${escapeHtml(point.modelName)} ${Math.round(point.accuracy * 100)}%</title></circle>`;
+          return `
+            <g>
+              <title>${escapeHtml(point.date)} ${escapeHtml(point.modelName)} ${Math.round(point.accuracy * 100)}%</title>
+              <foreignObject x="${(x - 15).toFixed(1)}" y="${(y - 15).toFixed(1)}" width="30" height="30">
+                <div class="trend-model-point">${modelBrand(point.modelName)}</div>
+              </foreignObject>
+            </g>
+          `;
         }).join('')}
       </svg>
       <div class="trend-legend">
@@ -1397,10 +1615,63 @@ function renderTrendChart(trend) {
   `;
 }
 
+function renderEvaluationRowV2(item) {
+  return `
+    <tr>
+      <td>${escapeHtml(item.contextName)}</td>
+      <td>${escapeHtml(evaluationDate(item))}</td>
+      <td>${escapeHtml(item.modelName)}</td>
+      <td>${escapeHtml(categoryName(item.category))}</td>
+      <td>${escapeHtml(item.selection)}</td>
+      <td>${escapeHtml(item.actualScore)}</td>
+      <td><b class="${item.counted ? item.hit ? 'hit' : 'miss' : 'push'}">${item.counted ? item.hit ? '命中' : '未中' : '走水'}</b></td>
+    </tr>
+  `;
+}
+
+function renderTrendChart(trend) {
+  if (!trend.length) return '<p class="meta">暂无走势数据。</p>';
+  const points = trend.slice(-32);
+  const width = 900;
+  const height = 260;
+  const pad = 38;
+  const maxIndex = Math.max(1, points.length - 1);
+  const polyline = points.map((point, index) => {
+    const x = pad + (index / maxIndex) * (width - pad * 2);
+    const y = height - pad - (point.accuracy || 0) * (height - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `
+    <div class="trend-chart">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="准确率走势">
+        <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line>
+        <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}"></line>
+        <polyline points="${polyline}"></polyline>
+        ${points.map((point, index) => {
+          const x = pad + (index / maxIndex) * (width - pad * 2);
+          const y = height - pad - (point.accuracy || 0) * (height - pad * 2);
+          return `
+            <g>
+              <title>${escapeHtml(point.date)} ${escapeHtml(point.modelName)} ${Math.round(point.accuracy * 100)}%</title>
+              <foreignObject x="${(x - 15).toFixed(1)}" y="${(y - 15).toFixed(1)}" width="30" height="30">
+                <div class="trend-model-point">${modelBrand(point.modelName)}</div>
+              </foreignObject>
+            </g>
+          `;
+        }).join('')}
+      </svg>
+      <div class="trend-legend">
+        ${points.slice(-10).map((point) => `<span>${modelBrand(point.modelName)} ${escapeHtml(point.date)} · ${escapeHtml(point.modelName)} · ${Math.round(point.accuracy * 100)}%</span>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderEvaluationRow(item) {
   return `
     <tr>
       <td>${escapeHtml(item.contextName)}</td>
+      <td>${escapeHtml(evaluationDate(item))}</td>
       <td>${escapeHtml(item.modelName)}</td>
       <td>${escapeHtml(categoryName(item.category))}</td>
       <td>${escapeHtml(item.selection)}</td>

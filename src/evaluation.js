@@ -35,7 +35,9 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
     models: summarizeBy(evaluations, (item) => item.modelName),
     categories: summarizeBy(evaluations, (item) => item.category),
     trend: buildTrend(evaluations),
-    evaluations: evaluations.slice(0, 300)
+    evaluations: evaluations
+      .sort((a, b) => String(b.matchDate).localeCompare(String(a.matchDate)) || String(a.contextName).localeCompare(String(b.contextName)))
+      .slice(0, 5000)
   };
 }
 
@@ -109,6 +111,7 @@ function buildEvaluation({ context, ranking, modelName, category, selection, pro
     contextId: contextKey(context),
     contextName: context?.matchName || ranking.contextName || '比赛',
     kickoff: context?.kickoff || '',
+    matchDate: String(context?.kickoff || ranking.createdAt || '').slice(0, 10) || 'unknown',
     rankingId: ranking.id,
     predictedAt: ranking.createdAt,
     modelName,
