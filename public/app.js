@@ -1286,15 +1286,18 @@ function renderRankingPick(pick, marketMap, index) {
   const risks = Array.isArray(pick.risks) ? pick.risks.filter(Boolean).slice(0, 3) : [];
   const outcome = marketOutcomeLabel(market);
   const outcomeDisplay = marketOutcomeDisplay(market);
+  const winnerFlag = categoryKey === 'moneyline' ? renderMoneylineFlag(market) : '';
   return `
     <article class="prediction-card ${categoryKey} reveal">
       <div class="prediction-rank">
         <span>#${index + 1}</span>
         <b class="pill ${categoryKey}">${escapeHtml(category.label)}</b>
       </div>
-      ${categoryKey === 'moneyline' ? `<div class="outcome-banner">${escapeHtml(outcomeDisplay)}</div>` : ''}
       <div class="prediction-main">
-        <h4>${escapeHtml(formatPredictionTitle(market))}</h4>
+        <div class="prediction-title-row">
+          ${winnerFlag}
+          <h4>${escapeHtml(formatPredictionTitle(market))}</h4>
+        </div>
         <p>${escapeHtml(market.matchName || '未知比赛')}</p>
       </div>
       <div class="prediction-metrics">
@@ -1313,6 +1316,12 @@ function renderRankingPick(pick, marketMap, index) {
       </div>
     </article>
   `;
+}
+
+function renderMoneylineFlag(market) {
+  const selection = String(market?.selection || '').trim();
+  const isDraw = /å¹³|draw|tie/i.test(selection);
+  return `<span class="winner-flag" title="${escapeHtml(isDraw ? '平局' : selection)}">${escapeHtml(isDraw ? '平' : countryFlag(selection))}</span>`;
 }
 
 function renderReports(reports) {
