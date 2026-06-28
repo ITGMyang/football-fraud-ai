@@ -5,7 +5,7 @@ import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
 import { contextKey, findExistingContext } from '../src/context-utils.js';
-import { buildAnalytics } from '../src/evaluation.js';
+import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
 
 export default {
   async fetch(request, env) {
@@ -219,6 +219,25 @@ async function routeApi(request, env) {
   if (request.method === 'GET' && url.pathname === '/api/analytics') {
     const db = await storage.readDb();
     return json({ analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
+  }
+  if (request.method === 'POST' && url.pathname === '/api/analytics/refresh') {
+    const db = await storage.readDb();
+    const targets = (db.matchContexts || []).filter(shouldRefreshForAnalytics).slice(0, 12);
+    const errors = [];
+    for (const context of targets) {
+      try {
+        await storage.upsertMatchContext(await fetchDongqiudiContext(context.sourceUrl, workerFetch));
+      } catch (error) {
+        errors.push({ sourceUrl: context.sourceUrl, error: error.message });
+      }
+    }
+    const nextDb = await storage.readDb();
+    return json({
+      refreshed: targets.length - errors.length,
+      attempted: targets.length,
+      errors,
+      analytics: buildAnalytics({ rankings: nextDb.rankings || [], contexts: nextDb.matchContexts || [] })
+    });
   }
 
   if (request.method === 'GET' && url.pathname === '/api/dongqiudi/matches') {

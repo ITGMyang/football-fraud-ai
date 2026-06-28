@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAnalytics } from '../src/evaluation.js';
+import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
 
 test('builds post-match analytics from finished contexts and rankings', () => {
   const contexts = [{
@@ -47,4 +47,16 @@ test('ignores unfinished contexts without actual score', () => {
 
   assert.equal(analytics.evaluatedCount, 0);
   assert.equal(analytics.matchCount, 0);
+});
+
+test('marks likely finished contexts without scores for analytics refresh', () => {
+  assert.equal(shouldRefreshForAnalytics({
+    sourceUrl: 'https://www.dongqiudi.com/match/1',
+    kickoff: '2026-06-20 12:00:00'
+  }), true);
+  assert.equal(shouldRefreshForAnalytics({
+    sourceUrl: 'https://www.dongqiudi.com/match/2',
+    status: 'Played',
+    actualScore: '2:1'
+  }), false);
 });

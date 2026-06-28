@@ -4,6 +4,8 @@ import { contextKey } from './context-utils.js';
 export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
   const contextMap = new Map((contexts || []).map((context) => [contextKey(context), context]));
   const evaluations = [];
+  const scoredContexts = (contexts || []).filter((context) => actualResultFromContext(context));
+  const finishedWithoutScore = (contexts || []).filter((context) => isLikelyFinished(context) && !actualResultFromContext(context));
 
   for (const ranking of rankings || []) {
     const context = contextMap.get(ranking.contextId);
@@ -25,6 +27,9 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
 
   return {
     generatedAt: new Date().toISOString(),
+    contextCount: contexts.length,
+    scoredContextCount: scoredContexts.length,
+    finishedWithoutScoreCount: finishedWithoutScore.length,
     evaluatedCount: evaluations.filter((item) => item.counted).length,
     matchCount: new Set(evaluations.map((item) => item.contextId)).size,
     models: summarizeBy(evaluations, (item) => item.modelName),
@@ -32,6 +37,10 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
     trend: buildTrend(evaluations),
     evaluations: evaluations.slice(0, 300)
   };
+}
+
+export function shouldRefreshForAnalytics(context = {}) {
+  return Boolean(context.sourceUrl) && isLikelyFinished(context) && !actualResultFromContext(context);
 }
 
 export function actualResultFromContext(context = {}) {
@@ -179,6 +188,23 @@ function buildTrend(evaluations) {
     byDateModel.set(key, row);
   }
   return [...byDateModel.values()].sort((a, b) => a.date.localeCompare(b.date) || a.modelName.localeCompare(b.modelName));
+}
+
+function isLikelyFinished(context = {}) {
+  if (/played|finished|完场|结束|ft/i.test(String(context.status || context.matchStatus || ''))) return true;
+  const kickoff = parseKickoffTime(context.kickoff);
+  return kickoff ? kickoff.getTime() + 150 * 60 * 1000 < Date.now() : false;
+}
+
+function parseKickoffTime(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (match) {
+    const [, year, month, day, hour, minute, second = '00'] = match;
+    return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`);
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function marketCategory(market) {

@@ -43,7 +43,7 @@ bind('#loadSample', 'click', async () => {
 });
 
 bind('#refresh', 'click', refresh);
-bind('#refreshAnalytics', 'click', refresh);
+bind('#refreshAnalytics', 'click', refreshAnalyticsData);
 bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
 bind('#competitionFilter', 'change', loadDongqiudiMatches);
 bind('#matchDate', 'change', loadDongqiudiMatches);
@@ -1272,7 +1272,7 @@ function renderAnalytics(analytics) {
     analyticsContentEl.innerHTML = `
       <div class="empty-analytics">
         <strong>暂无可计算准确率的数据</strong>
-        <p class="meta">需要先刷新已结束比赛，让懂球帝详情里带上完场比分，然后系统会自动评估历史预测。</p>
+        <p class="meta">已导入 ${analytics?.contextCount || 0} 场；已有赛果 ${analytics?.scoredContextCount || 0} 场；疑似完赛但缺比分 ${analytics?.finishedWithoutScoreCount || 0} 场。点击“刷新赛后数据”会重新抓这些完赛场次。</p>
       </div>
     `;
     return;
@@ -1328,6 +1328,28 @@ function renderAnalytics(analytics) {
       </section>
     </div>
   `;
+}
+
+async function refreshAnalyticsData(event) {
+  const button = event?.currentTarget;
+  const original = button?.textContent;
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = '刷新赛果中...';
+    }
+    const { analytics, refreshed, attempted, errors } = await api('/api/analytics/refresh', { method: 'POST' });
+    renderAnalytics(analytics);
+    const suffix = errors?.length ? `，${errors.length} 场失败` : '';
+    alert(`已检查 ${attempted || 0} 场，刷新 ${refreshed || 0} 场${suffix}`);
+  } catch (error) {
+    alert(error.message);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
 }
 
 function renderAccuracyBar(row) {
