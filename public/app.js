@@ -965,7 +965,7 @@ function renderOddsModule(index = {}) {
                     <tr>
                       <td>${escapeHtml(row.company || '-')}</td>
                       <td>${escapeHtml(row.home || '-')}</td>
-                      <td>${escapeHtml([row.line, row.lineValue ? `(${row.lineValue})` : ''].filter(Boolean).join(' ') || '-')}</td>
+                      <td>${escapeHtml(row.lineValue || row.line || '-')}</td>
                       <td>${escapeHtml(row.away || '-')}</td>
                       <td>${escapeHtml(row.updatedAt || '-')}</td>
                     </tr>
