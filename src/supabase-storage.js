@@ -54,7 +54,10 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
 
     async saveRanking(ranking, { mergeLatest = false } = {}) {
       if (mergeLatest) {
-        const latest = (await readPayloads(client, TABLES.rankings, 'created_at.desc', 1))[0];
+        const rankings = await readPayloads(client, TABLES.rankings, 'created_at.desc', 50);
+        const latest = ranking.contextId
+          ? rankings.find((item) => item.contextId === ranking.contextId)
+          : rankings[0];
         if (latest) {
           const byModel = new Map((latest.results || []).map((result) => [result.modelName, result]));
           for (const result of ranking.results || []) byModel.set(result.modelName, result);
@@ -62,6 +65,8 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
           latest.marketCount = ranking.marketCount || latest.marketCount;
           latest.createdAt = new Date().toISOString();
           latest.disclaimer = ranking.disclaimer || latest.disclaimer;
+          if (ranking.contextId) latest.contextId = ranking.contextId;
+          if (ranking.contextName) latest.contextName = ranking.contextName;
           await client.upsert(TABLES.rankings, [{
             id: latest.id,
             payload: latest,

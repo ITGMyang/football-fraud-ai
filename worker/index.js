@@ -306,9 +306,8 @@ async function routeApi(request, env) {
     const ranking = await rankMarkets(db.markets, requestedModel, env, workerFetch, context);
     ranking.contextId = context ? contextKey(context) : '';
     ranking.contextName = context?.matchName || '';
-    const latest = (db.rankings || [])[0];
     const savedRanking = await storage.saveRanking(ranking, {
-      mergeLatest: requestedModel !== 'all' && latest?.contextId === ranking.contextId
+      mergeLatest: requestedModel !== 'all'
     });
     return json({ ranking: savedRanking });
   }

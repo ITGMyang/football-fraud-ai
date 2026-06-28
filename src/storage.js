@@ -50,8 +50,11 @@ export function saveReport(report) {
 export function saveRanking(ranking, { mergeLatest = false } = {}) {
   const db = readDb();
   if (!Array.isArray(db.rankings)) db.rankings = [];
-  if (mergeLatest && db.rankings[0]) {
-    const latest = db.rankings[0];
+  if (mergeLatest && db.rankings.length) {
+    const mergeIndex = ranking.contextId
+      ? db.rankings.findIndex((item) => item.contextId === ranking.contextId)
+      : 0;
+    const latest = db.rankings[mergeIndex >= 0 ? mergeIndex : 0];
     const incoming = ranking.results || [];
     const byModel = new Map((latest.results || []).map((result) => [result.modelName, result]));
     for (const result of incoming) byModel.set(result.modelName, result);
@@ -59,6 +62,12 @@ export function saveRanking(ranking, { mergeLatest = false } = {}) {
     latest.marketCount = ranking.marketCount || latest.marketCount;
     latest.createdAt = new Date().toISOString();
     latest.disclaimer = ranking.disclaimer || latest.disclaimer;
+    if (ranking.contextId) latest.contextId = ranking.contextId;
+    if (ranking.contextName) latest.contextName = ranking.contextName;
+    db.rankings = [
+      latest,
+      ...db.rankings.filter((item) => item.id !== latest.id)
+    ].slice(0, 50);
     writeDb(db);
     return latest;
   }

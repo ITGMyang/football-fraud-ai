@@ -136,9 +136,8 @@ async function route(req, res) {
     const ranking = await rankMarkets(db.markets, requestedModel, process.env, openRouterFetch, context);
     ranking.contextId = context ? contextKey(context) : '';
     ranking.contextName = context?.matchName || '';
-    const latest = (db.rankings || [])[0];
     const savedRanking = saveRanking(ranking, {
-      mergeLatest: requestedModel !== 'all' && latest?.contextId === ranking.contextId
+      mergeLatest: requestedModel !== 'all'
     });
     return json(res, 200, { ranking: savedRanking });
   }

@@ -497,8 +497,7 @@ function renderAiContextTab(context) {
   const key = contextKey(context);
   const teams = contextTeams(context);
   const players = playerInfoStatus(context);
-  const ranking = rankingForContext(context);
-  const predictedModels = predictedModelsForRanking(ranking);
+  const predictedModels = predictedModelsForContext(context);
   const hasPrediction = predictedModels.size > 0;
   const urgent = isInOneHourCountdown(context);
   const statusClass = urgent ? 'urgent' : hasPrediction ? 'predicted' : 'future';
@@ -539,6 +538,16 @@ function renderAiContextTeam(team, side) {
 function rankingForContext(context) {
   const key = contextKey(context);
   return (window.currentRankings || []).find((ranking) => ranking.contextId === key) || null;
+}
+
+function predictedModelsForContext(context) {
+  const key = contextKey(context);
+  const models = new Set();
+  for (const ranking of window.currentRankings || []) {
+    if (ranking.contextId !== key) continue;
+    for (const model of predictedModelsForRanking(ranking)) models.add(model);
+  }
+  return models;
 }
 
 function predictedModelsForRanking(ranking) {
@@ -1039,8 +1048,8 @@ function renderRankings(rankings, markets) {
   const newest = currentContextRanking(rankings);
   const latestHasSuccess = newest?.results?.some((result) => (result.picks || []).length > 0);
   const latestNotice = latestHasSuccess
-    ? '<div class="ranking-notice">当前只显示最新一轮预测结果；旧结果请到历史区复盘。</div>'
-    : '<div class="ranking-notice">最新一轮没有有效 Top 4，当前显示这一轮的模型错误。你可以点击上方按钮重新预测。</div>';
+    ? '<div class="ranking-notice">当前按模型保留这场比赛最近一次结果；单模型重跑失败不会隐藏其他模型标签。</div>'
+    : '<div class="ranking-notice">最新一轮没有有效 Top 4；下方仍保留这场比赛其他模型的最近结果。</div>';
   const marketMap = new Map(markets.map((market) => [market.id, market]));
   if (!generated.some((item) => isActiveRankingItem(item)) || activeRankingModel === 'all') {
     activeRankingModel = generated[0].key;
@@ -1087,22 +1096,40 @@ function renderRankings(rankings, markets) {
 }
 
 function collectLatestGeneratedResults(rankings) {
-  const latest = currentContextRanking(rankings);
-  if (!latest) return [];
-  const results = latest.results || [];
-  const successful = results.filter((result) => (result.picks || []).length > 0);
-  const visibleResults = successful.length ? successful : results;
-  return visibleResults.map((result) => ({
-    key: `${latest.id}:${result.modelName}`,
-    ranking: latest,
-    result
-  }));
+  const related = currentContextRankings(rankings);
+  if (!related.length) return [];
+  const byModel = new Map();
+  for (const ranking of related) {
+    for (const result of ranking.results || []) {
+      const modelKey = modelBrandKey(result.modelName || '');
+      if (!byModel.has(modelKey)) {
+        byModel.set(modelKey, {
+          key: `${ranking.id}:${modelKey}`,
+          modelKey,
+          ranking,
+          result
+        });
+      }
+    }
+  }
+  const order = new Map(RANK_MODELS.map((model, index) => [modelBrandKey(model), index]));
+  return [...byModel.values()].sort((a, b) => {
+    const aOrder = order.has(a.modelKey) ? order.get(a.modelKey) : 99;
+    const bOrder = order.has(b.modelKey) ? order.get(b.modelKey) : 99;
+    return aOrder - bOrder || timestampOf(b.ranking.createdAt) - timestampOf(a.ranking.createdAt);
+  });
 }
 
 function currentContextRanking(rankings = []) {
   if (!rankings?.length) return null;
   if (!activeContextId) return rankings[0] || null;
   return rankings.find((ranking) => ranking.contextId === activeContextId) || null;
+}
+
+function currentContextRankings(rankings = []) {
+  if (!rankings?.length) return [];
+  if (!activeContextId) return rankings;
+  return rankings.filter((ranking) => ranking.contextId === activeContextId);
 }
 
 function updateRankButtons(rankings = []) {
