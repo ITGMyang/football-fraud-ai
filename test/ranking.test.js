@@ -123,7 +123,10 @@ test('ranking can use Dongqiudi context without imported odds markets', async ()
     index: {
       live: {
         asia: [
-          { company: '澳门', home: '0.98', line: '受半/一', lineValue: '-0.75', away: '0.86' }
+          { company: '\u6fb3\u95e8', home: '0.98', line: '\u53d7\u534a/\u4e00', lineValue: '-0.75', away: '0.86' }
+        ],
+        size: [
+          { company: '\u6fb3\u95e8', home: '0.91', line: '2.5/3', away: '0.89' }
         ]
       }
     }
@@ -136,6 +139,10 @@ test('ranking can use Dongqiudi context without imported odds markets', async ()
     .filter((market) => /handicap/.test(market.id))
     .map((market) => market.line);
   assert.deepEqual(handicapLines, ['+0.75', '-0.75']);
+  const totalLines = sentMarkets
+    .filter((market) => /total/.test(market.id))
+    .map((market) => `${market.selection}:${market.line}`);
+  assert.deepEqual(totalLines, ['\u5927:2.5/3', '\u5c0f:2.5/3']);
 });
 
 test('ranking parser tolerates fenced JSON and trailing commas', async () => {

@@ -1301,7 +1301,7 @@ function renderRankingPick(pick, marketMap, index) {
         <p>${escapeHtml(market.matchName || '未知比赛')}</p>
       </div>
       <div class="prediction-metrics">
-        <div><span>${categoryKey === 'moneyline' ? '三选一' : '盘口'}</span><strong>${escapeHtml(categoryKey === 'moneyline' ? outcome : (market.line || '无'))}</strong></div>
+        <div><span>${categoryKey === 'moneyline' ? '三选一' : '盘口'}</span><strong>${escapeHtml(categoryKey === 'moneyline' ? outcome : (displayMarketLine(market) || '无'))}</strong></div>
         <div><span>AI 概率</span><strong>${percent(pick.estimatedProbability)}</strong></div>
         <div><span>置信度</span><strong>${percent(pick.confidence)}</strong></div>
         <div><span>选择</span><strong>${escapeHtml(market.selection || '无')}</strong></div>
@@ -1892,17 +1892,32 @@ function displayMarketType(type) {
 function formatCategorySummaryLabel(category, market) {
   if (category === 'moneyline') return marketOutcomeDisplay(market);
   if (category === 'score') return `比分 ${market.selection || ''}`;
-  if (category === 'total') return `${market.selection || ''} ${market.line || ''} 球`;
-  return `${market.selection || ''} ${market.line || ''}`.trim();
+  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} \u7403`;
+  return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
 }
 
 function formatPredictionTitle(market) {
   const category = marketCategory(market);
   if (category === 'moneyline') return marketOutcomeDisplay(market);
   if (category === 'score') return `比分 ${market.selection || ''}`.trim();
-  if (category === 'handicap') return `${market.selection || ''} ${market.line || ''}`.trim();
-  if (category === 'total') return `${market.selection || ''} ${market.line || ''} 球`.trim();
-  return `${market.selection || ''} ${market.line || ''}`.trim();
+  if (category === 'handicap') return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
+  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} \u7403`.trim();
+  return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
+}
+
+function displayMarketLine(market = {}) {
+  const raw = String(market.line || '').trim();
+  if (marketCategory(market) !== 'handicap') return raw;
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return raw;
+  if (num > 0) return `+${formatLineNumber(num)}`;
+  if (num < 0) return `-${formatLineNumber(Math.abs(num))}`;
+  return '0';
+}
+
+function formatLineNumber(value) {
+  const rounded = Math.round(Number(value) * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 function marketOutcomeLabel(market) {
