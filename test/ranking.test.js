@@ -145,6 +145,53 @@ test('ranking can use Dongqiudi context without imported odds markets', async ()
   assert.deepEqual(totalLines, ['\u5927:2.5/3', '\u5c0f:2.5/3']);
 });
 
+test('ranking maps positive Dongqiudi handicap value as home giving goals', async () => {
+  let sentMarkets = [];
+  const fakeFetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    const user = JSON.parse(body.messages.find((message) => message.role === 'user').content);
+    sentMarkets = user.markets;
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: user.markets.slice(0, 4).map((market, index) => ({
+                marketId: market.id,
+                estimatedProbability: 0.6 - index / 100,
+                confidence: 0.5,
+                reason: 'test',
+                risks: []
+              }))
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  await rankMarkets([], 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch, {
+    teams: ['\u5fb7\u56fd', '\u5df4\u62c9\u572d'],
+    matchName: '\u5fb7\u56fd v \u5df4\u62c9\u572d',
+    index: {
+      live: {
+        asia: [
+          { company: '\u6fb3\u95e8', home: '1.02', line: '\u7403\u534a', lineValue: '1.50', away: '0.82' }
+        ]
+      }
+    }
+  });
+
+  const handicapLines = sentMarkets
+    .filter((market) => /handicap/.test(market.id))
+    .map((market) => `${market.selection}:${market.line}`);
+  assert.deepEqual(handicapLines, ['\u5fb7\u56fd:-1.5', '\u5df4\u62c9\u572d:+1.5']);
+});
+
 test('ranking parser tolerates fenced JSON and trailing commas', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 }),

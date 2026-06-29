@@ -518,7 +518,7 @@ function handicapLinesFromLiveRow(row = {}) {
   if (/\u53d7/.test(text)) return { homeLine: formatSignedLine(absLine), awayLine: formatSignedLine(-absLine) };
   if (/\u8ba9/.test(text)) return { homeLine: formatSignedLine(-absLine), awayLine: formatSignedLine(absLine) };
   const signed = Number(row.lineValue);
-  return { homeLine: formatSignedLine(signed), awayLine: formatSignedLine(-signed) };
+  return { homeLine: formatSignedLine(-signed), awayLine: formatSignedLine(signed) };
 }
 
 function formatSignedLine(value) {
