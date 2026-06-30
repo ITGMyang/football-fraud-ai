@@ -155,7 +155,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       body: JSON.stringify({
         model,
         temperature: retry ? 0 : 0.15,
-        max_tokens: 2200,
+        ...completionTokenLimit(provider, 2200),
         messages: [
           { role: 'system', content: rankingSystemPromptV2() },
           { role: 'user', content: rankingUserPromptV2(markets, matchContext, retry) }
@@ -329,6 +329,12 @@ function rankingSystemPromptV2() {
     'You must also return scorePicks in the JSON shape requested by the user prompt. Score predictions are separate from picks unless a score market is explicitly requested there.',
     'Return legal JSON only. Do not output Markdown, explanatory text, chain-of-thought, betting advice, stake sizing, or anything outside JSON.'
   ].join('\n');
+}
+
+function completionTokenLimit(provider, limit) {
+  return String(provider).toLowerCase() === 'openai'
+    ? { max_completion_tokens: limit }
+    : { max_tokens: limit };
 }
 
 function userPrompt(market, retry) {
