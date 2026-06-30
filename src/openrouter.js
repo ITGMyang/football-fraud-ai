@@ -123,8 +123,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error('模型没有返回 content');
+    const content = extractModelContent(data);
     const parsed = parseModelJson(content);
     return {
       modelName: label,
@@ -155,7 +154,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       body: JSON.stringify({
         model,
         ...modelTemperature(provider, retry ? 0 : 0.15),
-        ...completionTokenLimit(provider, 2200),
+        ...completionTokenLimit(provider, completionTokenBudget(provider, 2200)),
         messages: [
           { role: 'system', content: rankingSystemPromptV2() },
           { role: 'user', content: rankingUserPromptV2(markets, matchContext, retry) }
@@ -170,8 +169,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error('模型没有返回 content');
+    const content = extractModelContent(data);
     const parsed = parseModelJson(content);
     const rawPicks = validateRankingPicks(parsed, markets);
     const scorePicks = ensureScorePickCount(
@@ -337,10 +335,37 @@ function completionTokenLimit(provider, limit) {
     : { max_tokens: limit };
 }
 
+function completionTokenBudget(provider, fallback) {
+  return String(provider).toLowerCase() === 'openai' ? 8000 : fallback;
+}
+
 function modelTemperature(provider, value) {
   return String(provider).toLowerCase() === 'openai'
     ? {}
     : { temperature: value };
+}
+
+function extractModelContent(data) {
+  const choice = data?.choices?.[0] || {};
+  const message = choice.message || {};
+  const content = normalizeContent(message.content || data?.output_text || choice.text);
+  if (content) return content;
+  if (message.refusal) throw new Error(`模型拒绝返回: ${message.refusal}`);
+  if (choice.finish_reason === 'length') {
+    throw new Error('模型输出被截断：OpenAI GPT 5.5 消耗了全部 max_completion_tokens，请重跑一次或减少输入数据。');
+  }
+  throw new Error(`模型没有返回 content${choice.finish_reason ? `，finish_reason=${choice.finish_reason}` : ''}`);
+}
+
+function normalizeContent(content) {
+  if (typeof content === 'string') return content.trim();
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (typeof part === 'string') return part;
+      return part?.text || part?.content || part?.value || '';
+    }).join('').trim();
+  }
+  return '';
 }
 
 function userPrompt(market, retry) {
