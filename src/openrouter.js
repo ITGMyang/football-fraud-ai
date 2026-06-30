@@ -108,7 +108,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
       },
       body: JSON.stringify({
         model,
-        temperature: retry ? 0 : 0.2,
+        ...modelTemperature(provider, retry ? 0 : 0.2),
         messages: [
           { role: 'system', content: systemPrompt() },
           { role: 'user', content: userPrompt(market, retry) }
@@ -154,7 +154,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       },
       body: JSON.stringify({
         model,
-        temperature: retry ? 0 : 0.15,
+        ...modelTemperature(provider, retry ? 0 : 0.15),
         ...completionTokenLimit(provider, 2200),
         messages: [
           { role: 'system', content: rankingSystemPromptV2() },
@@ -335,6 +335,12 @@ function completionTokenLimit(provider, limit) {
   return String(provider).toLowerCase() === 'openai'
     ? { max_completion_tokens: limit }
     : { max_tokens: limit };
+}
+
+function modelTemperature(provider, value) {
+  return String(provider).toLowerCase() === 'openai'
+    ? {}
+    : { temperature: value };
 }
 
 function userPrompt(market, retry) {

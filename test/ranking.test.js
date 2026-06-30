@@ -467,6 +467,7 @@ test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   assert.match(requestedUrl, /^https:\/\/api\.openai\.com\/v1\/chat\/completions$/);
   assert.equal(requestBody.max_tokens, undefined);
   assert.equal(requestBody.max_completion_tokens, 2200);
+  assert.equal(requestBody.temperature, undefined);
   assert.equal(ranking.results[0].provider, 'OpenAI');
 });
 
