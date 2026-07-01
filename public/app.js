@@ -1173,14 +1173,14 @@ function collectLatestGeneratedResults(rankings) {
   for (const ranking of related) {
     for (const result of ranking.results || []) {
       const modelKey = modelBrandKey(result.modelName || '');
-      if (!byModel.has(modelKey)) {
-        byModel.set(modelKey, {
-          key: `${ranking.id}:${modelKey}`,
-          modelKey,
-          ranking,
-          result
-        });
-      }
+      const candidate = {
+        key: `${ranking.id}:${modelKey}`,
+        modelKey,
+        ranking,
+        result
+      };
+      const existing = byModel.get(modelKey);
+      if (!existing || isNewerModelResult(candidate, existing)) byModel.set(modelKey, candidate);
     }
   }
   const order = new Map(RANK_MODELS.map((model, index) => [modelBrandKey(model), index]));
@@ -1189,6 +1189,22 @@ function collectLatestGeneratedResults(rankings) {
     const bOrder = order.has(b.modelKey) ? order.get(b.modelKey) : 99;
     return aOrder - bOrder || timestampOf(b.ranking.createdAt) - timestampOf(a.ranking.createdAt);
   });
+}
+
+function isNewerModelResult(candidate, existing) {
+  const candidateTime = timestampOf(candidate.ranking?.createdAt);
+  const existingTime = timestampOf(existing.ranking?.createdAt);
+  if (candidateTime !== existingTime) return candidateTime > existingTime;
+  return modelResultSpecificity(candidate.result) >= modelResultSpecificity(existing.result);
+}
+
+function modelResultSpecificity(result = {}) {
+  const name = String(result.modelName || '');
+  let score = name.length;
+  if (/\d/.test(name)) score += 20;
+  if (/max|pro|preview|5\.5|4\.8/i.test(name)) score += 10;
+  if (result.error) score -= 5;
+  return score;
 }
 
 function currentContextRanking(rankings = []) {

@@ -59,8 +59,8 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
           ? rankings.find((item) => item.contextId === ranking.contextId)
           : rankings[0];
         if (latest) {
-          const byModel = new Map((latest.results || []).map((result) => [result.modelName, result]));
-          for (const result of ranking.results || []) byModel.set(result.modelName, result);
+          const byModel = new Map((latest.results || []).map((result) => [resultModelKey(result.modelName), result]));
+          for (const result of ranking.results || []) byModel.set(resultModelKey(result.modelName), result);
           latest.results = [...byModel.values()];
           latest.marketCount = ranking.marketCount || latest.marketCount;
           latest.createdAt = new Date().toISOString();
@@ -95,6 +95,16 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       return context;
     }
   };
+}
+
+function resultModelKey(modelName = '') {
+  const text = String(modelName || '').toLowerCase();
+  if (text.includes('gpt') || text.includes('openai')) return 'gpt';
+  if (text.includes('claude')) return 'claude';
+  if (text.includes('gemini')) return 'gemini';
+  if (text.includes('deepseek')) return 'deepseek';
+  if (text.includes('qwen') || text.includes('通义')) return 'qwen';
+  return text || 'ai';
 }
 
 async function readPayloads(client, table, order, limit) {

@@ -86,6 +86,41 @@ test('single model ranking merges into latest ranking for the same context', asy
   }
 });
 
+test('single model ranking replaces older result from same model brand', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'football-storage-'));
+  process.chdir(tempDir);
+  try {
+    const storage = await import(`../src/storage.js?test=${Date.now()}-brand-merge`);
+    storage.saveRanking({
+      id: 'batch-1',
+      contextId: 'england-congo',
+      marketCount: 4,
+      createdAt: '2026-06-26T00:00:00.000Z',
+      results: [
+        { modelName: 'Qwen', picks: [{ marketId: 'old' }], scorePicks: [] },
+        { modelName: 'GPT 5.5', picks: [{ marketId: 'gpt' }], scorePicks: [] }
+      ]
+    });
+
+    const merged = storage.saveRanking({
+      id: 'single-qwen',
+      contextId: 'england-congo',
+      marketCount: 4,
+      createdAt: '2026-06-26T00:03:00.000Z',
+      results: [
+        { modelName: 'Qwen 3.7 Max', picks: [{ marketId: 'new' }], scorePicks: [] }
+      ]
+    }, { mergeLatest: true });
+
+    assert.deepEqual(merged.results.map((result) => result.modelName), ['Qwen 3.7 Max', 'GPT 5.5']);
+    assert.equal(merged.results.find((result) => result.modelName === 'Qwen 3.7 Max').picks[0].marketId, 'new');
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('upserting an imported match context refreshes capturedAt in place', async () => {
   const originalCwd = process.cwd();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'football-storage-'));

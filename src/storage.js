@@ -56,8 +56,8 @@ export function saveRanking(ranking, { mergeLatest = false } = {}) {
       : 0;
     const latest = db.rankings[mergeIndex >= 0 ? mergeIndex : 0];
     const incoming = ranking.results || [];
-    const byModel = new Map((latest.results || []).map((result) => [result.modelName, result]));
-    for (const result of incoming) byModel.set(result.modelName, result);
+    const byModel = new Map((latest.results || []).map((result) => [resultModelKey(result.modelName), result]));
+    for (const result of incoming) byModel.set(resultModelKey(result.modelName), result);
     latest.results = [...byModel.values()];
     latest.marketCount = ranking.marketCount || latest.marketCount;
     latest.createdAt = new Date().toISOString();
@@ -75,6 +75,16 @@ export function saveRanking(ranking, { mergeLatest = false } = {}) {
   db.rankings = db.rankings.slice(0, 50);
   writeDb(db);
   return ranking;
+}
+
+function resultModelKey(modelName = '') {
+  const text = String(modelName || '').toLowerCase();
+  if (text.includes('gpt') || text.includes('openai')) return 'gpt';
+  if (text.includes('claude')) return 'claude';
+  if (text.includes('gemini')) return 'gemini';
+  if (text.includes('deepseek')) return 'deepseek';
+  if (text.includes('qwen') || text.includes('通义')) return 'qwen';
+  return text || 'ai';
 }
 
 export function upsertMatchContext(context) {
