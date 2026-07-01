@@ -326,6 +326,7 @@ function rankingSystemPromptV2() {
     'When hit probability and odds value conflict, prefer long-term EV only after preserving a reasonable hit probability.',
     'Return picks sorted by estimatedProbability descending.',
     'You must also return scorePicks in the JSON shape requested by the user prompt. Score predictions are separate from picks unless a score market is explicitly requested there.',
+    'Use English JSON keys exactly as requested, but write all user-facing text values in Simplified Chinese, including reason, risks, and scorePicks.reason.',
     'Return legal JSON only. Do not output Markdown, explanatory text, chain-of-thought, betting advice, stake sizing, or anything outside JSON.'
   ].join('\n');
 }
@@ -491,6 +492,7 @@ function rankingUserPromptV2(markets, matchContext, retry) {
       'For scorePicks, use a score/correct score/比分 marketId when available. If no exact score marketId fits, still provide the score text.',
       'estimatedProbability is your AI probability, not odds implied probability.',
       'Sort both picks and scorePicks by estimatedProbability descending.',
+      'Use Simplified Chinese for every reason and risks item.',
       'Do not promise profit or suggest stake size.'
     ]
   });
