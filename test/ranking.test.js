@@ -471,7 +471,7 @@ test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   assert.equal(requestBody.max_output_tokens, 8000);
   assert.equal(requestBody.temperature, undefined);
   assert.equal(requestBody.text.format.type, 'json_object');
-  assert.match(requestBody.instructions, /Professional Football Analyst/);
+  assert.match(requestBody.instructions, /职业足球分析师/);
   assert.match(requestBody.input, /markets/);
   assert.equal(ranking.results[0].provider, 'OpenAI');
 });

@@ -1255,7 +1255,7 @@ function renderScorePredictions(scorePicks) {
     <section class="score-predictions">
       <div class="score-head">
         <strong>比分预测</strong>
-        <span>2 mainline + 1 market-fit + 1 aggressive</span>
+        <span>2 个主线 + 1 个盘口匹配 + 1 个激进比分</span>
       </div>
       <div class="score-grid">
         ${picks.length ? picks.map((pick, index) => `
