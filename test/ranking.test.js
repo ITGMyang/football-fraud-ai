@@ -464,10 +464,15 @@ test('gpt-prefixed model uses OpenAI provider automatically', async () => {
     MODEL_GPT: 'gpt-5.5'
   }, fakeFetch);
 
-  assert.match(requestedUrl, /^https:\/\/api\.openai\.com\/v1\/chat\/completions$/);
+  assert.match(requestedUrl, /^https:\/\/api\.openai\.com\/v1\/responses$/);
+  assert.equal(requestBody.messages, undefined);
   assert.equal(requestBody.max_tokens, undefined);
-  assert.equal(requestBody.max_completion_tokens, 8000);
+  assert.equal(requestBody.max_completion_tokens, undefined);
+  assert.equal(requestBody.max_output_tokens, 8000);
   assert.equal(requestBody.temperature, undefined);
+  assert.equal(requestBody.text.format.type, 'json_object');
+  assert.match(requestBody.instructions, /Professional Football Analyst/);
+  assert.match(requestBody.input, /markets/);
   assert.equal(ranking.results[0].provider, 'OpenAI');
 });
 
@@ -494,6 +499,38 @@ test('ranking parser accepts array content from OpenAI responses', async () => {
             }
           ]
         }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENAI_API_KEY: 'test-openai',
+    MODEL_GPT: 'gpt-5.5'
+  }, fakeFetch);
+
+  assert.equal(ranking.results[0].picks[0].marketId, 'a');
+});
+
+test('ranking parser accepts Responses API output content', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      output: [{
+        type: 'message',
+        content: [{
+          type: 'output_text',
+          text: JSON.stringify({
+            picks: [{ marketId: 'a', estimatedProbability: 0.6, confidence: 0.5, reason: 'home', risks: [] }],
+            scorePicks: [
+              { score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'low' },
+              { score: '2:1', estimatedProbability: 0.18, confidence: 0.35, reason: 'edge' },
+              { score: '1:1', estimatedProbability: 0.16, confidence: 0.3, reason: 'draw' }
+            ]
+          })
+        }]
       }]
     })
   });

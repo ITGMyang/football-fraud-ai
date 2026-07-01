@@ -99,22 +99,23 @@ async function callRankingModelWithRetry(args) {
 async function callModel({ label, model, provider, market, env, fetchImpl, retry = false }) {
   try {
     const client = modelClient(provider, env);
-    const response = await fetchImpl(`${client.baseUrl}/chat/completions`, {
+    const request = modelRequest({
+      client,
+      provider,
+      model,
+      system: systemPrompt(),
+      user: userPrompt(market, retry),
+      temperature: retry ? 0 : 0.2,
+      maxTokens: 4000
+    });
+    const response = await fetchImpl(request.url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${client.apiKey}`,
         'Content-Type': 'application/json',
         ...client.extraHeaders
       },
-      body: JSON.stringify({
-        model,
-        ...modelTemperature(provider, retry ? 0 : 0.2),
-        messages: [
-          { role: 'system', content: systemPrompt() },
-          { role: 'user', content: userPrompt(market, retry) }
-        ],
-        response_format: { type: 'json_object' }
-      })
+      body: JSON.stringify(request.body)
     });
 
     if (!response.ok) {
@@ -144,23 +145,23 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
 async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, retry = false }) {
   try {
     const client = modelClient(provider, env);
-    const response = await fetchImpl(`${client.baseUrl}/chat/completions`, {
+    const request = modelRequest({
+      client,
+      provider,
+      model,
+      system: rankingSystemPromptV2(),
+      user: rankingUserPromptV2(markets, matchContext, retry),
+      temperature: retry ? 0 : 0.15,
+      maxTokens: 2200
+    });
+    const response = await fetchImpl(request.url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${client.apiKey}`,
         'Content-Type': 'application/json',
         ...client.extraHeaders
       },
-      body: JSON.stringify({
-        model,
-        ...modelTemperature(provider, retry ? 0 : 0.15),
-        ...completionTokenLimit(provider, completionTokenBudget(provider, 2200)),
-        messages: [
-          { role: 'system', content: rankingSystemPromptV2() },
-          { role: 'user', content: rankingUserPromptV2(markets, matchContext, retry) }
-        ],
-        response_format: { type: 'json_object' }
-      })
+      body: JSON.stringify(request.body)
     });
 
     if (!response.ok) {
@@ -345,10 +346,39 @@ function modelTemperature(provider, value) {
     : { temperature: value };
 }
 
+function modelRequest({ client, provider, model, system, user, temperature, maxTokens }) {
+  if (String(provider).toLowerCase() === 'openai') {
+    return {
+      url: `${client.baseUrl}/responses`,
+      body: {
+        model,
+        instructions: system,
+        input: user,
+        max_output_tokens: completionTokenBudget(provider, maxTokens),
+        text: { format: { type: 'json_object' } }
+      }
+    };
+  }
+
+  return {
+    url: `${client.baseUrl}/chat/completions`,
+    body: {
+      model,
+      ...modelTemperature(provider, temperature),
+      ...completionTokenLimit(provider, completionTokenBudget(provider, maxTokens)),
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
+      response_format: { type: 'json_object' }
+    }
+  };
+}
+
 function extractModelContent(data) {
   const choice = data?.choices?.[0] || {};
   const message = choice.message || {};
-  const content = normalizeContent(message.content || data?.output_text || choice.text);
+  const content = normalizeContent(message.content || data?.output_text || choice.text || responseOutputText(data));
   if (content) return content;
   if (message.refusal) throw new Error(`模型拒绝返回: ${message.refusal}`);
   if (choice.finish_reason === 'length') {
@@ -357,12 +387,17 @@ function extractModelContent(data) {
   throw new Error(`模型没有返回 content${choice.finish_reason ? `，finish_reason=${choice.finish_reason}` : ''}`);
 }
 
+function responseOutputText(data) {
+  if (!Array.isArray(data?.output)) return '';
+  return data.output.map((item) => normalizeContent(item?.content)).join('').trim();
+}
+
 function normalizeContent(content) {
   if (typeof content === 'string') return content.trim();
   if (Array.isArray(content)) {
     return content.map((part) => {
       if (typeof part === 'string') return part;
-      return part?.text || part?.content || part?.value || '';
+      return part?.text || part?.content || part?.value || part?.output_text || '';
     }).join('').trim();
   }
   return '';
