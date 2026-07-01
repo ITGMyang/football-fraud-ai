@@ -190,6 +190,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       modelName: label,
       modelId: model,
       provider: client.name,
+      generatedAt: new Date().toISOString(),
       picks,
       scorePicks
     };
@@ -198,6 +199,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       modelName: label,
       modelId: model,
       provider: providerLabel(provider),
+      generatedAt: new Date().toISOString(),
       error: error.message,
       picks: [],
       scorePicks: []

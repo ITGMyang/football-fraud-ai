@@ -1173,10 +1173,11 @@ function collectLatestGeneratedResults(rankings) {
   for (const ranking of related) {
     for (const result of ranking.results || []) {
       const modelKey = modelBrandKey(result.modelName || '');
+      const resultCreatedAt = result.generatedAt || ranking.createdAt;
       const candidate = {
         key: `${ranking.id}:${modelKey}`,
         modelKey,
-        ranking,
+        ranking: { ...ranking, createdAt: resultCreatedAt },
         result
       };
       const existing = byModel.get(modelKey);

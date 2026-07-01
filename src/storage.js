@@ -56,7 +56,11 @@ export function saveRanking(ranking, { mergeLatest = false } = {}) {
       : 0;
     const latest = db.rankings[mergeIndex >= 0 ? mergeIndex : 0];
     const incoming = ranking.results || [];
-    const byModel = new Map((latest.results || []).map((result) => [resultModelKey(result.modelName), result]));
+    const existingResults = (latest.results || []).map((result) => ({
+      ...result,
+      generatedAt: result.generatedAt || latest.createdAt
+    }));
+    const byModel = new Map(existingResults.map((result) => [resultModelKey(result.modelName), result]));
     for (const result of incoming) byModel.set(resultModelKey(result.modelName), result);
     latest.results = [...byModel.values()];
     latest.marketCount = ranking.marketCount || latest.marketCount;
