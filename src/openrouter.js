@@ -941,7 +941,8 @@ function inferredPick(market, scorePick, reason) {
     estimatedProbability: probability,
     confidence: Math.max(0.25, Math.min(0.55, Number(scorePick?.confidence || 0.32))),
     reason,
-    risks: ['该选择由模型比分预测自动推导，建议重跑模型获取直接盘口判断']
+    inferred: true,
+    risks: ['该盘口由比分预测自动补齐，非模型直接选择；请结合直接盘口卡片一起看。']
   };
 }
 
