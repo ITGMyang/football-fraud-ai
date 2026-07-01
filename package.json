@@ -9,7 +9,7 @@
     "cf:dry-run": "wrangler deploy --dry-run",
     "cf:deploy": "wrangler deploy",
     "test:models": "node scripts/test-models.js",
-    "test": "node --test test"
+    "test": "node --test test/*.js"
   },
   "dependencies": {
     "undici": "^6.22.0"

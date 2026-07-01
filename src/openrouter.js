@@ -173,8 +173,15 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
     const content = extractModelContent(data);
     const parsed = parseModelJson(content);
     const rawPicks = validateRankingPicks(parsed, markets);
+    const rawScorePicks = validateScorePicks(parsed, markets);
+    if (hasEnglishUserFacingText(rawPicks, rawScorePicks)) {
+      if (!retry) {
+        throw new Error('模型返回英文说明，系统已自动重跑一次。');
+      }
+      replaceEnglishUserFacingText(rawPicks, rawScorePicks);
+    }
     const scorePicks = ensureScorePickCount(
-      alignScorePicksWithTotals(validateScorePicks(parsed, markets), rawPicks, markets),
+      alignScorePicksWithTotals(rawScorePicks, rawPicks, markets),
       rawPicks,
       markets
     ).slice(0, SCORE_PICK_COUNT);
@@ -1038,4 +1045,41 @@ function normalizeModelProbability(value) {
   if (num > 1 && num <= 100) return num / 100;
   if (num >= 0 && num <= 1) return num;
   return null;
+}
+
+function hasEnglishUserFacingText(picks = [], scorePicks = []) {
+  return [...picks, ...scorePicks].some((pick) => {
+    if (looksLikeEnglishSentence(pick.reason)) return true;
+    return Array.isArray(pick.risks) && pick.risks.some(looksLikeEnglishSentence);
+  });
+}
+
+function replaceEnglishUserFacingText(picks = [], scorePicks = []) {
+  for (const pick of picks) {
+    if (looksLikeEnglishSentence(pick.reason)) {
+      pick.reason = '模型返回了英文分析，系统已隐藏原文；建议结合该盘口方向、概率和置信度复核。';
+    }
+    if (Array.isArray(pick.risks)) {
+      pick.risks = pick.risks.map((risk) => (
+        looksLikeEnglishSentence(risk)
+          ? '模型返回了英文风险说明，建议重跑该模型获取中文风险。'
+          : risk
+      ));
+    }
+  }
+  for (const pick of scorePicks) {
+    if (looksLikeEnglishSentence(pick.reason)) {
+      pick.reason = '模型返回了英文比分理由，系统已隐藏原文。';
+    }
+  }
+}
+
+function looksLikeEnglishSentence(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  const latinWords = text.match(/[A-Za-z]{3,}/g) || [];
+  if (latinWords.length < 4) return false;
+  const latinChars = latinWords.join('').length;
+  const cjkChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+  return latinChars > Math.max(18, cjkChars * 1.5);
 }

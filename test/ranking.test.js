@@ -606,6 +606,62 @@ test('Claude model can route through APIMart', async () => {
   assert.equal(ranking.results[0].provider, 'APIMart');
 });
 
+test('ranking retries once when model returns English user-facing text', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'England v Congo', marketType: '足球 胜平负', selection: 'England', line: '胜平负', odds: 1.4 }),
+    buildMarket({ id: 'b', matchName: 'England v Congo', marketType: '足球 大小球', selection: '小', line: '2.5', odds: 1.8 })
+  ];
+  let calls = 0;
+  const fakeFetch = async () => {
+    calls += 1;
+    const content = calls === 1
+      ? {
+          picks: [
+            {
+              marketId: 'a',
+              estimatedProbability: 0.71,
+              confidence: 0.55,
+              reason: 'England have superior squad depth and should control the match tempo.',
+              risks: ['Early rotation could lower attacking urgency']
+            }
+          ],
+          scorePicks: [
+            { score: '1:0', scoreType: 'mainline', estimatedProbability: 0.18, confidence: 0.35, reason: 'England can win a controlled low scoring game.' }
+          ]
+        }
+      : {
+          picks: [
+            {
+              marketId: 'a',
+              estimatedProbability: 0.71,
+              confidence: 0.55,
+              reason: '英格兰整体实力占优，控场能力更稳定。',
+              risks: ['轮换可能降低进攻强度']
+            }
+          ],
+          scorePicks: [
+            { score: '1:0', scoreType: 'mainline', estimatedProbability: 0.18, confidence: 0.35, reason: '低比分赢球路径更符合当前信息。' }
+          ]
+        };
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(content) } }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'Qwen', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_QWEN: 'qwen/qwen3.7-max'
+  }, fakeFetch);
+
+  assert.equal(calls, 2);
+  assert.equal(ranking.results[0].error, undefined);
+  assert.match(ranking.results[0].picks[0].reason, /英格兰/);
+  assert.match(ranking.results[0].scorePicks[0].reason, /低比分/);
+});
+
 test('model ids and api keys tolerate BOM and whitespace from secrets', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
