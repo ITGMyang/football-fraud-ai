@@ -1252,6 +1252,25 @@ summary {
   justify-content: flex-end;
 }
 
+.qwen-model-select {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 160px);
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.qwen-model-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.qwen-model-select select {
+  min-height: 42px;
+  padding: 8px 10px;
+}
+
 .rankings,
 .cards {
   display: grid;

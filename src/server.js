@@ -161,7 +161,7 @@ async function route(req, res) {
       : (db.matchContexts || [])[0] || null;
     if (!db.markets.length && !context) return json(res, 400, { error: '还没有导入懂球帝比赛数据' });
     const requestedModel = body.model || 'all';
-    const ranking = await rankMarkets(db.markets, requestedModel, process.env, openRouterFetch, context);
+    const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(process.env, body), openRouterFetch, context);
     ranking.contextId = context ? contextKey(context) : '';
     ranking.contextName = context?.matchName || '';
     const savedRanking = saveRanking(ranking, {
@@ -171,6 +171,17 @@ async function route(req, res) {
   }
 
   return json(res, 404, { error: 'Not found' });
+}
+
+function rankingEnv(env, body = {}) {
+  const variant = String(body.qwenVariant || '').toLowerCase();
+  if (variant === 'max') {
+    return { ...env, MODEL_QWEN: 'qwen/qwen3.7-max', MODEL_QWEN_LABEL: 'Qwen 3.7 Max' };
+  }
+  if (variant === 'plus') {
+    return { ...env, MODEL_QWEN: 'qwen/qwen3.7-plus', MODEL_QWEN_LABEL: 'Qwen 3.7 Plus' };
+  }
+  return env;
 }
 
 function serveFile(res, filename, contentType) {

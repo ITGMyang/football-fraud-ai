@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8">
@@ -120,7 +120,13 @@
             <button class="secondary" data-rank-model="Claude">重跑 Claude</button>
             <button class="secondary" data-rank-model="Gemini">重跑 Gemini</button>
             <button class="secondary" data-rank-model="DeepSeek">重跑 DeepSeek</button>
-            <button class="secondary" data-rank-model="Qwen">重跑 Qwen</button>
+            <button class="secondary" data-rank-model="Qwen">重跑 Qwen</button>`r`n            <label class="qwen-model-select">
+              <span>Qwen</span>
+              <select id="qwenVariant">
+                <option value="plus">Plus 稳定</option>
+                <option value="max">Max 推理强</option>
+              </select>
+            </label>
           </div>
         </div>
         <div id="rankings" class="rankings"></div>
@@ -173,6 +179,8 @@
       </section>
     </div>
 
-    <script src="/app.js?v=20260703-0001"></script>
+    <script src="/app.js?v=20260703-0002"></script>
   </body>
 </html>
+
+

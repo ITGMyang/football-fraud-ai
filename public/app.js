@@ -22,6 +22,7 @@ const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
 const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
 const AI_CONTEXT_RANGE_STORAGE_KEY = 'footballFraud.aiContextRange';
 const AI_CONTEXT_SORT_STORAGE_KEY = 'footballFraud.aiContextSort';
+const QWEN_VARIANT_STORAGE_KEY = 'footballFraud.qwenVariant';
 const RANK_MODELS = ['GPT', 'Claude', 'Gemini', 'DeepSeek', 'Qwen'];
 let activeRankingModel = 'all';
 let activeContextId = readStoredActiveContextId();
@@ -58,6 +59,7 @@ bind('#matchDate', 'change', loadDongqiudiMatches);
 bind('#aiContextDate', 'change', handleAiContextDateChange);
 bind('#aiContextRange', 'change', handleAiContextRangeChange);
 bind('#aiContextSort', 'change', handleAiContextSortChange);
+initQwenVariantSelector();
 
 bind('#importDongqiudiUrl', 'click', importDongqiudiUrl);
 
@@ -130,6 +132,25 @@ function readStoredValue(key) {
   } catch {
     return '';
   }
+}
+
+function initQwenVariantSelector() {
+  const select = $('#qwenVariant');
+  if (!select) return;
+  const stored = readStoredValue(QWEN_VARIANT_STORAGE_KEY);
+  select.value = ['plus', 'max'].includes(stored) ? stored : 'plus';
+  select.addEventListener('change', () => {
+    try {
+      localStorage.setItem(QWEN_VARIANT_STORAGE_KEY, select.value);
+    } catch {
+      // Keep the visible select value when localStorage is unavailable.
+    }
+  });
+}
+
+function selectedQwenVariant() {
+  const value = $('#qwenVariant')?.value || readStoredValue(QWEN_VARIANT_STORAGE_KEY) || 'plus';
+  return ['plus', 'max'].includes(value) ? value : 'plus';
 }
 
 function setActiveContextId(value) {
@@ -1790,7 +1811,7 @@ async function runRanking(model, button) {
     button.textContent = '预测中...';
     await api('/api/rankings', {
       method: 'POST',
-      body: JSON.stringify({ model, contextId: activeContextId })
+      body: JSON.stringify({ model, contextId: activeContextId, qwenVariant: selectedQwenVariant() })
     });
     activeRankingModel = model === 'all'
       ? 'all'
