@@ -310,13 +310,18 @@ async function importScheduleMatch(sourceUrl, button) {
       button.disabled = true;
       button.textContent = '导入中...';
     }
-    const { context, alreadyImported } = await api('/api/import/dongqiudi-url', {
+    const { context, alreadyImported, refreshed } = await api('/api/import/dongqiudi-url', {
       method: 'POST',
       body: JSON.stringify({ sourceUrl })
     });
     setActiveContextId(contextKey(context));
     setActiveAiContextDate(contextDate(context));
     await refresh();
+    if (refreshed) {
+      $('#ai-panel')?.scrollIntoView({ block: 'start' });
+      alert(`已刷新该场数据：${context.matchName || sourceUrl}`);
+      return;
+    }
     if (alreadyImported) {
       alert(`该场次已导入：${context.matchName || sourceUrl}`);
     } else {

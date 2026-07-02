@@ -17,3 +17,7 @@ export function findExistingContext(contexts = [], sourceUrl = '') {
       || (targetUrl && existingKey === targetUrl);
   }) || null;
 }
+
+export function hasLineupPlayers(context = {}) {
+  return Array.isArray(context.lineup?.players) && context.lineup.players.length > 0;
+}

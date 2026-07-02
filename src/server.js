@@ -8,7 +8,7 @@ import { fetchDongqiudiContext, fetchDongqiudiMatches } from './dongqiudi-fetche
 import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
-import { contextKey, findExistingContext } from './context-utils.js';
+import { contextKey, findExistingContext, hasLineupPlayers } from './context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from './evaluation.js';
 import { clearMarkets, readDb, saveRanking, saveReport, upsertMarkets, upsertMatchContext } from './storage.js';
 
@@ -115,7 +115,11 @@ async function route(req, res) {
     const body = await readJson(req);
     const sourceUrl = body.sourceUrl || body.url;
     const existing = findExistingContext(readDb().matchContexts || [], sourceUrl);
-    if (existing) return json(res, 200, { context: existing, alreadyImported: true });
+    if (existing && hasLineupPlayers(existing)) return json(res, 200, { context: existing, alreadyImported: true, refreshed: false });
+    if (existing) {
+      const context = upsertMatchContext(await fetchDongqiudiContext(sourceUrl, fetch));
+      return json(res, 200, { context, alreadyImported: true, refreshed: true });
+    }
     const context = upsertMatchContext(await fetchDongqiudiContext(sourceUrl, fetch));
     return json(res, 200, { context, alreadyImported: false });
   }

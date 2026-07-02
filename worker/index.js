@@ -4,7 +4,7 @@ import { fetchDongqiudiContext, fetchDongqiudiMatches } from '../src/dongqiudi-f
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
-import { contextKey, findExistingContext } from '../src/context-utils.js';
+import { contextKey, findExistingContext, hasLineupPlayers } from '../src/context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
 
 export default {
@@ -291,7 +291,11 @@ async function routeApi(request, env) {
     const body = await request.json();
     const sourceUrl = body.sourceUrl || body.url;
     const existing = findExistingContext((await storage.readDb()).matchContexts || [], sourceUrl);
-    if (existing) return json({ context: existing, alreadyImported: true });
+    if (existing && hasLineupPlayers(existing)) return json({ context: existing, alreadyImported: true, refreshed: false });
+    if (existing) {
+      const context = await storage.upsertMatchContext(await fetchDongqiudiContext(sourceUrl, workerFetch));
+      return json({ context, alreadyImported: true, refreshed: true });
+    }
     const context = await storage.upsertMatchContext(await fetchDongqiudiContext(sourceUrl, workerFetch));
     return json({ context, alreadyImported: false });
   }
