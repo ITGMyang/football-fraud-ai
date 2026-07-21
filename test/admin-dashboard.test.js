@@ -86,8 +86,13 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   ]);
 
   assert.match(markup, /id="adminDashboard"/);
-  assert.match(markup, /Operations Dashboard/);
+  assert.match(markup, /运营管理后台/);
+  assert.match(markup, /role="tablist"/);
+  assert.match(markup, /data-admin-tab="overview"/);
+  assert.match(markup, /data-admin-tab="models"/);
+  assert.match(markup, /data-admin-panel="orders"/);
   assert.match(app, /\/api\/admin\/dashboard/);
+  assert.match(app, /activateAdminTab/);
   assert.match(worker, /'\/admin'/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/dashboard'/);
   assert.match(worker, /isAdminUser/);

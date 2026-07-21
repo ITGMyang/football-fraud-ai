@@ -69,6 +69,9 @@ bind('#refresh', 'click', refresh);
 bind('#refreshAnalytics', 'click', refreshAnalyticsData);
 bind('#reloadBackend', 'click', loadBackendSchedules);
 bind('#reloadAdmin', 'click', loadAdminDashboard);
+document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
+  tab.addEventListener('click', () => activateAdminTab(tab.dataset.adminTab));
+});
 bind('#backendSearch', 'input', renderBackendSchedules);
 bind('#backendCompetition', 'change', renderBackendSchedules);
 bind('#backendStatus', 'change', renderBackendSchedules);
@@ -219,7 +222,7 @@ async function loadAdminDashboard() {
   if (!adminDashboardEl) return;
   const notice = $('#adminNotice');
   notice.dataset.tone = 'loading';
-  notice.textContent = 'Loading live operational data...';
+  notice.textContent = '正在加载最新运营数据...';
   try {
     const { dashboard } = await api('/api/admin/dashboard');
     renderAdminDashboard(dashboard || {});
@@ -228,8 +231,8 @@ async function loadAdminDashboard() {
   } catch (error) {
     notice.dataset.tone = 'error';
     notice.textContent = error.status === 403
-      ? 'This page is restricted to administrator accounts.'
-      : error.status === 401 ? 'Sign in with the administrator account to continue.' : error.message;
+      ? '此页面仅限管理员账号访问。'
+      : error.status === 401 ? '请先使用管理员账号登录。' : error.message;
   }
 }
 
@@ -239,47 +242,61 @@ function renderAdminDashboard(dashboard) {
   const apiCalls = Number(core.apiFootballCallsToday) || 0;
   const apiPercent = apiLimit ? Math.min(100, (apiCalls / apiLimit) * 100) : 0;
   const updated = $('#adminUpdatedAt');
-  if (updated) updated.textContent = `Updated ${formatAdminDate(dashboard.generatedAt)}`;
+  if (updated) updated.textContent = `更新于 ${formatAdminDate(dashboard.generatedAt)}`;
   adminCoreMetricsEl.innerHTML = [
-    adminMetric('API-Football Today', formatNumber(apiCalls), apiLimit ? `of ${formatNumber(apiLimit)} calls` : 'Limit unavailable', apiPercent),
-    adminMetric('AI Calls Today', formatNumber(core.modelCallsToday), 'All providers'),
-    adminMetric('Reported AI Cost', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} priced calls` : 'Provider cost not reported'),
-    adminMetric('Cached Matches', formatNumber(core.cachedMatches), `Refresh ${adminStatusLabel(core.lastRefreshStatus)}`),
-    adminMetric('Registered Users', formatNumber(dashboard.users?.total), `${formatNumber(dashboard.users?.activeToday)} active today`),
-    adminMetric('Paid Access', formatNumber(dashboard.users?.paid), `${formatNumber(dashboard.users?.active30d)} active in 30 days`),
-    adminMetric('Confirmed Revenue', money(dashboard.orders?.confirmedRevenueUsd), `${formatNumber(dashboard.orders?.confirmedCount)} completed orders`),
-    adminMetric('Pending Orders', formatNumber(dashboard.orders?.pendingCount), `${formatNumber(dashboard.orders?.failedCount)} failed`)
+    adminMetric('今日 API-Football 调用', formatNumber(apiCalls), apiLimit ? `每日额度 ${formatNumber(apiLimit)} 次` : '额度未知', apiPercent),
+    adminMetric('今日 AI 调用', formatNumber(core.modelCallsToday), '全部模型供应商'),
+    adminMetric('已上报 AI 成本', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} 次调用包含成本` : '供应商未上报成本'),
+    adminMetric('缓存比赛', formatNumber(core.cachedMatches), `刷新状态：${adminStatusLabel(core.lastRefreshStatus)}`),
+    adminMetric('注册用户', formatNumber(dashboard.users?.total), `今日活跃 ${formatNumber(dashboard.users?.activeToday)} 人`),
+    adminMetric('付费用户', formatNumber(dashboard.users?.paid), `近 30 天活跃 ${formatNumber(dashboard.users?.active30d)} 人`),
+    adminMetric('确认收入', money(dashboard.orders?.confirmedRevenueUsd), `${formatNumber(dashboard.orders?.confirmedCount)} 笔已完成订单`),
+    adminMetric('待处理订单', formatNumber(dashboard.orders?.pendingCount), `${formatNumber(dashboard.orders?.failedCount)} 笔失败`)
   ].join('');
 
   $('#adminModelUsage').innerHTML = adminTable(
-    ['Model', 'Provider', 'Requests', 'Input', 'Output', 'Total Tokens', 'Cost', 'Errors'],
+    ['模型', '供应商', '调用次数', '输入 Token', '输出 Token', 'Token 总数', '成本', '错误'],
     (dashboard.models || []).map((row) => [
       row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
       formatNumber(row.outputTokens), formatNumber(row.totalTokens),
-      row.costReportedCalls ? money(row.costUsd) : 'Not reported', formatNumber(row.errors)
+      row.costReportedCalls ? money(row.costUsd) : '未上报', formatNumber(row.errors)
     ]),
-    'No model calls have been recorded today.'
+    '今天暂时没有模型调用记录。'
   );
   $('#adminLeaguePerformance').innerHTML = adminTable(
-    ['Competition', 'Cached Matches', 'Private Imports', 'AI Results'],
+    ['赛事', '缓存比赛', '用户私有导入', 'AI 结果'],
     (dashboard.leagues || []).map((row) => [row.name, formatNumber(row.cachedMatches), formatNumber(row.imports), formatNumber(row.predictions)]),
-    'No competition activity is available.'
+    '暂时没有赛事使用数据。'
   );
   $('#adminUserAccess').innerHTML = adminTable(
-    ['Account', 'Provider', 'Plan', 'Prediction Runs', 'Calls Today', 'Last Sign-in'],
+    ['账号', '登录方式', '当前方案', '预测次数', '今日调用', '最后登录'],
     (dashboard.userRows || []).map((row) => [
       row.email || shortId(row.id), row.provider, row.planId, formatNumber(row.predictionRuns),
       formatNumber(row.callsToday), formatAdminDate(row.lastSeenAt)
     ]),
-    'No users found.'
+    '暂时没有用户数据。'
   );
   $('#adminOrders').innerHTML = adminTable(
-    ['Order', 'Account', 'Plan', 'Amount', 'Status', 'Created'],
+    ['订单', '账号', '方案', '金额', '状态', '创建时间'],
     (dashboard.recentOrders || []).map((row) => [
       shortId(row.id), shortId(row.ownerId), row.planId, money(row.amountUsd), orderStatus(row.status), formatAdminDate(row.createdAt)
     ]),
-    'No orders have been created.'
+    '暂时没有订单。'
   );
+}
+
+function activateAdminTab(tabName = 'overview') {
+  const selected = ['overview', 'models', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
+  document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
+    const active = tab.dataset.adminTab === selected;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('[data-admin-panel]').forEach((panel) => {
+    const active = panel.dataset.adminPanel === selected;
+    panel.hidden = !active;
+    panel.classList.toggle('active', active);
+  });
 }
 
 function adminMetric(label, value, detail, progress = null) {
@@ -301,24 +318,24 @@ function money(value) {
 
 function formatAdminDate(value) {
   const date = new Date(value || '');
-  if (Number.isNaN(date.getTime())) return 'Never';
-  return date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  if (Number.isNaN(date.getTime())) return '从未';
+  return date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function shortId(value) {
-  const text = String(value || 'Unknown');
+  const text = String(value || '未知');
   return text.length > 12 ? `${text.slice(0, 8)}...` : text;
 }
 
 function adminStatusLabel(status) {
-  return status === 'healthy' ? 'healthy' : status === 'warning' ? 'has warnings' : 'not recorded';
+  return status === 'healthy' ? '正常' : status === 'warning' ? '存在警告' : '暂无记录';
 }
 
 function orderStatus(status) {
-  if (Number(status) === 20) return 'Confirmed';
-  if ([0, 1].includes(Number(status))) return 'Pending';
-  if (Number(status) < 0) return 'Failed';
-  return `Status ${status}`;
+  if (Number(status) === 20) return '已确认';
+  if ([0, 1].includes(Number(status))) return '处理中';
+  if (Number(status) < 0) return '失败';
+  return `状态 ${status}`;
 }
 
 function renderBackendCompetitionOptions() {

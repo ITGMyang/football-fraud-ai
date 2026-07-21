@@ -4,13 +4,17 @@ import { readFile } from 'node:fs/promises';
 
 const HAN = /[\p{Script=Han}]/u;
 
-test('static website and authentication copy are English-only', async () => {
-  const files = await Promise.all([
+test('public website and authentication copy remain English-only outside the admin console', async () => {
+  const [markup, ...files] = await Promise.all([
     readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth-client.js', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth-utils.js', import.meta.url), 'utf8')
   ]);
 
+  const publicMarkup = markup
+    .replace(/<a id="adminNavLink"[\s\S]*?<\/a>/, '')
+    .replace(/<section id="adminDashboard"[\s\S]*?<section id="ai-panel"/, '<section id="ai-panel"');
+  assert.doesNotMatch(publicMarkup, HAN);
   for (const source of files) assert.doesNotMatch(source, HAN);
 });
 

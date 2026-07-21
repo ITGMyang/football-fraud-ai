@@ -1108,6 +1108,31 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-notice[data-tone="loading"],
 .admin-notice[data-tone="error"] { padding-top: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .admin-notice[data-tone="error"] { color: var(--danger); background: var(--danger-soft); }
+.admin-tabs {
+  display: flex;
+  gap: 0;
+  max-width: 1440px;
+  margin: 0 auto;
+  overflow-x: auto;
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: #fff;
+}
+.admin-tabs button {
+  min-width: 138px;
+  min-height: 54px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 13px 20px;
+  color: var(--muted);
+  background: #fff;
+  font-weight: 800;
+}
+.admin-tabs button:hover { color: #173f32; background: #f3f7f3; filter: none; }
+.admin-tabs button.active { color: #173f32; border-bottom-color: var(--signal); background: #eef5f0; }
+.admin-tab-panel { min-width: 0; }
 .admin-core-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1137,6 +1162,7 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-empty { padding: 28px 16px; color: var(--muted); background: #fff; }
 
 @media (max-width: 1100px) {
+  .admin-tabs { margin: 0 22px; }
   .admin-core-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 22px; }
   .admin-module { margin: 0 22px; }
   .prediction-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1215,6 +1241,8 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
   .admin-route main { width: 100%; padding-top: 126px; }
   .admin-head { align-items: stretch; flex-direction: column; padding: 28px 18px; }
   .admin-head-actions { justify-content: space-between; }
+  .admin-tabs { margin: 0 12px; }
+  .admin-tabs button { min-width: 112px; padding-right: 14px; padding-left: 14px; }
   .admin-core-grid { grid-template-columns: 1fr; margin: 0 12px; }
   .admin-metric { min-height: 124px; padding: 20px; }
   .admin-module { margin: 0 12px; padding-top: 32px; }

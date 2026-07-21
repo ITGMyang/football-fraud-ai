@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FutBots</title>
-    <link rel="stylesheet" href="/styles.css?v=20260721-003">
+    <link rel="stylesheet" href="/styles.css?v=20260721-004">
   </head>
   <body>
     <nav class="floating-nav" aria-label="Main navigation">
@@ -13,7 +13,7 @@
         <a href="#matchSchedule">How It Works</a>
         <a href="/data">Imported Data</a>
         <a href="/backend">Data Console</a>
-        <a id="adminNavLink" href="/admin" hidden>Operations</a>
+        <a id="adminNavLink" href="/admin" hidden>运营后台</a>
         <a href="/analytics">Accuracy</a>
         <a href="#historyPanel">History</a>
         <a href="#subscriptionPanel">Pricing</a>
@@ -128,47 +128,57 @@
       <section id="adminDashboard" class="admin-dashboard" hidden>
         <header class="admin-head">
           <div>
-            <span class="admin-eyebrow">FUTBOTS CONTROL ROOM</span>
-            <h2>Operations Dashboard</h2>
-            <p>Live product usage, model cost, access, and revenue signals.</p>
+            <span class="admin-eyebrow">FUTBOTS 管理中心</span>
+            <h2>运营管理后台</h2>
+            <p>集中查看接口用量、模型成本、用户权限与订单数据。</p>
           </div>
           <div class="admin-head-actions">
-            <span id="adminUpdatedAt">Not loaded</span>
-            <button id="reloadAdmin" type="button">Refresh</button>
+            <span id="adminUpdatedAt">尚未加载</span>
+            <button id="reloadAdmin" type="button">刷新数据</button>
           </div>
         </header>
 
         <div id="adminNotice" class="admin-notice" role="status" aria-live="polite"></div>
-        <div id="adminCoreMetrics" class="admin-core-grid" aria-label="Core operations metrics"></div>
+        <nav class="admin-tabs" role="tablist" aria-label="管理后台数据分类">
+          <button class="active" type="button" role="tab" aria-selected="true" data-admin-tab="overview">数据总览</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="models">模型用量</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="leagues">赛事数据</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="users">用户权限</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="orders">订单财务</button>
+        </nav>
 
-        <section class="admin-module" aria-labelledby="adminModelsTitle">
+        <section class="admin-tab-panel active" role="tabpanel" data-admin-panel="overview">
+          <div id="adminCoreMetrics" class="admin-core-grid" aria-label="核心运营指标"></div>
+        </section>
+
+        <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="models" aria-labelledby="adminModelsTitle" hidden>
           <div class="admin-module-head">
-            <div><span>MODEL ECONOMICS</span><h3 id="adminModelsTitle">AI Usage Today</h3></div>
-            <small>Token and cost data starts from dashboard launch.</small>
+            <div><span>模型成本</span><h3 id="adminModelsTitle">今日 AI 调用</h3></div>
+            <small>Token 与成本数据从管理后台上线后开始统计。</small>
           </div>
           <div id="adminModelUsage" class="admin-table-wrap"></div>
         </section>
 
-        <section class="admin-module" aria-labelledby="adminLeaguesTitle">
+        <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="leagues" aria-labelledby="adminLeaguesTitle" hidden>
           <div class="admin-module-head">
-            <div><span>CONTENT DEMAND</span><h3 id="adminLeaguesTitle">Competition Activity</h3></div>
-            <small>Shared cache and private account imports remain separate.</small>
+            <div><span>赛事热度</span><h3 id="adminLeaguesTitle">赛事数据使用情况</h3></div>
+            <small>共享赛程缓存与各账号私有导入数据仍然完全分开。</small>
           </div>
           <div id="adminLeaguePerformance" class="admin-table-wrap"></div>
         </section>
 
-        <section class="admin-module" aria-labelledby="adminUsersTitle">
+        <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="users" aria-labelledby="adminUsersTitle" hidden>
           <div class="admin-module-head">
-            <div><span>ACCESS CONTROL</span><h3 id="adminUsersTitle">Users and Entitlements</h3></div>
-            <small>Authentication metadata is read directly from Supabase Auth.</small>
+            <div><span>访问控制</span><h3 id="adminUsersTitle">用户与会员权限</h3></div>
+            <small>用户身份与登录信息直接读取自 Supabase Auth。</small>
           </div>
           <div id="adminUserAccess" class="admin-table-wrap"></div>
         </section>
 
-        <section class="admin-module" aria-labelledby="adminOrdersTitle">
+        <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="orders" aria-labelledby="adminOrdersTitle" hidden>
           <div class="admin-module-head">
-            <div><span>REVENUE</span><h3 id="adminOrdersTitle">AllScale Orders</h3></div>
-            <small>Confirmed revenue is based only on completed orders.</small>
+            <div><span>收入管理</span><h3 id="adminOrdersTitle">AllScale 订单</h3></div>
+            <small>确认收入只统计已完成付款的订单。</small>
           </div>
           <div id="adminOrders" class="admin-table-wrap"></div>
         </section>
@@ -349,6 +359,6 @@
 
     <script src="/vendor/supabase.js"></script>
     <script type="module" src="/auth-client.js?v=20260721-001"></script>
-        <script defer src="/app.js?v=20260721-003"></script>
+            <script defer src="/app.js?v=20260721-004"></script>
   </body>
 </html>
