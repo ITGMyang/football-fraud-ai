@@ -327,8 +327,7 @@ main {
 
 .match-center-controls label,
 .ai-context-filter label,
-.analytics-filters label,
-.qwen-model-select {
+.analytics-filters label {
   display: grid;
   gap: var(--space-xs);
   color: var(--muted);
@@ -628,7 +627,6 @@ main {
 .ai-controls span { color: var(--muted); font-size: 12px; }
 .ai-buttons { display: flex; flex-wrap: wrap; gap: var(--space-xs); justify-content: flex-end; }
 .ai-buttons button.secondary { background: var(--surface-soft); }
-.qwen-model-select { grid-template-columns: auto 150px; align-items: center; }
 
 .rankings,
 .cards { display: grid; gap: var(--space-md); }
@@ -1227,7 +1225,6 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
   .guest-access { align-items: stretch; flex-direction: column; }
   .guest-access button { width: 100%; }
   .ai-buttons { justify-content: flex-start; }
-  .qwen-model-select { grid-template-columns: 1fr; }
   .btts-prediction { grid-template-columns: 1fr; }
   .btts-answer { border-right: 0; border-bottom: 1px solid var(--line); padding-bottom: var(--space-sm); }
   .data-snapshot { grid-template-columns: 1fr; }

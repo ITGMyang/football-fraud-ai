@@ -33,7 +33,6 @@ const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
 const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
 const AI_CONTEXT_RANGE_STORAGE_KEY = 'footballFraud.aiContextRange';
 const AI_CONTEXT_SORT_STORAGE_KEY = 'footballFraud.aiContextSort';
-const QWEN_VARIANT_STORAGE_KEY = 'footballFraud.qwenVariant';
 const BILLING_ORDER_STORAGE_KEY = 'footballFraud.billingOrderId';
 const RANK_MODELS = ['GPT', 'Claude', 'Gemini', 'DeepSeek', 'Qwen'];
 let activeRankingModel = 'all';
@@ -82,7 +81,6 @@ bind('#guestLogin', 'click', () => window.footballAuth?.open());
 bind('#aiContextDate', 'change', handleAiContextDateChange);
 bind('#aiContextRange', 'change', handleAiContextRangeChange);
 bind('#aiContextSort', 'change', handleAiContextSortChange);
-initQwenVariantSelector();
 
 document.querySelectorAll('[data-billing-plan]').forEach((button) => {
   button.addEventListener('click', () => startBillingCheckout(button.dataset.billingPlan, button));
@@ -748,21 +746,6 @@ function readStoredValue(key) {
   } catch {
     return '';
   }
-}
-
-function initQwenVariantSelector() {
-  const select = $('#qwenVariant');
-  if (!select) return;
-  select.value = 'max';
-  try {
-    localStorage.setItem(QWEN_VARIANT_STORAGE_KEY, 'max');
-  } catch {
-    // The fixed Max selection still applies when storage is unavailable.
-  }
-}
-
-function selectedQwenVariant() {
-  return 'max';
 }
 
 function setActiveContextId(value) {
@@ -2398,7 +2381,7 @@ async function runRanking(model, button) {
     button.textContent = 'Predicting...';
     await api('/api/rankings', {
       method: 'POST',
-      body: JSON.stringify({ model, contextId: activeContextId, qwenVariant: selectedQwenVariant() })
+      body: JSON.stringify({ model, contextId: activeContextId })
     });
     activeRankingModel = model === 'all'
       ? 'all'

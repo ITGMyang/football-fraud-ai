@@ -58,8 +58,8 @@ test('match UI uses API-Football instead of Dongqiudi endpoints', async () => {
   assert.match(markup, /<option value="all" selected>All Competitions<\/option>/);
   assert.match(markup, /<option value="1">FIFA World Cup<\/option>/);
   assert.doesNotMatch(markup, /Plus \/ Stable/);
-  assert.match(markup, /<option value="max" selected>Max \/ Advanced Reasoning<\/option>/);
-  assert.match(source, /function selectedQwenVariant\(\)\s*\{\s*return 'max';/);
+  assert.doesNotMatch(markup, /id="qwenVariant"|Max \/ Advanced Reasoning/);
+  assert.doesNotMatch(source, /qwenVariant|selectedQwenVariant/);
   assert.doesNotMatch(`${source}\n${worker}\n${server}\n${config}`, /qwen3\.7-plus|Qwen 3\.7 Plus/);
   assert.match(config, /qwen\/qwen3\.7-max/);
   assert.match(source, /\/api\/football\/matches/);
