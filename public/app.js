@@ -753,20 +753,16 @@ function readStoredValue(key) {
 function initQwenVariantSelector() {
   const select = $('#qwenVariant');
   if (!select) return;
-  const stored = readStoredValue(QWEN_VARIANT_STORAGE_KEY);
-  select.value = ['plus', 'max'].includes(stored) ? stored : 'plus';
-  select.addEventListener('change', () => {
-    try {
-      localStorage.setItem(QWEN_VARIANT_STORAGE_KEY, select.value);
-    } catch {
-      // Keep the visible select value when localStorage is unavailable.
-    }
-  });
+  select.value = 'max';
+  try {
+    localStorage.setItem(QWEN_VARIANT_STORAGE_KEY, 'max');
+  } catch {
+    // The fixed Max selection still applies when storage is unavailable.
+  }
 }
 
 function selectedQwenVariant() {
-  const value = $('#qwenVariant')?.value || readStoredValue(QWEN_VARIANT_STORAGE_KEY) || 'plus';
-  return ['plus', 'max'].includes(value) ? value : 'plus';
+  return 'max';
 }
 
 function setActiveContextId(value) {
@@ -869,7 +865,7 @@ async function loadApiFootballMatches(event) {
     }
     if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">Loading matches from API-Football...</p>';
     const date = $('#matchDate')?.value || '';
-    const competitionId = $('#competitionFilter')?.value || '1';
+    const competitionId = $('#competitionFilter')?.value || 'all';
     const schedule = await api(`/api/football/matches?competitionId=${encodeURIComponent(competitionId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`);
     renderMatchSchedule(schedule);
   } catch (error) {

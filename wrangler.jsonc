@@ -37,7 +37,7 @@
     "MODEL_GEMINI_PROVIDER": "apimart",
     "MODEL_GEMINI_LABEL": "Gemini",
     "MODEL_DEEPSEEK_LABEL": "DeepSeek",
-    "MODEL_QWEN": "qwen/qwen3.7-plus",
-    "MODEL_QWEN_LABEL": "Qwen 3.7 Plus"
+    "MODEL_QWEN": "qwen/qwen3.7-max",
+    "MODEL_QWEN_LABEL": "Qwen 3.7 Max"
   }
 }

@@ -46,12 +46,22 @@ test('landing page omits the requested promotional and schedule helper copy', as
 });
 
 test('match UI uses API-Football instead of Dongqiudi endpoints', async () => {
-  const markup = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-  const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+  const [markup, source, worker, server, config] = await Promise.all([
+    readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
+    readFile(new URL('../worker/index.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/server.js', import.meta.url), 'utf8'),
+    readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
+  ]);
 
   assert.match(markup, /id="loadApiFootballMatches"/);
-  assert.match(markup, /<option value="all">All Competitions<\/option>/);
-  assert.match(markup, /<option value="1" selected>FIFA World Cup<\/option>/);
+  assert.match(markup, /<option value="all" selected>All Competitions<\/option>/);
+  assert.match(markup, /<option value="1">FIFA World Cup<\/option>/);
+  assert.doesNotMatch(markup, /Plus \/ Stable/);
+  assert.match(markup, /<option value="max" selected>Max \/ Advanced Reasoning<\/option>/);
+  assert.match(source, /function selectedQwenVariant\(\)\s*\{\s*return 'max';/);
+  assert.doesNotMatch(`${source}\n${worker}\n${server}\n${config}`, /qwen3\.7-plus|Qwen 3\.7 Plus/);
+  assert.match(config, /qwen\/qwen3\.7-max/);
   assert.match(source, /\/api\/football\/matches/);
   assert.match(source, /\/api\/import\/api-football/);
   assert.doesNotMatch(source, /\/api\/dongqiudi|\/api\/import\/dongqiudi/);

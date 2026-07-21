@@ -228,14 +228,7 @@ function hasCompleteCatalog(context) {
 }
 
 function rankingEnv(env, body = {}) {
-  const variant = String(body.qwenVariant || '').toLowerCase();
-  if (variant === 'max') {
-    return { ...env, MODEL_QWEN: 'qwen/qwen3.7-max', MODEL_QWEN_LABEL: 'Qwen 3.7 Max' };
-  }
-  if (variant === 'plus') {
-    return { ...env, MODEL_QWEN: 'qwen/qwen3.7-plus', MODEL_QWEN_LABEL: 'Qwen 3.7 Plus' };
-  }
-  return env;
+  return { ...env, MODEL_QWEN: 'qwen/qwen3.7-max', MODEL_QWEN_LABEL: 'Qwen 3.7 Max' };
 }
 
 function serveFile(res, filename, contentType) {
