@@ -150,6 +150,7 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(app, /activateAdminTab/);
   assert.match(app, /APIMart 按 Token 单价计算/);
   assert.match(app, /renderAdminSharedPool/);
+  assert.match(app, /startAdminAutoRefresh/);
   assert.match(app, /未配置单价/);
   assert.match(worker, /'\/admin'/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/dashboard'/);

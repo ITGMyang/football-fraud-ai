@@ -196,6 +196,24 @@ test('Supabase billing storage scopes orders and entitlements to their owner', a
   assert.equal(entitlement.planId, 'day');
 });
 
+test('Supabase lists recent non-terminal billing orders for server reconciliation', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    return new Response('[]', { headers: { 'content-type': 'application/json' } });
+  });
+
+  await storage.listPendingBillingOrders('2026-07-14T00:00:00.000Z');
+
+  const request = requests.find(({ url }) => url.includes('/billing_orders?'));
+  assert.match(request.url, /status=gte\.0/);
+  assert.match(request.url, /created_at=gte\.2026-07-14/);
+  assert.match(request.url, /order=updated_at\.asc/);
+});
+
 test('Supabase records AI usage and scheduled refresh events separately', async () => {
   const requests = [];
   const storage = createSupabaseStorage({

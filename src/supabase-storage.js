@@ -271,6 +271,16 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       return rows.length;
     },
 
+    async listPendingBillingOrders(since) {
+      const rows = await client.selectRows(TABLES.billingOrders, '*', {
+        status: 'gte.0',
+        created_at: `gte.${since}`,
+        order: 'updated_at.asc',
+        limit: '50'
+      });
+      return rows.filter((row) => Number(row.status) !== 20).map(mapBillingOrder);
+    },
+
     async readBillingEntitlement(ownerId) {
       const rows = await client.selectRows(TABLES.billingEntitlements, '*', {
         owner_id: `eq.${ownerId}`,

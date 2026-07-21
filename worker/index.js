@@ -24,7 +24,7 @@ import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js'
 import { authConfig } from '../src/auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from '../src/guest-access.js';
 import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.js';
-import { billingAccess, billingPlan, publicBillingPlans } from '../src/billing.js';
+import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
 import { buildAdminDashboard } from '../src/admin-dashboard.js';
 import { isAdminUser } from '../src/auth.js';
 import {
@@ -89,12 +89,21 @@ export default {
   },
 
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(refreshApiFootballScheduleCache(env).then(async (result) => {
-      await createSupabaseStorage(env, fetch).recordSystemEvent('api_football_refresh', result);
-      console.log(JSON.stringify({ event: 'api_football_schedule_cache_refresh', ...result }));
-    }).catch((error) => {
-      console.error(JSON.stringify({ event: 'api_football_schedule_cache_refresh_failed', error: error.message }));
-    }));
+    ctx.waitUntil((async () => {
+      const storage = createSupabaseStorage(env, fetch);
+      const refreshTask = refreshApiFootballScheduleCache(env).then(async (result) => {
+        await storage.recordSystemEvent('api_football_refresh', result);
+        console.log(JSON.stringify({ event: 'api_football_schedule_cache_refresh', ...result }));
+      }).catch((error) => {
+        console.error(JSON.stringify({ event: 'api_football_schedule_cache_refresh_failed', error: error.message }));
+      });
+      const billingTask = reconcileRecentBillingOrders(storage, env, fetch).then((result) => {
+        console.log(JSON.stringify({ event: 'billing_reconciliation', ...result }));
+      }).catch((error) => {
+        console.error(JSON.stringify({ event: 'billing_reconciliation_failed', error: error.message }));
+      });
+      await Promise.all([refreshTask, billingTask]);
+    })());
   }
 };
 
@@ -121,12 +130,15 @@ async function routeApi(request, env, access) {
   if (request.method === 'GET' && url.pathname === '/api/admin/dashboard') {
     if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);
     if (!isAdminUser(access.user, env)) return json({ error: 'Administrator access required' }, 403);
-    const data = await storage.readAdminDashboardData();
+    let data = await storage.readAdminDashboardData();
+    const reconciliation = await reconcileRecentBillingOrders(storage, env, workerFetch, data.orders);
+    if (reconciliation.updated) data = await storage.readAdminDashboardData();
     return json({
       dashboard: buildAdminDashboard({
         ...data,
         apiFootballDailyLimit: Number(env.API_FOOTBALL_DAILY_LIMIT) || 7500
-      })
+      }),
+      billingReconciliation: reconciliation
     });
   }
   if (request.method === 'GET' && url.pathname === '/api/billing/status') {
@@ -188,27 +200,37 @@ async function routeApi(request, env, access) {
     const order = await storage.readBillingOrder(ownerId, orderId);
     if (!order) return json({ error: 'Order not found' }, 404);
     const currentBilling = billingAccess(await storage.readBillingEntitlement(ownerId));
-    if (Number(order.status) === 20 || currentBilling.active) {
+    if (currentBilling.active) {
       return json({ orderId: order.id, status: 20, billing: currentBilling });
     }
     if (!order.intentId) return json({ order, status: order.status, billing: currentBilling });
+    if (Number(order.status) === 20) {
+      await storage.confirmAllScalePayment({
+        intentId: order.intentId,
+        webhookId: `repair:${order.intentId}`,
+        nonce: crypto.randomUUID(),
+        payload: { source: 'entitlement-repair' }
+      });
+      return json({
+        orderId: order.id,
+        status: 20,
+        billing: billingAccess(await storage.readBillingEntitlement(ownerId))
+      });
+    }
     const lastCheck = Date.parse(order.updatedAt || '');
     if (Number.isFinite(lastCheck) && Date.now() - lastCheck < 4000) {
       return json({ orderId: order.id, status: order.status, billing: currentBilling, retryAfterMs: 4000 });
     }
-    const remote = await getAllScaleCheckoutStatus(order.intentId, env, workerFetch);
-    await storage.updateBillingOrder(order.id, { status: remote.status, requestId: remote.requestId });
-    if (remote.status === 20) {
-      await storage.confirmAllScalePayment({
-        intentId: order.intentId,
-        webhookId: `poll:${order.intentId}`,
-        nonce: crypto.randomUUID(),
-        payload: { source: 'status-poll', request_id: remote.requestId }
-      });
-    }
+    const reconciliation = await reconcilePendingBillingOrders({
+      orders: [order],
+      storage,
+      getStatus: (intentId) => getAllScaleCheckoutStatus(intentId, env, workerFetch)
+    });
+    if (reconciliation.errors.length) throw new Error(reconciliation.errors[0].error);
+    const refreshedOrder = await storage.readBillingOrder(ownerId, order.id);
     return json({
       orderId: order.id,
-      status: remote.status,
+      status: refreshedOrder?.status ?? order.status,
       billing: billingAccess(await storage.readBillingEntitlement(ownerId))
     });
   }
@@ -551,6 +573,18 @@ async function reservePredictionAccess(access, storage, ownerId) {
     release: true,
     billing: billingAccess({ freePredictionUsed: true })
   };
+}
+
+async function reconcileRecentBillingOrders(storage, env, fetchImpl, providedOrders = null) {
+  const since = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString();
+  const orders = providedOrders
+    ? providedOrders.filter((order) => Date.parse(order.created_at || order.createdAt || '') >= Date.parse(since))
+    : await storage.listPendingBillingOrders(since);
+  return reconcilePendingBillingOrders({
+    orders,
+    storage,
+    getStatus: (intentId) => getAllScaleCheckoutStatus(intentId, env, fetchImpl)
+  });
 }
 
 function apiFootballOptions(env) {

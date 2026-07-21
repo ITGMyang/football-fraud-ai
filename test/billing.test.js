@@ -6,7 +6,8 @@ import {
   BILLING_PLANS,
   billingAccess,
   billingPlan,
-  publicBillingPlans
+  publicBillingPlans,
+  reconcilePendingBillingOrders
 } from '../src/billing.js';
 import {
   createAllScaleCheckout,
@@ -41,6 +42,50 @@ test('billing access distinguishes paid, free and exhausted accounts', () => {
   });
   assert.equal(billingAccess({ freePredictionUsed: false }, now).tier, 'free');
   assert.equal(billingAccess({ freePredictionUsed: true }, now).tier, 'locked');
+});
+
+test('pending payment reconciliation confirms paid orders and keeps processing orders pending', async () => {
+  const updates = [];
+  const confirmations = [];
+  const storage = {
+    updateBillingOrder: async (id, fields) => updates.push({ id, fields }),
+    confirmAllScalePayment: async (input) => confirmations.push(input)
+  };
+  const result = await reconcilePendingBillingOrders({
+    orders: [
+      { id: 'paid-order', intentId: 'paid-intent', status: 1 },
+      { id: 'pending-order', allscale_intent_id: 'pending-intent', status: 1 }
+    ],
+    storage,
+    getStatus: async (intentId) => ({ status: intentId === 'paid-intent' ? 20 : 1, requestId: `req-${intentId}` })
+  });
+
+  assert.deepEqual(result, { checked: 2, confirmed: 1, updated: 2, errors: [] });
+  assert.deepEqual(updates.map((item) => item.fields.status), [undefined, 1]);
+  assert.equal(confirmations[0].intentId, 'paid-intent');
+  assert.match(confirmations[0].webhookId, /^poll:/);
+});
+
+test('pending payment reconciliation continues after a provider error', async () => {
+  const result = await reconcilePendingBillingOrders({
+    orders: [
+      { id: 'broken-order', intentId: 'broken-intent', status: 1 },
+      { id: 'paid-order', intentId: 'paid-intent', status: 1 }
+    ],
+    storage: {
+      updateBillingOrder: async () => null,
+      confirmAllScalePayment: async () => null
+    },
+    getStatus: async (intentId) => {
+      if (intentId === 'broken-intent') throw new Error('provider unavailable');
+      return { status: 20, requestId: 'req-paid' };
+    }
+  });
+
+  assert.equal(result.checked, 2);
+  assert.equal(result.confirmed, 1);
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0].orderId, 'broken-order');
 });
 
 test('AllScale request signing follows the documented canonical string', async () => {

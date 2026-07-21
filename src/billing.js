@@ -39,3 +39,33 @@ export function billingAccess(entitlement = {}, now = Date.now()) {
     freePredictionUsed
   };
 }
+
+export async function reconcilePendingBillingOrders({ orders = [], storage, getStatus }) {
+  const summary = { checked: 0, confirmed: 0, updated: 0, errors: [] };
+  for (const order of orders) {
+    const orderId = String(order.id || '');
+    const intentId = String(order.intentId || order.allscale_intent_id || '');
+    const currentStatus = Number(order.status);
+    if (!orderId || !intentId || currentStatus === 20 || currentStatus < 0) continue;
+    summary.checked += 1;
+    try {
+      const remote = await getStatus(intentId);
+      if (Number(remote.status) === 20) {
+        await storage.confirmAllScalePayment({
+          intentId,
+          webhookId: `poll:${intentId}`,
+          nonce: crypto.randomUUID(),
+          payload: { source: 'server-reconciliation', request_id: remote.requestId || '' }
+        });
+        await storage.updateBillingOrder(orderId, { requestId: remote.requestId || '' });
+        summary.confirmed += 1;
+      } else {
+        await storage.updateBillingOrder(orderId, { status: remote.status, requestId: remote.requestId || '' });
+      }
+      summary.updated += 1;
+    } catch (error) {
+      summary.errors.push({ orderId, error: error.message });
+    }
+  }
+  return summary;
+}

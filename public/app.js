@@ -43,6 +43,8 @@ let activeAiContextSort = readStoredValue(AI_CONTEXT_SORT_STORAGE_KEY) || 'impor
 let accessState = { authenticated: false, guestPredictionUsed: false };
 let backendSchedules = [];
 let adminSharedPoolMatches = [];
+let adminRefreshTimer = null;
+let adminDashboardLoading = false;
 const analyticsState = {
   raw: null,
   date: '',
@@ -174,7 +176,10 @@ async function initializeApp() {
     renderRoute([], [], []);
     await syncAccessStatus();
     if (location.pathname === '/backend') await loadBackendSchedules();
-    else await loadAdminDashboard();
+    else {
+      await loadAdminDashboard();
+      startAdminAutoRefresh();
+    }
     return;
   }
   await Promise.all([refresh(), loadApiFootballMatches(), syncAccessStatus()]);
@@ -218,11 +223,15 @@ async function loadBackendSchedules() {
   }
 }
 
-async function loadAdminDashboard() {
-  if (!adminDashboardEl) return;
+async function loadAdminDashboard(options = {}) {
+  if (!adminDashboardEl || adminDashboardLoading) return;
+  adminDashboardLoading = true;
+  const silent = options?.silent === true;
   const notice = $('#adminNotice');
-  notice.dataset.tone = 'loading';
-  notice.textContent = '正在加载最新运营数据...';
+  if (!silent) {
+    notice.dataset.tone = 'loading';
+    notice.textContent = '正在加载最新运营数据...';
+  }
   try {
     const { dashboard } = await api('/api/admin/dashboard');
     renderAdminDashboard(dashboard || {});
@@ -233,7 +242,18 @@ async function loadAdminDashboard() {
     notice.textContent = error.status === 403
       ? '此页面仅限管理员账号访问。'
       : error.status === 401 ? '请先使用管理员账号登录。' : error.message;
+  } finally {
+    adminDashboardLoading = false;
   }
+}
+
+function startAdminAutoRefresh() {
+  if (adminRefreshTimer) return;
+  adminRefreshTimer = window.setInterval(() => {
+    if (location.pathname === '/admin' && document.visibilityState === 'visible' && accessState.admin) {
+      loadAdminDashboard({ silent: true });
+    }
+  }, 30000);
 }
 
 function renderAdminDashboard(dashboard) {
