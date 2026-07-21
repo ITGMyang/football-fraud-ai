@@ -1,7 +1,7 @@
 export const BILLING_PLANS = Object.freeze([
-  Object.freeze({ id: 'day', name: '24 小时卡', amountCents: 299, durationHours: 24, recommended: false }),
-  Object.freeze({ id: 'week', name: '7 天周卡', amountCents: 1199, durationHours: 7 * 24, recommended: false }),
-  Object.freeze({ id: 'month', name: '30 天月卡', amountCents: 2999, durationHours: 30 * 24, recommended: true })
+  Object.freeze({ id: 'day', name: '24-Hour Pass', amountCents: 299, durationHours: 24, recommended: false }),
+  Object.freeze({ id: 'week', name: 'Weekly Pass', amountCents: 1199, durationHours: 7 * 24, recommended: false }),
+  Object.freeze({ id: 'month', name: 'Monthly Pass', amountCents: 2999, durationHours: 30 * 24, recommended: true })
 ]);
 
 export function billingPlan(planId) {

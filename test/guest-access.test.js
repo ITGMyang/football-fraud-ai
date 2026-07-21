@@ -33,13 +33,13 @@ test('guest cannot request another ranking after the signed usage cookie is set'
     ok: false,
     status: 403,
     code: 'GUEST_LIMIT_REACHED',
-    error: '访客预测次数已用完，请登录后继续'
+    error: 'The guest prediction has been used. Sign in to continue.'
   });
 });
 
 test('guest cannot use other write APIs', async () => {
   const access = await authorizeApiRequest(new Request('https://app.test/api/markets/clear', { method: 'POST' }), env);
-  assert.deepEqual(access, { ok: false, status: 401, error: '请先登录' });
+  assert.deepEqual(access, { ok: false, status: 401, error: 'Sign in required' });
 });
 
 test('signed-in user can use write APIs without guest limits', async () => {

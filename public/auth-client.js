@@ -44,14 +44,14 @@ async function initialize() {
   try {
     const response = await fetch('/api/auth/config');
     const config = await response.json();
-    if (!response.ok || !config.enabled) throw new Error(config.error || 'Supabase Auth 尚未配置');
-    if (!window.supabase?.createClient) throw new Error('登录组件加载失败，请刷新页面');
+    if (!response.ok || !config.enabled) throw new Error(config.error || 'Supabase Auth is not configured');
+    if (!window.supabase?.createClient) throw new Error('The sign-in component failed to load. Refresh the page and try again.');
     authSiteUrl = config.siteUrl || window.location.origin;
     if (elements.telegram) {
       elements.telegram.disabled = !config.telegramEnabled;
       elements.telegram.querySelector('span').textContent = config.telegramEnabled
-        ? '使用 Telegram 登录'
-        : 'Telegram 登录（待配置）';
+        ? 'Continue with Telegram'
+        : 'Telegram sign-in is unavailable';
     }
     client = window.supabase.createClient(config.supabaseUrl, config.publishableKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
@@ -96,12 +96,12 @@ function bindEvents() {
 
 async function submitEmailAuth(event) {
   event.preventDefault();
-  if (!client) return showStatus('登录服务还未准备好', 'error');
+  if (!client) return showStatus('The sign-in service is not ready yet', 'error');
   const email = elements.email.value.trim();
   const password = elements.password.value;
-  if (!email || !password) return showStatus('请输入邮箱和密码', 'error');
-  if (password.length < 8) return showStatus('密码至少需要 8 位', 'error');
-  setBusy(elements.submit, true, mode === 'signup' ? '注册中...' : '登录中...');
+  if (!email || !password) return showStatus('Enter your email and password', 'error');
+  if (password.length < 8) return showStatus('Password must be at least 8 characters', 'error');
+  setBusy(elements.submit, true, mode === 'signup' ? 'Creating account...' : 'Signing in...');
   try {
     if (mode === 'signup') {
       const { data, error } = await client.auth.signUp({
@@ -111,7 +111,7 @@ async function submitEmailAuth(event) {
       });
       if (error) throw error;
       if (!data.session) {
-        showStatus('注册成功，请打开确认邮件完成验证', 'success');
+        showStatus('Account created. Open the confirmation email to verify your address.', 'success');
         setMode('login');
         return;
       }
@@ -128,15 +128,15 @@ async function submitEmailAuth(event) {
 }
 
 async function signInWithGoogle() {
-  return signInWithProvider('google', elements.google, '正在跳转 Google...');
+  return signInWithProvider('google', elements.google, 'Redirecting to Google...');
 }
 
 async function signInWithTelegram() {
-  return signInWithProvider('custom:telegram', elements.telegram, '正在跳转 Telegram...');
+  return signInWithProvider('custom:telegram', elements.telegram, 'Redirecting to Telegram...');
 }
 
 async function signInWithProvider(provider, button, pendingLabel) {
-  if (!client) return showStatus('登录服务还未准备好', 'error');
+  if (!client) return showStatus('The sign-in service is not ready yet', 'error');
   setBusy(button, true, pendingLabel);
   try {
     sessionStorage.setItem('footballFraud.authNext', currentNextPath());
@@ -152,16 +152,16 @@ async function signInWithProvider(provider, button, pendingLabel) {
 }
 
 async function sendPasswordReset() {
-  if (!client) return showStatus('登录服务还未准备好', 'error');
+  if (!client) return showStatus('The sign-in service is not ready yet', 'error');
   const email = elements.email.value.trim();
-  if (!email) return showStatus('先输入需要找回的邮箱', 'error');
-  setBusy(elements.forgot, true, '发送中...');
+  if (!email) return showStatus('Enter the email address you want to recover', 'error');
+  setBusy(elements.forgot, true, 'Sending...');
   try {
     const { error } = await client.auth.resetPasswordForEmail(email, {
       redirectTo: authRedirectUrl(authSiteUrl, '/auth/reset')
     });
     if (error) throw error;
-    showStatus('重设密码邮件已发送，请检查收件箱', 'success');
+    showStatus('Password reset email sent. Check your inbox.', 'success');
   } catch (error) {
     showStatus(authErrorMessage(error), 'error');
   } finally {
@@ -172,12 +172,12 @@ async function sendPasswordReset() {
 async function updatePassword(event) {
   event.preventDefault();
   const password = elements.resetPassword.value;
-  if (password.length < 8) return showStatus('新密码至少需要 8 位', 'error');
-  setBusy(elements.resetSubmit, true, '保存中...');
+  if (password.length < 8) return showStatus('The new password must be at least 8 characters', 'error');
+  setBusy(elements.resetSubmit, true, 'Saving...');
   try {
     const { error } = await client.auth.updateUser({ password });
     if (error) throw error;
-    showStatus('密码已更新', 'success');
+    showStatus('Password updated', 'success');
     window.history.replaceState({}, '', '/');
     finishLogin();
   } catch (error) {
@@ -196,7 +196,7 @@ async function signOut() {
 function renderSession() {
   const signedIn = Boolean(session?.user);
   if (elements.trigger) {
-    elements.trigger.textContent = signedIn ? displayUser(session.user) : '登录 + 注册';
+    elements.trigger.textContent = signedIn ? displayUser(session.user) : 'Sign In';
     elements.trigger.classList.toggle('is-signed-in', signedIn);
   }
   if (elements.signOut) elements.signOut.hidden = !signedIn;
@@ -212,7 +212,7 @@ function setMode(nextMode) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', String(active));
   });
-  elements.submit.textContent = mode === 'signup' ? '创建账号' : '登录';
+  elements.submit.textContent = mode === 'signup' ? 'Create Account' : 'Sign In';
   elements.password.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
   elements.forgot.hidden = mode === 'signup';
   showStatus('');
@@ -263,7 +263,7 @@ function currentNextPath() {
 }
 
 function displayUser(user) {
-  return user.user_metadata?.full_name || user.email || '已登录';
+  return user.user_metadata?.full_name || user.email || 'Signed In';
 }
 
 function showStatus(message, kind = '') {

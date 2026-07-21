@@ -67,12 +67,12 @@ async function route(req, res) {
     return json(res, 200, { analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
   }
   if (req.method === 'GET' && url.pathname === '/api/backend/schedules') {
-    if (access.role !== 'user') return json(res, 401, { error: '请先登录后查看数据后台' });
+    if (access.role !== 'user') return json(res, 401, { error: 'Sign in to view the data console' });
     return json(res, 200, { schedules: [], generatedAt: new Date().toISOString() });
   }
   const backendFixtureMatch = url.pathname.match(/^\/api\/backend\/fixtures\/(\d+)$/);
   if (req.method === 'GET' && backendFixtureMatch) {
-    if (access.role !== 'user') return json(res, 401, { error: '请先登录后查看比赛详情' });
+    if (access.role !== 'user') return json(res, 401, { error: 'Sign in to view match details' });
     const context = await fetchApiFootballContext(backendFixtureMatch[1], {
       ...apiFootballOptions(process.env),
       includeCatalog: true
@@ -119,7 +119,7 @@ async function route(req, res) {
   if (req.method === 'GET' && marketMatch) {
     const id = decodeURIComponent(marketMatch[1]);
     const market = readDb({ ownerId }).markets.find((item) => item.id === id);
-    if (!market) return json(res, 404, { error: '找不到盘口' });
+    if (!market) return json(res, 404, { error: 'Market not found' });
     return json(res, 200, { market });
   }
 
@@ -143,7 +143,7 @@ async function route(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/import/api-football') {
     const body = await readJson(req);
     const fixtureId = String(body.fixtureId || body.matchId || '').trim();
-    if (!fixtureId) return json(res, 400, { error: '缺少 fixtureId' });
+    if (!fixtureId) return json(res, 400, { error: 'Missing fixtureId' });
     const existing = findExistingContext(readDb({ ownerId }).matchContexts || [], fixtureId);
     if (existing && hasLineupPlayers(existing) && hasCompleteCatalog(existing)) {
       return json(res, 200, { context: existing, alreadyImported: true, refreshed: false });
@@ -174,7 +174,7 @@ async function route(req, res) {
   if (req.method === 'POST' && predictMatch) {
     const id = decodeURIComponent(predictMatch[1]);
     const market = readDb({ ownerId }).markets.find((item) => item.id === id);
-    if (!market) return json(res, 404, { error: '找不到盘口' });
+    if (!market) return json(res, 404, { error: 'Market not found' });
     const report = await predictMarket(market, process.env, openRouterFetch);
     saveReport(report, { ownerId });
     return json(res, 200, { report });
@@ -187,7 +187,7 @@ async function route(req, res) {
     const context = contextSelector
       ? findExistingContext(db.matchContexts || [], contextSelector)
       : (db.matchContexts || [])[0] || null;
-    if (!db.markets.length && !context) return json(res, 400, { error: '还没有导入 API-Football 比赛数据' });
+    if (!db.markets.length && !context) return json(res, 400, { error: 'No API-Football match data has been imported' });
     const requestedModel = body.model || 'all';
     const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(process.env, body), openRouterFetch, context);
     ranking.contextId = context ? contextKey(context) : '';

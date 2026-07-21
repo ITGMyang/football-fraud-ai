@@ -29,7 +29,7 @@ test('billing plans keep prices and durations on the server', () => {
   ]);
   assert.equal(billingPlan('unknown'), null);
   assert.deepEqual(publicBillingPlans()[0], {
-    id: 'day', name: '24 小时卡', price: '2.99', currency: 'USDT', durationHours: 24, recommended: false
+    id: 'day', name: '24-Hour Pass', price: '2.99', currency: 'USDT', durationHours: 24, recommended: false
   });
 });
 
@@ -84,7 +84,7 @@ test('checkout creation ignores client amounts and uses the selected server plan
     stable_coin: 1,
     amount_cents: 299,
     order_id: 'order-1',
-    order_description: '24 小时卡',
+    order_description: '24-Hour Pass',
     user_id: 'user-1',
     user_name: 'Member',
     redirect_url: 'https://futbots.cc/?checkout=return',

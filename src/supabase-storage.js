@@ -13,7 +13,7 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
   const baseUrl = String(env.SUPABASE_URL || '').replace(/^\uFEFF/, '').trim().replace(/\/$/, '');
   const serviceKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY || '';
   if (!baseUrl || !serviceKey) {
-    throw new Error('Cloudflare 部署需要配置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_SECRET_KEY');
+    throw new Error('Cloudflare requires SUPABASE_URL and either SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY');
   }
 
   const client = new SupabaseRestClient(baseUrl, serviceKey, fetchImpl);

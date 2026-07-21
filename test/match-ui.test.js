@@ -7,7 +7,7 @@ test('match schedule refresh never rewrites the competition select options', asy
   const loader = source.slice(source.indexOf('async function loadApiFootballMatches'), source.indexOf('function renderMatchSchedule'));
   assert.match(loader, /const button = \$\('#loadApiFootballMatches'\)/);
   assert.doesNotMatch(loader, /event\?\.currentTarget/);
-  assert.match(loader, /button\.textContent\s*=\s*'读取中\.\.\.'/);
+  assert.match(loader, /button\.textContent\s*=\s*'Loading\.\.\.'/);
 });
 
 test('AI context cards stay neutral when the inner button is hovered', async () => {
@@ -50,8 +50,8 @@ test('match UI uses API-Football instead of Dongqiudi endpoints', async () => {
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 
   assert.match(markup, /id="loadApiFootballMatches"/);
-  assert.match(markup, /<option value="all">全部赛事<\/option>/);
-  assert.match(markup, /<option value="1" selected>世界杯<\/option>/);
+  assert.match(markup, /<option value="all">All Competitions<\/option>/);
+  assert.match(markup, /<option value="1" selected>FIFA World Cup<\/option>/);
   assert.match(source, /\/api\/football\/matches/);
   assert.match(source, /\/api\/import\/api-football/);
   assert.doesNotMatch(source, /\/api\/dongqiudi|\/api\/import\/dongqiudi/);
@@ -63,7 +63,7 @@ test('backend cache monitor is a separate read-only Supabase view', async () => 
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
 
-  assert.match(markup, /href="\/backend"[^>]*>数据后台</);
+  assert.match(markup, /href="\/backend"[^>]*>Data Console</);
   assert.match(markup, /id="backendPanel"/);
   assert.match(source, /api\('\/api\/backend\/schedules'\)/);
   assert.match(source, /location\.pathname === '\/backend'/);
@@ -80,9 +80,9 @@ test('backend fixture rows open an authenticated API-Football detail view', asyn
   assert.match(source, /data-backend-fixture=/);
   assert.match(source, /\/api\/backend\/fixtures\//);
   assert.match(source, /renderBackendFixtureDetail/);
-  assert.match(source, /接口抓取状态/);
-  assert.match(source, /接口返回为空/);
-  assert.match(source, /抓取失败/);
+  assert.match(source, /API Fetch Status/);
+  assert.match(source, /Empty Response/);
+  assert.match(source, /Fetch Failed/);
   assert.match(source, /fetchStatus/);
   assert.match(worker, /backendFixtureMatch = url\.pathname\.match/);
   assert.match(worker, /api\\\/backend\\\/fixtures/);

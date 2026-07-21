@@ -51,11 +51,11 @@ const analyticsState = {
 };
 
 const MARKET_GROUPS = [
-  { key: 'moneyline', label: '胜平负', help: '主胜、平局、客胜这类 1X2 市场。' },
-  { key: 'score', label: '比分', help: '正确比分候选项。' },
-  { key: 'handicap', label: '亚洲让分盘', help: '让球/受让盘口，例如 德国 -0.5、厄瓜多尔 +0.5。' },
-  { key: 'total', label: '大小球', help: '总进球大/小，例如 大 2.5、小 2.5。' },
-  { key: 'other', label: '其他', help: '暂未归类或需要手动修正的盘口。' }
+  { key: 'moneyline', label: 'Moneyline', help: 'Home win, draw, or away win in a 1X2 market.' },
+  { key: 'score', label: 'Correct Score', help: 'Exact scoreline candidates.' },
+  { key: 'handicap', label: 'Asian Handicap', help: 'Giving or receiving a handicap, such as Germany -0.5 or Ecuador +0.5.' },
+  { key: 'total', label: 'Goals Total', help: 'Total goals over or under a line, such as Over 2.5.' },
+  { key: 'other', label: 'Other', help: 'Unclassified markets that may require manual review.' }
 ];
 
 bind('#loadSample', 'click', async () => {
@@ -136,7 +136,7 @@ document.addEventListener('click', (event) => {
 
 bind('#importText', 'click', async () => {
   const result = await importStakeText();
-  alert(`导入 ${result.markets.length} 条盘口`);
+  alert(`Imported ${result.markets.length} markets`);
 });
 
 bind('#manualForm', 'submit', async (event) => {
@@ -185,7 +185,7 @@ async function refreshForAccountChange() {
 
 async function loadBackendSchedules() {
   if (!backendContentEl) return;
-  backendContentEl.innerHTML = '<p class="backend-loading">正在读取 Supabase 缓存...</p>';
+  backendContentEl.innerHTML = '<p class="backend-loading">Loading the Supabase cache...</p>';
   try {
     const result = await api('/api/backend/schedules');
     backendSchedules = Array.isArray(result.schedules)
@@ -194,13 +194,13 @@ async function loadBackendSchedules() {
     renderBackendCompetitionOptions();
     renderBackendSchedules();
     const updated = $('#backendUpdatedAt');
-    if (updated) updated.textContent = `读取于 ${formatBackendTime(result.generatedAt)}`;
+    if (updated) updated.textContent = `Loaded at ${formatBackendTime(result.generatedAt)}`;
   } catch (error) {
     backendSchedules = [];
     renderBackendSummary([]);
     backendContentEl.innerHTML = `
       <div class="backend-empty">
-        <strong>${error.status === 401 ? '请先登录' : '读取失败'}</strong>
+        <strong>${error.status === 401 ? 'Sign In Required' : 'Load Failed'}</strong>
         <span>${escapeHtml(error.message)}</span>
       </div>
     `;
@@ -215,7 +215,7 @@ function renderBackendCompetitionOptions() {
     .map((schedule) => ({ id: String(schedule.competitionId || ''), name: backendCompetitionName(schedule) }))
     .filter((item) => item.id)
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-  select.innerHTML = '<option value="all">全部赛事</option>' + options
+  select.innerHTML = '<option value="all">All Competitions</option>' + options
     .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
     .join('');
   select.value = options.some((item) => item.id === selected) ? selected : 'all';
@@ -241,14 +241,14 @@ function renderBackendSchedules() {
   }).sort((a, b) => Date.parse(b.match.kickoff || '') - Date.parse(a.match.kickoff || ''));
 
   if (!rows.length) {
-    backendContentEl.innerHTML = '<div class="backend-empty"><strong>没有匹配的数据</strong><span>可以清除筛选条件后重试。</span></div>';
+    backendContentEl.innerHTML = '<div class="backend-empty"><strong>No matching data</strong><span>Clear the filters and try again.</span></div>';
     return;
   }
 
   backendContentEl.innerHTML = `
     <div class="backend-table-wrap">
       <table class="backend-table">
-        <thead><tr><th>赛事</th><th>比赛</th><th>北京时间</th><th>Fixture ID</th><th>盘口</th><th>刷新状态</th><th>写入时间</th><th>详情</th></tr></thead>
+        <thead><tr><th>Competition</th><th>Match</th><th>Beijing Time</th><th>Fixture ID</th><th>Odds</th><th>Refresh Status</th><th>Cached At</th><th>Details</th></tr></thead>
         <tbody>${rows.map(renderBackendRow).join('')}</tbody>
       </table>
     </div>
@@ -263,16 +263,16 @@ function renderBackendSummary(schedules) {
     .some((check) => check?.status === 'rate-limited')).length;
   const latest = schedules.reduce((value, schedule) => Math.max(value, Date.parse(schedule.fetchedAt || '') || 0), 0);
   backendSummaryEl.innerHTML = [
-    ['缓存赛事', schedules.length],
-    ['缓存比赛', matches.length],
-    ['有盘口', oddsMatches],
-    ['刷新异常', delayed],
-    ['最近写入', latest ? formatBackendTime(new Date(latest).toISOString()) : '暂无']
+    ['Cached Competitions', schedules.length],
+    ['Cached Matches', matches.length],
+    ['Odds Available', oddsMatches],
+    ['Refresh Delays', delayed],
+    ['Latest Write', latest ? formatBackendTime(new Date(latest).toISOString()) : 'None']
   ].map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
 }
 
 function renderBackendRow({ schedule, match, provider }) {
-  const providerStatus = provider?.status === 'rate-limited' ? '限流' : provider?.status === 'ready' ? '正常' : '缓存';
+  const providerStatus = provider?.status === 'rate-limited' ? 'Rate Limited' : provider?.status === 'ready' ? 'Ready' : 'Cached';
   const providerTone = provider?.status === 'rate-limited' ? 'danger' : provider?.status === 'ready' ? 'ok' : 'neutral';
   const fixtureId = String(match.matchId || match.id || '');
   return `
@@ -281,31 +281,31 @@ function renderBackendRow({ schedule, match, provider }) {
       <td><strong>${escapeHtml(match.home || '')}</strong><span>vs</span><strong>${escapeHtml(match.away || '')}</strong></td>
       <td>${escapeHtml(formatBackendTime(match.kickoff))}</td>
       <td><code>${escapeHtml(fixtureId)}</code></td>
-      <td><span class="backend-status ${match.hasOdds === true ? 'ok' : 'neutral'}">${match.hasOdds === true ? '已验证' : '无盘口'}</span></td>
+      <td><span class="backend-status ${match.hasOdds === true ? 'ok' : 'neutral'}">${match.hasOdds === true ? 'Verified' : 'No Odds'}</span></td>
       <td><span class="backend-status ${providerTone}">${providerStatus}</span></td>
       <td>${escapeHtml(formatBackendTime(schedule.fetchedAt))}</td>
-      <td><button class="backend-detail-button secondary" type="button" data-backend-fixture="${escapeHtml(fixtureId)}">查看</button></td>
+      <td><button class="backend-detail-button secondary" type="button" data-backend-fixture="${escapeHtml(fixtureId)}">View</button></td>
     </tr>
   `;
 }
 
 async function openBackendFixture(fixtureId, button) {
   if (!fixtureId || !contextModalEl || !contextModalBodyEl) return;
-  const original = button?.textContent || '查看';
+  const original = button?.textContent || 'View';
   try {
     if (button) {
       button.disabled = true;
-      button.textContent = '读取中';
+      button.textContent = 'Loading';
     }
     if (contextModalTitleEl) contextModalTitleEl.textContent = `Fixture ${fixtureId}`;
-    contextModalBodyEl.innerHTML = '<p class="backend-loading">正在从 API-Football 读取比赛详情...</p>';
+    contextModalBodyEl.innerHTML = '<p class="backend-loading">Loading match details from API-Football...</p>';
     contextModalEl.hidden = false;
     document.body.classList.add('modal-open');
     const { context, generatedAt } = await api(`/api/backend/fixtures/${encodeURIComponent(fixtureId)}`);
     if (contextModalTitleEl) contextModalTitleEl.textContent = context.matchName || `Fixture ${fixtureId}`;
     contextModalBodyEl.innerHTML = renderBackendFixtureDetail(context, generatedAt);
   } catch (error) {
-    contextModalBodyEl.innerHTML = `<div class="backend-empty"><strong>详情读取失败</strong><span>${escapeHtml(error.message)}</span></div>`;
+    contextModalBodyEl.innerHTML = `<div class="backend-empty"><strong>Unable to Load Details</strong><span>${escapeHtml(error.message)}</span></div>`;
   } finally {
     if (button) {
       button.disabled = false;
@@ -325,42 +325,42 @@ function renderBackendFixtureDetail(context = {}, generatedAt = '') {
   const apiPrediction = context.analysis?.apiPrediction || {};
   const fetchStatus = context.fetchStatus || {};
   const coverage = [
-    ['Fixtures', 1, '单场', fetchStatus.fixtures],
-    ['H2H', context.analysis?.h2h?.length || 0, '单场', fetchStatus.h2h],
-    ['Live / Events', context.live?.length || 0, '单场', fetchStatus.events],
-    ['Odds', oddsCount, '单场', fetchStatus.odds],
-    ['Lineups', lineupPlayers.length, '单场', fetchStatus.lineups],
-    ['Fixture Statistics', fixtureStats.length, '单场', fetchStatus.fixtureStatistics],
-    ['Predictions', apiPrediction.advice || apiPrediction.winner ? 1 : 0, '单场', fetchStatus.predictions],
-    ['Injuries', injuryNotes.length, '单场', fetchStatus.injuries],
-    ['Players Statistics', playerStats.length, '单场', fetchStatus.playerStatistics],
-    ['Standings', catalog.standings?.length || 0, '联赛', fetchStatus.standings],
-    ['Top Scorers', catalog.topScorers?.length || 0, '联赛', fetchStatus.topScorers],
-    ['Teams Statistics', catalog.teamStatistics?.length || 0, '球队', fetchStatus.teamStatistics],
-    ['Players Squads', catalog.squads?.length || 0, '球队', fetchStatus.squads],
-    ['Coaches', catalog.coaches?.length || 0, '球队', fetchStatus.coaches],
-    ['Transfers / Trophies / Sidelined', 0, '非单场', { state: 'not-requested', count: 0 }]
+    ['Fixtures', 1, 'match', fetchStatus.fixtures],
+    ['H2H', context.analysis?.h2h?.length || 0, 'match', fetchStatus.h2h],
+    ['Live / Events', context.live?.length || 0, 'match', fetchStatus.events],
+    ['Odds', oddsCount, 'match', fetchStatus.odds],
+    ['Lineups', lineupPlayers.length, 'match', fetchStatus.lineups],
+    ['Fixture Statistics', fixtureStats.length, 'match', fetchStatus.fixtureStatistics],
+    ['Predictions', apiPrediction.advice || apiPrediction.winner ? 1 : 0, 'match', fetchStatus.predictions],
+    ['Injuries', injuryNotes.length, 'match', fetchStatus.injuries],
+    ['Players Statistics', playerStats.length, 'match', fetchStatus.playerStatistics],
+    ['Standings', catalog.standings?.length || 0, 'league', fetchStatus.standings],
+    ['Top Scorers', catalog.topScorers?.length || 0, 'league', fetchStatus.topScorers],
+    ['Teams Statistics', catalog.teamStatistics?.length || 0, 'team', fetchStatus.teamStatistics],
+    ['Players Squads', catalog.squads?.length || 0, 'team', fetchStatus.squads],
+    ['Coaches', catalog.coaches?.length || 0, 'team', fetchStatus.coaches],
+    ['Transfers / Trophies / Sidelined', 0, 'non-match', { state: 'not-requested', count: 0 }]
   ];
   const teamSeasonStats = (catalog.teamStatistics || []).map((row) => [
     row.team,
-    `赛 ${row.played || 0}`,
-    `胜 ${row.wins || 0}`,
-    `平 ${row.draws || 0}`,
-    `负 ${row.losses || 0}`,
-    `进 ${row.goalsFor || 0}`,
-    `失 ${row.goalsAgainst || 0}`,
-    `零封 ${row.cleanSheets || 0}`
+    `Played ${row.played || 0}`,
+    `Won ${row.wins || 0}`,
+    `Drawn ${row.draws || 0}`,
+    `Lost ${row.losses || 0}`,
+    `GF ${row.goalsFor || 0}`,
+    `GA ${row.goalsAgainst || 0}`,
+    `Clean Sheets ${row.cleanSheets || 0}`
   ].join(' · '));
   const matchStats = fixtureStats.map((row) => `${row.team} · ${Object.entries(row.values || {})
     .map(([key, value]) => `${key}: ${value ?? '-'}`).join(' · ')}`);
   const matchPlayerStats = playerStats.map((row) => {
     const stats = row.statistics || {};
-    return [row.team, row.player, stats.games?.minutes ? `${stats.games.minutes}分钟` : '', stats.games?.rating ? `评分 ${stats.games.rating}` : '']
+    return [row.team, row.player, stats.games?.minutes ? `${stats.games.minutes} minutes` : '', stats.games?.rating ? `Rating ${stats.games.rating}` : '']
       .filter(Boolean).join(' · ');
   });
   const predictionText = [
-    apiPrediction.winner ? `倾向：${apiPrediction.winner}` : '',
-    apiPrediction.advice ? `建议：${apiPrediction.advice}` : '',
+    apiPrediction.winner ? `Lean: ${apiPrediction.winner}` : '',
+    apiPrediction.advice ? `Advice: ${apiPrediction.advice}` : '',
     ...Object.entries(apiPrediction.percent || {}).map(([key, value]) => `${key} ${value}`)
   ].filter(Boolean);
 
@@ -369,21 +369,21 @@ function renderBackendFixtureDetail(context = {}, generatedAt = '') {
       <div class="backend-fixture-overview">
         <div>
           <span>API-FOOTBALL FIXTURE ${escapeHtml(context.matchId || '')}</span>
-          <h3>${escapeHtml(context.matchName || '比赛')}</h3>
-          <p>${escapeHtml(context.competition || '')} · ${escapeHtml(fixture.country || '国家未返回')} · ${escapeHtml(fixture.season || '赛季未返回')} · ${escapeHtml(fixture.round || '轮次未返回')}</p>
+          <h3>${escapeHtml(context.matchName || 'Match')}</h3>
+          <p>${escapeHtml(context.competition || '')} · ${escapeHtml(fixture.country || 'Country unavailable')} · ${escapeHtml(fixture.season || 'Season unavailable')} · ${escapeHtml(fixture.round || 'Round unavailable')}</p>
         </div>
-        <small>读取于 ${escapeHtml(formatBackendTime(generatedAt))}</small>
+        <small>Loaded at ${escapeHtml(formatBackendTime(generatedAt))}</small>
       </div>
       <div class="backend-fixture-meta">
-        ${renderInfoTile('开赛时间', formatBackendTime(context.kickoff))}
-        ${renderInfoTile('比赛状态', context.status || '暂无')}
-        ${renderInfoTile('比赛场地', fixture.venue?.name ? `${fixture.venue.name}${fixture.venue.city ? ` · ${fixture.venue.city}` : ''}` : '暂无')}
-        ${renderInfoTile('裁判', fixture.referee || '暂无')}
-        ${renderInfoTile('阵型', context.lineup?.formation || '暂无')}
-        ${renderInfoTile('盘口记录', oddsCount ? `${oddsCount} 条` : '暂无')}
+        ${renderInfoTile('Kickoff', formatBackendTime(context.kickoff))}
+        ${renderInfoTile('Match Status', context.status || 'Unavailable')}
+        ${renderInfoTile('Venue', fixture.venue?.name ? `${fixture.venue.name}${fixture.venue.city ? ` · ${fixture.venue.city}` : ''}` : 'Unavailable')}
+        ${renderInfoTile('Referee', fixture.referee || 'Unavailable')}
+        ${renderInfoTile('Formation', context.lineup?.formation || 'Unavailable')}
+        ${renderInfoTile('Odds Records', oddsCount ? `${oddsCount} records` : 'Unavailable')}
       </div>
       <section class="backend-coverage">
-        <div class="backend-detail-heading"><h4>接口抓取状态</h4><span>已区分空数据与请求失败</span></div>
+        <div class="backend-detail-heading"><h4>API Fetch Status</h4><span>Empty responses and failed requests are shown separately</span></div>
         <div class="backend-coverage-grid">
           ${coverage.map(([label, count, scope, status]) => {
             const display = backendCoverageDisplay(count, scope, status);
@@ -391,24 +391,24 @@ function renderBackendFixtureDetail(context = {}, generatedAt = '') {
             <div class="backend-coverage-item ${display.className}"${display.detail ? ` title="${escapeHtml(display.detail)}"` : ''}>
               <span>${escapeHtml(label)}</span>
               <strong>${escapeHtml(display.label)}</strong>
-              <small>${escapeHtml(display.detail || `${scope}级`)}</small>
+              <small>${escapeHtml(display.detail || `${scope} level`)}</small>
             </div>
           `;}).join('')}
         </div>
       </section>
       <div class="backend-detail-modules">
-        ${renderBackendDetailModule('首发与球员', lineupPlayers)}
-        ${renderBackendDetailModule('伤停', injuryNotes)}
-        ${renderBackendDetailModule('交锋记录 H2H', context.analysis?.h2h || [])}
-        ${renderBackendDetailModule('比赛事件', context.live || [])}
-        ${renderBackendDetailModule('单场球队统计', matchStats)}
-        ${renderBackendDetailModule('单场球员统计', matchPlayerStats)}
-        ${renderBackendDetailModule('API 预测', predictionText)}
-        ${renderBackendDetailModule('积分榜', catalog.standings || [])}
-        ${renderBackendDetailModule('射手榜', catalog.topScorers || [])}
-        ${renderBackendDetailModule('赛季球队统计', teamSeasonStats)}
-        ${renderBackendDetailModule('球队名单', catalog.squads || [])}
-        ${renderBackendDetailModule('教练', catalog.coaches || [])}
+        ${renderBackendDetailModule('Lineups and Players', lineupPlayers)}
+        ${renderBackendDetailModule('Injuries', injuryNotes)}
+        ${renderBackendDetailModule('Head-to-Head', context.analysis?.h2h || [])}
+        ${renderBackendDetailModule('Match Events', context.live || [])}
+        ${renderBackendDetailModule('Fixture Team Statistics', matchStats)}
+        ${renderBackendDetailModule('Fixture Player Statistics', matchPlayerStats)}
+        ${renderBackendDetailModule('API Prediction', predictionText)}
+        ${renderBackendDetailModule('Standings', catalog.standings || [])}
+        ${renderBackendDetailModule('Top Scorers', catalog.topScorers || [])}
+        ${renderBackendDetailModule('Season Team Statistics', teamSeasonStats)}
+        ${renderBackendDetailModule('Squads', catalog.squads || [])}
+        ${renderBackendDetailModule('Coaches', catalog.coaches || [])}
         ${renderOddsModule(context.index || {})}
       </div>
     </article>
@@ -417,15 +417,15 @@ function renderBackendFixtureDetail(context = {}, generatedAt = '') {
 
 function backendCoverageDisplay(count, scope, status = {}) {
   const availableCount = count || (status.state === 'available' ? status.count : 0);
-  if (availableCount) return { className: 'available', label: `已抓取 ${availableCount}`, detail: `${scope}级` };
+  if (availableCount) return { className: 'available', label: `Captured ${availableCount}`, detail: `${scope} level` };
   if (status.state === 'error') {
-    return { className: 'error', label: '抓取失败', detail: status.error || '接口请求失败' };
+    return { className: 'error', label: 'Fetch Failed', detail: status.error || 'API request failed' };
   }
-  if (status.state === 'empty') return { className: 'empty', label: '接口返回为空', detail: `${scope}级` };
-  if (status.state === 'not-requested' || scope === '非单场') {
-    return { className: 'scope', label: '未按比赛查询', detail: `${scope}级` };
+  if (status.state === 'empty') return { className: 'empty', label: 'Empty Response', detail: `${scope} level` };
+  if (status.state === 'not-requested' || scope === 'non-match') {
+    return { className: 'scope', label: 'Not Queried by Fixture', detail: `${scope} level` };
   }
-  return { className: 'empty', label: '状态未知', detail: '旧数据未记录接口状态' };
+  return { className: 'empty', label: 'Unknown Status', detail: 'Legacy data did not record API status' };
 }
 
 function renderBackendDetailModule(title, rows = []) {
@@ -433,26 +433,26 @@ function renderBackendDetailModule(title, rows = []) {
   return `
     <section class="backend-detail-module">
       <div class="backend-detail-heading"><h4>${escapeHtml(title)}</h4><span>${visible.length}</span></div>
-      ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p>API 当前暂无这类数据。</p>'}
+      ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p>No data is currently available for this module.</p>'}
     </section>
   `;
 }
 
 function backendCompetitionName(schedule) {
   const names = {
-    '1': '世界杯', '2': '欧冠', '3': '欧联', '15': '世俱杯', '17': '亚冠精英',
-    '39': '英超', '61': '法甲', '78': '德甲', '135': '意甲', '140': '西甲',
-    '169': '中超', '170': '中甲', '171': '中乙', '188': '澳超', '307': '沙特联'
+    '1': 'FIFA World Cup', '2': 'UEFA Champions League', '3': 'UEFA Europa League', '15': 'FIFA Club World Cup', '17': 'AFC Champions League Elite',
+    '39': 'Premier League', '61': 'Ligue 1', '78': 'Bundesliga', '135': 'Serie A', '140': 'La Liga',
+    '169': 'Chinese Super League', '170': 'China League One', '171': 'China League Two', '188': 'A-League', '307': 'Saudi Pro League'
   };
   return names[String(schedule.competitionId || '')]
     || schedule.matches?.find((match) => match.competition)?.competition
-    || `赛事 ${schedule.competitionId || ''}`;
+    || `Competition ${schedule.competitionId || ''}`;
 }
 
 function formatBackendTime(value) {
   const date = new Date(value || '');
-  if (Number.isNaN(date.getTime())) return '暂无';
-  return date.toLocaleString('zh-CN', {
+  if (Number.isNaN(date.getTime())) return 'Unavailable';
+  return date.toLocaleString('en-US', {
     timeZone: 'Asia/Shanghai',
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
   });
@@ -491,7 +491,7 @@ function renderGuestAccess() {
   document.querySelectorAll('[data-rank-model]').forEach((button) => {
     button.disabled = blocked || (!paid && button.dataset.rankModel !== 'Qwen');
     button.title = !paid && !blocked && button.dataset.rankModel !== 'Qwen'
-      ? '免费体验仅运行 Qwen，订阅后可使用此模型'
+      ? 'The free trial only runs Qwen. Purchase a pass to use this model.'
       : '';
   });
 }
@@ -501,31 +501,31 @@ function renderBillingStatus() {
   const billing = accessState.billing || {};
   if (billing.active) {
     billingStatusEl.dataset.tone = 'paid';
-    billingStatusTitleEl.textContent = '全部 AI 已解锁';
+    billingStatusTitleEl.textContent = 'All AI Models Unlocked';
     billingStatusDetailEl.textContent = billing.validUntil
-      ? `有效期至 ${formatBillingDate(billing.validUntil)}`
-      : '订阅有效';
+      ? `Valid until ${formatBillingDate(billing.validUntil)}`
+      : 'Pass active';
   } else if (billing.tier === 'locked') {
     billingStatusEl.dataset.tone = 'locked';
-    billingStatusTitleEl.textContent = '免费次数已用完';
-    billingStatusDetailEl.textContent = '购买套餐后继续预测';
+    billingStatusTitleEl.textContent = 'Free Prediction Used';
+    billingStatusDetailEl.textContent = 'Purchase a pass to continue';
   } else {
     billingStatusEl.dataset.tone = 'free';
-    billingStatusTitleEl.textContent = accessState.authenticated ? '剩余 1 次 Qwen 预测' : '免费体验';
-    billingStatusDetailEl.textContent = accessState.authenticated ? '订阅后解锁全部模型' : '登录后可购买套餐';
+    billingStatusTitleEl.textContent = accessState.authenticated ? '1 Qwen Prediction Remaining' : 'Free Trial';
+    billingStatusDetailEl.textContent = accessState.authenticated ? 'Purchase a pass to unlock all models' : 'Sign in to purchase a pass';
   }
 }
 
 async function startBillingCheckout(planId, button) {
   if (!accessState.authenticated) {
-    window.footballAuth?.open('请先登录后购买套餐');
+    window.footballAuth?.open('Sign in before purchasing a pass');
     return;
   }
   const original = button.textContent;
-  setBillingMessage('正在创建安全支付订单...');
+  setBillingMessage('Creating a secure checkout...');
   try {
     button.disabled = true;
-    button.textContent = '正在跳转...';
+    button.textContent = 'Redirecting...';
     const result = await api('/api/billing/checkout', {
       method: 'POST',
       body: JSON.stringify({ planId })
@@ -548,7 +548,7 @@ async function resumeBillingCheckout() {
   const params = new URLSearchParams(location.search);
   const orderId = params.get('order') || readStoredValue(BILLING_ORDER_STORAGE_KEY);
   if (!orderId || params.get('checkout') !== 'return') return;
-  setBillingMessage('正在确认付款状态，请稍候...');
+  setBillingMessage('Confirming your payment...');
   document.querySelector('#subscriptionPanel')?.scrollIntoView({ block: 'start' });
   for (let attempt = 0; attempt < 12; attempt += 1) {
     try {
@@ -557,12 +557,12 @@ async function resumeBillingCheckout() {
         accessState.billing = result.billing;
         renderGuestAccess();
         renderBillingStatus();
-        setBillingMessage('付款已确认，全部 AI 模型已经解锁。');
+        setBillingMessage('Payment confirmed. All AI models are now unlocked.');
         clearBillingReturnState();
         return;
       }
       if (Number(result.status) < 0) {
-        setBillingMessage('订单未完成，请重新选择套餐。', true);
+        setBillingMessage('The order was not completed. Select a pass and try again.', true);
         return;
       }
     } catch (error) {
@@ -570,7 +570,7 @@ async function resumeBillingCheckout() {
     }
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
-  setBillingMessage('付款仍在确认中，稍后刷新页面即可查看状态。');
+  setBillingMessage('Payment is still being confirmed. Refresh the page shortly to check again.');
 }
 
 function clearBillingReturnState() {
@@ -594,7 +594,7 @@ function setBillingMessage(message, isError = false) {
 function formatBillingDate(value) {
   const date = new Date(value || '');
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString('en-US', {
     timeZone: 'Asia/Shanghai',
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
   });
@@ -732,9 +732,9 @@ async function loadApiFootballMatches(event) {
   try {
     if (button) {
       button.disabled = true;
-      button.textContent = '读取中...';
+      button.textContent = 'Loading...';
     }
-    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">正在读取 API-Football 比赛列表...</p>';
+    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">Loading matches from API-Football...</p>';
     const date = $('#matchDate')?.value || '';
     const competitionId = $('#competitionFilter')?.value || '1';
     const schedule = await api(`/api/football/matches?competitionId=${encodeURIComponent(competitionId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`);
@@ -758,12 +758,12 @@ function renderMatchSchedule(schedule) {
     return;
   }
 
-  const notice = `${escapeHtml(schedule.date)} 未开始 ${matches.length} 场`;
+  const notice = `${matches.length} upcoming matches on ${escapeHtml(schedule.date)}`;
 
   matchScheduleEl.innerHTML = `
     <div class="schedule-summary">
       <strong>${notice}</strong>
-      <span>来源：${escapeHtml(shortUrl(schedule.sourceUrl))} · 抓取时间 ${escapeHtml(new Date(schedule.fetchedAt).toLocaleTimeString())}</span>
+      <span>Source: ${escapeHtml(shortUrl(schedule.sourceUrl))} · Captured at ${escapeHtml(new Date(schedule.fetchedAt).toLocaleTimeString('en-US'))}</span>
     </div>
     ${matches.map(renderScheduleCard).join('')}
   `;
@@ -799,7 +799,7 @@ function renderScheduleCard(match) {
       </div>
       <div class="schedule-actions">
         <span>API-Football</span>
-        <button data-import-match="${escapeHtml(match.matchId)}">导入并分析</button>
+        <button data-import-match="${escapeHtml(match.matchId)}">Import and Analyze</button>
       </div>
     </article>
   `;
@@ -810,7 +810,7 @@ async function importScheduleMatch(fixtureId, button) {
   try {
     if (button) {
       button.disabled = true;
-      button.textContent = '导入中...';
+      button.textContent = 'Importing...';
     }
     const { context, alreadyImported, refreshed } = await api('/api/import/api-football', {
       method: 'POST',
@@ -821,14 +821,14 @@ async function importScheduleMatch(fixtureId, button) {
     await refresh();
     if (refreshed) {
       $('#ai-panel')?.scrollIntoView({ block: 'start' });
-      alert(`已刷新该场数据：${context.matchName || fixtureId}`);
+      alert(`Match data refreshed: ${context.matchName || fixtureId}`);
       return;
     }
     if (alreadyImported) {
-      alert(`该场次已导入：${context.matchName || fixtureId}`);
+      alert(`Match already imported: ${context.matchName || fixtureId}`);
     } else {
       $('#ai-panel')?.scrollIntoView({ block: 'start' });
-      alert(`已导入：${context.matchName || fixtureId}`);
+      alert(`Imported: ${context.matchName || fixtureId}`);
     }
   } catch (error) {
     alert(error.message);
@@ -846,7 +846,7 @@ function renderContexts(contexts) {
     : null;
   const latest = active || contexts?.[0];
   if (!latest) {
-    contextsEl.innerHTML = '<p class="meta">尚未导入 API-Football 比赛数据。AI 预测目前只能参考手动盘口。</p>';
+    contextsEl.innerHTML = '<p class="meta">No API-Football match data has been imported. AI predictions can currently use manual markets only.</p>';
     return;
   }
 
@@ -856,25 +856,25 @@ function renderContexts(contexts) {
   contextsEl.innerHTML = `
     <div class="context-card">
       <div class="context-card-main">
-        <strong>已导入 API-Football 数据：${escapeHtml(latest.matchName || '比赛')}</strong>
-        <div class="context-teams" aria-label="比赛双方">
+        <strong>Imported API-Football Data: ${escapeHtml(latest.matchName || 'Match')}</strong>
+        <div class="context-teams" aria-label="Teams">
           ${teams.map((team, index) => `
             <span class="team-flag">
               ${renderTeamCrest(contextTeamLogo(latest, index), team)}
-              ${escapeHtml(team || (index === 0 ? '主队' : '客队'))}
+              ${escapeHtml(team || (index === 0 ? 'Home Team' : 'Away Team'))}
             </span>
             ${index === 0 ? '<em>v</em>' : ''}
           `).join('')}
         </div>
         <div class="context-time-row">
-          <span class="kickoff-pill primary-time">当地开赛 ${escapeHtml(formatKickoff(latest))}</span>
-          <span class="kickoff-pill secondary-time">北京时间 ${escapeHtml(formatBeijingKickoff(latest.kickoff))}</span>
+          <span class="kickoff-pill primary-time">Local Kickoff ${escapeHtml(formatKickoff(latest))}</span>
+          <span class="kickoff-pill secondary-time">Beijing Time ${escapeHtml(formatBeijingKickoff(latest.kickoff))}</span>
           <span class="lineup-window ${timing.state}">${escapeHtml(timing.label)}</span>
           <span class="player-info-pill ${playerStatus.state}">${escapeHtml(playerStatus.label)}</span>
         </div>
-        <span>阵容/战绩/指数/专家/文字直播上下文会随 AI 预测发送</span>
+        <span>Lineups, form, odds, predictions, and live-event context are sent with each AI request</span>
       </div>
-      <a href="https://dashboard.api-football.com/" target="_blank" rel="noreferrer">API 来源</a>
+      <a href="https://dashboard.api-football.com/" target="_blank" rel="noreferrer">API Source</a>
     </div>
   `;
 }
@@ -886,8 +886,8 @@ function renderAiContextSelector(contexts = []) {
 
   const datedContexts = filterContextsByAiRange(contexts.filter((context) => contextDate(context)));
   if (!datedContexts.length) {
-    aiContextDateEl.innerHTML = '<option value="">暂无已导入数据</option>';
-    aiContextTabsEl.innerHTML = '<p class="meta">当前范围里还没有已导入比赛。</p>';
+    aiContextDateEl.innerHTML = '<option value="">No imported data</option>';
+    aiContextTabsEl.innerHTML = '<p class="meta">No imported matches are available in this range.</p>';
     return;
   }
 
@@ -907,7 +907,7 @@ function renderAiContextSelector(contexts = []) {
 
   aiContextDateEl.innerHTML = dates.map((date) => {
     const count = datedContexts.filter((context) => contextDate(context) === date).length;
-    return `<option value="${escapeHtml(date)}" ${date === activeAiContextDate ? 'selected' : ''}>${escapeHtml(date)}（已导入 ${count} 场）</option>`;
+    return `<option value="${escapeHtml(date)}" ${date === activeAiContextDate ? 'selected' : ''}>${escapeHtml(date)} (${count} imported)</option>`;
   }).join('');
 
   const visibleContexts = sortAiContexts(datedContexts.filter((context) => contextDate(context) === activeAiContextDate));
@@ -1028,7 +1028,7 @@ function renderAiContextTab(context) {
   const hasPrediction = Boolean(rankingForContext(context));
   const urgent = isInOneHourCountdown(context);
   const statusClass = urgent ? 'urgent' : hasPrediction ? 'predicted' : 'future';
-  const statusLabel = urgent ? '红色 1 小时预警' : hasPrediction ? '已预测' : '未来预测';
+  const statusLabel = urgent ? '1-Hour Lineup Alert' : hasPrediction ? 'Predicted' : 'Upcoming';
   return `
     <article class="ai-context-tab-card ${key === activeContextId ? 'active' : ''} ${urgent ? 'needs-predict' : ''}">
       <button class="ai-context-main" data-ai-context-tab="${escapeHtml(key)}" type="button">
@@ -1044,7 +1044,7 @@ function renderAiContextTab(context) {
         </div>
       </button>
       <div class="ai-context-actions">
-        <button class="context-detail-button" data-context-detail="${escapeHtml(key)}" type="button">详情</button>
+        <button class="context-detail-button" data-context-detail="${escapeHtml(key)}" type="button">Details</button>
       </div>
     </article>
   `;
@@ -1054,7 +1054,7 @@ function renderAiContextTeam(team, side, logo) {
   return `
     <div class="ai-context-team ${side}">
       ${renderTeamCrest(logo, team)}
-      <strong>${escapeHtml(team || '未知')}</strong>
+      <strong>${escapeHtml(team || 'Unknown')}</strong>
     </div>
   `;
 }
@@ -1067,7 +1067,7 @@ function contextTeamLogo(context, index) {
 
 function renderTeamCrest(logo, team) {
   if (!logo) return '<span class="team-crest team-crest-placeholder" aria-hidden="true"></span>';
-  return `<img class="team-crest" src="${escapeHtml(logo)}" alt="${escapeHtml(team || '球队')}标志" loading="lazy" referrerpolicy="no-referrer">`;
+  return `<img class="team-crest" src="${escapeHtml(logo)}" alt="${escapeHtml(team || 'Team')} crest" loading="lazy" referrerpolicy="no-referrer">`;
 }
 
 function rankingForContext(context) {
@@ -1086,7 +1086,7 @@ function renderContextExplorer(contexts) {
   if (!contextExplorerEl) return;
   if (!contexts?.length) {
     if (contextTabsEl) contextTabsEl.innerHTML = '';
-    contextExplorerEl.innerHTML = '<p class="meta">还没有抓取比赛详情。先在“今日开场”里选择一场导入。</p>';
+    contextExplorerEl.innerHTML = '<p class="meta">No match details have been captured. Select a match from Match Intelligence to import it.</p>';
     return;
   }
 
@@ -1101,7 +1101,7 @@ function renderContextExplorer(contexts) {
   if (contextTabsEl) {
     contextTabsEl.innerHTML = contexts.map((context, index) => `
       <button class="${contextKey(context) === contextKey(activeContext) ? 'active' : ''}" data-context-tab="${escapeHtml(contextKey(context))}" type="button">
-        <strong>${escapeHtml(context.matchName || `比赛 ${index + 1}`)}</strong>
+        <strong>${escapeHtml(context.matchName || `Match ${index + 1}`)}</strong>
         <span>${escapeHtml(context.kickoff || context.capturedAt || '')}</span>
       </button>
     `).join('');
@@ -1128,26 +1128,26 @@ function renderContextDetailCard(context, activeIndex = 0) {
     <article class="data-match-card featured">
       <div class="data-match-head">
         <div>
-          <span>${activeIndex === 0 ? '最新导入' : '已导入数据'}</span>
-          <h3>${escapeHtml(context.matchName || '比赛')}</h3>
+          <span>${activeIndex === 0 ? 'Latest Import' : 'Imported Data'}</span>
+          <h3>${escapeHtml(context.matchName || 'Match')}</h3>
           <p>${escapeHtml(context.competition || '')} · ${escapeHtml(context.kickoff || '')}</p>
         </div>
         <div class="data-actions">
-          <button class="secondary" data-refresh-context="${escapeHtml(context.sourceUrl || '')}" type="button">刷新该场数据</button>
-          <a href="https://dashboard.api-football.com/" target="_blank" rel="noreferrer">API 来源</a>
+          <button class="secondary" data-refresh-context="${escapeHtml(context.sourceUrl || '')}" type="button">Refresh Match Data</button>
+          <a href="https://dashboard.api-football.com/" target="_blank" rel="noreferrer">API Source</a>
         </div>
       </div>
       <div class="data-snapshot">
-        ${renderInfoTile('天气/场地', context.live?.join(' · ') || context.lineup?.notes?.join(' · ') || '未抓到')}
-        ${renderInfoTile('阵型', context.lineup?.formation || '未抓到')}
-        ${renderInfoTile('指数标签', context.index?.tabs?.join(' / ') || '未抓到')}
-        ${renderInfoTile('数据预测', `${context.experts?.length || 0} 条 API 预测`)}
-        ${renderInfoTile('球员信息', playerCount ? `已抓取 ${playerCount} 人` : '未抓到')}
+        ${renderInfoTile('Weather / Venue', context.live?.join(' · ') || context.lineup?.notes?.join(' · ') || 'Not captured')}
+        ${renderInfoTile('Formation', context.lineup?.formation || 'Not captured')}
+        ${renderInfoTile('Odds Categories', context.index?.tabs?.join(' / ') || 'Not captured')}
+        ${renderInfoTile('API Predictions', `${context.experts?.length || 0} records`)}
+        ${renderInfoTile('Player Data', playerCount ? `${playerCount} players captured` : 'Not captured')}
       </div>
       <div class="data-modules">
-        ${renderDataModule(`球员信息${playerCount ? ` · 已抓取 ${playerCount} 人` : ' · 未抓到'}`, context.lineup?.players || [], 'players')}
-        ${renderDataModule('近期战绩', flattenRecent(context.analysis?.recent), 'recent')}
-        ${renderDataModule('积分/排名', context.analysis?.standings || [], 'standings')}
+        ${renderDataModule(`Player Data${playerCount ? ` · ${playerCount} captured` : ' · Not captured'}`, context.lineup?.players || [], 'players')}
+        ${renderDataModule('Recent Form', flattenRecent(context.analysis?.recent), 'recent')}
+        ${renderDataModule('Standings', context.analysis?.standings || [], 'standings')}
         ${renderOddsModule(context.index)}
         ${renderExpertModule(context.experts || [])}
       </div>
@@ -1158,7 +1158,7 @@ function renderContextDetailCard(context, activeIndex = 0) {
 function openContextModal(context, contexts = []) {
   if (!contextModalEl || !contextModalBodyEl) return;
   const activeIndex = Math.max(0, contexts.findIndex((item) => contextKey(item) === contextKey(context)));
-  if (contextModalTitleEl) contextModalTitleEl.textContent = context.matchName || '比赛详情';
+  if (contextModalTitleEl) contextModalTitleEl.textContent = context.matchName || 'Match Details';
   contextModalBodyEl.innerHTML = renderContextDetailCard(context, activeIndex);
   contextModalBodyEl.querySelector('[data-refresh-context]')?.addEventListener('click', async (event) => {
     await refreshContextData(event);
@@ -1239,7 +1239,7 @@ function countryFlag(teamName) {
 
 function formatKickoff(context = {}) {
   const kickoff = parseKickoffTime(context.kickoff);
-  if (!kickoff) return context.kickoff || '时间未知';
+  if (!kickoff) return context.kickoff || 'Time unavailable';
   const venue = venueText(context);
   const timeZone = venueTimeZone(venue) || 'Asia/Shanghai';
   const label = kickoff.toLocaleString('zh-CN', {
@@ -1251,12 +1251,12 @@ function formatKickoff(context = {}) {
     hour12: false
   });
   const venueLabel = shortVenue(venue);
-  return venueLabel ? `${label} · ${venueLabel}` : `${label} · 比赛地`;
+  return venueLabel ? `${label} · ${venueLabel}` : `${label} · Match venue`;
 }
 
 function formatBeijingKickoff(value) {
   const kickoff = parseKickoffTime(value);
-  if (!kickoff) return value || '时间未知';
+  if (!kickoff) return value || 'Time unavailable';
   return kickoff.toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai',
     month: '2-digit',
@@ -1307,14 +1307,14 @@ function venueTimeZone(venue = '') {
 
 function lineupTiming(context = {}) {
   const kickoff = parseKickoffTime(context.kickoff);
-  if (!kickoff) return { state: 'muted', label: '开赛时间未知：先做前期预测，赛前再刷新阵容' };
+  if (!kickoff) return { state: 'muted', label: 'Kickoff time unavailable. Run an early prediction and refresh lineups before the match.' };
   const diff = kickoff.getTime() - Date.now();
   const oneHour = 60 * 60 * 1000;
   const finalWhistle = kickoff.getTime() + (150 * 60 * 1000);
-  if (diff > oneHour) return { state: 'early', label: '请在此前期预测；首发通常赛前 1 小时重点刷新' };
-  if (diff >= 0) return { state: 'hot', label: '赛前 1 小时窗口：高亮检查队员/首发信息' };
-  if (Date.now() < finalWhistle) return { state: 'live', label: '比赛进行中：队员信息优先参考，谨慎重跑' };
-  return { state: 'done', label: '比赛可能已结束：仅适合复盘，不建议预测' };
+  if (diff > oneHour) return { state: 'early', label: 'Early prediction window. Starting lineups are usually updated one hour before kickoff.' };
+  if (diff >= 0) return { state: 'hot', label: 'One-hour lineup window: check player and starting lineup data.' };
+  if (Date.now() < finalWhistle) return { state: 'live', label: 'Match in progress: prioritize player data and rerun with caution.' };
+  return { state: 'done', label: 'The match may be finished. Use this data for review, not prediction.' };
 }
 
 function playerInfoStatus(context = {}) {
@@ -1322,14 +1322,14 @@ function playerInfoStatus(context = {}) {
   if (playerCount > 0) {
     return {
       state: 'has-players',
-      label: `已抓取 ${playerCount} 名球员信息，包含球队、号码和位置（以 API-Football 返回为准）`,
-      shortLabel: `已抓取 ${playerCount} 名球员`
+      label: `${playerCount} player records captured, including team, number, and position as returned by API-Football.`,
+      shortLabel: `${playerCount} players captured`
     };
   }
   return {
     state: 'no-players',
-    label: '当前没有抓到球员信息，建议赛前 1 小时刷新该场数据',
-    shortLabel: '未抓到球员'
+    label: 'No player data is currently available. Refresh the match one hour before kickoff.',
+    shortLabel: 'No player data'
   };
 }
 
@@ -1372,7 +1372,7 @@ async function refreshContextData(event) {
   const original = button.textContent;
   try {
     button.disabled = true;
-    button.textContent = '刷新中...';
+    button.textContent = 'Refreshing...';
     const { context } = await api('/api/contexts/refresh', {
       method: 'POST',
       body: JSON.stringify({ sourceUrl })
@@ -1380,7 +1380,7 @@ async function refreshContextData(event) {
     setActiveContextId(contextKey(context));
     setActiveAiContextDate(contextDate(context));
     await refresh();
-    alert(`已刷新：${context.matchName || sourceUrl}`);
+    alert(`Refreshed: ${context.matchName || sourceUrl}`);
   } catch (error) {
     alert(error.message);
   } finally {
@@ -1393,7 +1393,7 @@ function renderInfoTile(label, value) {
   return `
     <div class="info-tile">
       <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(value || '未抓到')}</strong>
+      <strong>${escapeHtml(value || 'Not captured')}</strong>
     </div>
   `;
 }
@@ -1404,7 +1404,7 @@ function renderDataModule(title, rows, type) {
   return `
     <section class="data-module ${type}">
       <h4>${escapeHtml(title)} <span>${visible.length}</span></h4>
-      ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p class="meta">未抓到这类数据。</p>'}
+      ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p class="meta">No data was captured for this module.</p>'}
     </section>
   `;
 }
@@ -1412,15 +1412,15 @@ function renderDataModule(title, rows, type) {
 function renderOddsModule(index = {}) {
   const live = index.live || {};
   const groups = [
-    { key: 'asia', title: '即时让球', empty: '未抓到即时让球盘。' },
-    { key: 'size', title: '即时大小球', empty: '未抓到即时大小球。' },
-    { key: 'euro', title: '即时欧指', empty: '未抓到即时欧指。' }
+    { key: 'asia', title: 'Live Asian Handicap', empty: 'No live Asian handicap was captured.' },
+    { key: 'size', title: 'Live Goals Total', empty: 'No live goals total was captured.' },
+    { key: 'euro', title: 'Live 1X2 Odds', empty: 'No live 1X2 odds were captured.' }
   ].map((group) => ({ ...group, rows: live[group.key] || [] }));
   const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
-  if (!total) return renderDataModule('指数摘要', index.handicapRows || [], 'odds-fallback');
+  if (!total) return renderDataModule('Odds Summary', index.handicapRows || [], 'odds-fallback');
   return `
     <section class="data-module odds live-odds">
-      <h4>即时盘口 <span>${total}</span></h4>
+      <h4>Live Odds <span>${total}</span></h4>
       ${groups.map((group) => `
         <div class="odds-group">
           <div class="odds-group-title">${escapeHtml(group.title)} <span>${group.rows.length}</span></div>
@@ -1428,7 +1428,7 @@ function renderOddsModule(index = {}) {
             <div class="odds-table-wrap">
               <table class="odds-table">
                 <thead>
-                  <tr><th>公司</th><th>主</th><th>${group.key === 'euro' ? '平' : '盘口'}</th><th>客</th><th>更新</th></tr>
+                  <tr><th>Bookmaker</th><th>Home</th><th>${group.key === 'euro' ? 'Draw' : 'Line'}</th><th>Away</th><th>Updated</th></tr>
                 </thead>
                 <tbody>
                   ${group.rows.slice(0, 10).map((row) => `
@@ -1454,14 +1454,14 @@ function renderExpertModule(experts) {
   const visible = (experts || []).slice(0, 8);
   return `
     <section class="data-module experts">
-      <h4>API 数据预测 <span>${visible.length}</span></h4>
+      <h4>API Predictions <span>${visible.length}</span></h4>
       ${visible.length ? visible.map((item) => `
         <article class="expert-row">
-          <strong>${escapeHtml(item.author || '未知')}</strong>
+          <strong>${escapeHtml(item.author || 'Unknown')}</strong>
           <p>${escapeHtml(item.title || '')}</p>
           <span>${escapeHtml([item.market, ...(item.tags || [])].filter(Boolean).join(' · '))}</span>
         </article>
-      `).join('') : '<p class="meta">当前没有 API 数据预测。</p>'}
+      `).join('') : '<p class="meta">No API predictions are currently available.</p>'}
     </section>
   `;
 }
@@ -1484,7 +1484,7 @@ async function importStakeText() {
 function renderMarkets(markets) {
   if (!marketsEl) return;
   if (!markets.length) {
-    marketsEl.innerHTML = '<p class="meta">旧盘口已清空。当前 AI 预测会基于 API-Football 上下文生成候选项。</p>';
+    marketsEl.innerHTML = '<p class="meta">Legacy markets have been cleared. AI predictions now generate candidates from API-Football context.</p>';
     return;
   }
 
@@ -1511,13 +1511,13 @@ function renderMarkets(markets) {
           <h3>${group.label}</h3>
           <p>${group.help}</p>
         </div>
-        <span class="count">${items.length} 条</span>
+        <span class="count">${items.length} items</span>
       </div>
       <div class="market-grid"></div>
     `;
     const grid = section.querySelector('.market-grid');
     if (!items.length) {
-      grid.innerHTML = '<p class="meta empty">当前导入内容没有展开这个市场。</p>';
+      grid.innerHTML = '<p class="meta empty">The imported data does not include this market.</p>';
     } else {
       for (const market of items) grid.appendChild(renderMarketCard(market, group));
     }
@@ -1539,13 +1539,13 @@ function renderMarketCard(market, group) {
       <span>${escapeHtml(market.line)}</span>
     </div>
     <div class="prob-row">
-      <span>赔率参考</span>
+      <span>Reference Odds</span>
       <strong>${percent(market.impliedProbability)}</strong>
     </div>
     <div class="source-row">${escapeHtml(shortUrl(market.sourceUrl))}</div>
     <div class="actions">
-      <button data-predict="${market.id}">多模型预测</button>
-      <a href="/match/${encodeURIComponent(market.id)}">详情</a>
+      <button data-predict="${market.id}">Multi-Model Prediction</button>
+      <a href="/match/${encodeURIComponent(market.id)}">Details</a>
     </div>
   `;
   card.querySelector('button').addEventListener('click', () => predict(market.id));
@@ -1555,15 +1555,18 @@ function renderMarketCard(market, group) {
 function renderRankings(rankings, markets) {
   const generated = collectLatestGeneratedResults(rankings);
   if (!generated.length) {
-    rankingsEl.innerHTML = '<p class="meta">还没有 AI 总预测。点击上方按钮后，每个模型会给出自己的 Top 4，并可在模型标签之间切换。</p>';
+    const hasLegacyResults = currentContextRankings(rankings).some((ranking) => (ranking.results || []).length);
+    rankingsEl.innerHTML = hasLegacyResults
+      ? '<p class="meta">Legacy non-English predictions are hidden. Run the models again to create a new English prediction.</p>'
+      : '<p class="meta">No AI prediction has been generated yet. Run the models to receive each model\'s Top 4 and switch between saved results.</p>';
     return;
   }
 
   const newest = currentContextRanking(rankings);
   const latestHasSuccess = newest?.results?.some((result) => (result.picks || []).length > 0);
   const latestNotice = latestHasSuccess
-    ? '<div class="ranking-notice">当前按模型保留这场比赛最近一次结果；单模型重跑失败不会隐藏其他模型标签。</div>'
-    : '<div class="ranking-notice">最新一轮没有有效 Top 4；下方仍保留这场比赛其他模型的最近结果。</div>';
+    ? '<div class="ranking-notice">The latest result for each model is retained. A failed single-model rerun will not hide other saved models.</div>'
+    : '<div class="ranking-notice">The latest run returned no valid Top 4. Earlier valid model results remain available below.</div>';
   const marketMap = new Map(markets.map((market) => [market.id, market]));
   if (!generated.some((item) => isActiveRankingItem(item)) || activeRankingModel === 'all') {
     activeRankingModel = generated[0].key;
@@ -1574,16 +1577,16 @@ function renderRankings(rankings, markets) {
 
   rankingsEl.innerHTML = `
     <div class="ranking-meta">
-      <strong>最新 AI 预测</strong>
-      <span>${escapeHtml(new Date(activeItem.ranking.createdAt).toLocaleString())} · 候选 ${activeItem.ranking.marketCount} 项 · 当前显示 ${escapeHtml(activeResult.modelName)}</span>
+      <strong>Latest AI Prediction</strong>
+      <span>${escapeHtml(new Date(activeItem.ranking.createdAt).toLocaleString('en-US'))} · ${activeItem.ranking.marketCount} candidates · Showing ${escapeHtml(activeResult.modelName)}</span>
     </div>
     ${latestNotice}
     <div class="generated-switch">
       <div>
-        <strong>最新一轮模型</strong>
-        <span>只切换最新生成的 AI 结果，不会重新预测，也不会调用 API。</span>
+        <strong>Latest Model Results</strong>
+        <span>Switching tabs only changes the saved result. It does not rerun a model or call an API.</span>
       </div>
-      <div class="model-tabs" role="tablist" aria-label="切换已生成的 AI 预测结果">
+      <div class="model-tabs" role="tablist" aria-label="Switch saved AI prediction results">
         ${generated.map((item) => `
           <button class="${item.key === activeRankingModel ? 'active' : ''}" data-model-tab="${escapeHtml(item.key)}" type="button">
             ${modelBrand(item.result.modelName)}
@@ -1615,6 +1618,7 @@ function collectLatestGeneratedResults(rankings) {
   const byModel = new Map();
   for (const ranking of related) {
     for (const result of ranking.results || []) {
+      if (!isEnglishPredictionResult(result)) continue;
       const modelKey = modelBrandKey(result.modelName || '');
       const resultCreatedAt = result.generatedAt || ranking.createdAt;
       const candidate = {
@@ -1633,6 +1637,10 @@ function collectLatestGeneratedResults(rankings) {
     const bOrder = order.has(b.modelKey) ? order.get(b.modelKey) : 99;
     return aOrder - bOrder || timestampOf(b.ranking.createdAt) - timestampOf(a.ranking.createdAt);
   });
+}
+
+function isEnglishPredictionResult(result) {
+  return !/[\u3400-\u9fff]/u.test(JSON.stringify(result || {}));
 }
 
 function isNewerModelResult(candidate, existing) {
@@ -1668,10 +1676,10 @@ function updateRankButtons(rankings = []) {
   document.querySelectorAll('[data-rank-model]').forEach((button) => {
     const model = button.dataset.rankModel;
     if (model === 'all') {
-      button.textContent = hasRanking ? '重新预测全部 AI' : '开始预测全部 AI';
+      button.textContent = hasRanking ? 'Rerun All AI Models' : 'Run All AI Models';
       return;
     }
-    button.textContent = hasRanking ? `重跑 ${model}` : `开始 ${model}`;
+    button.textContent = hasRanking ? `Rerun ${model}` : `Run ${model}`;
   });
   renderGuestAccess();
 }
@@ -1698,14 +1706,14 @@ function renderModelRanking(result, marketMap) {
         <div>
           <h3 class="model-title">${modelBrand(result?.modelName)} ${escapeHtml(result?.modelName || 'AI')}</h3>
           ${result?.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}
-          <p>按 AI 预测概率从大到小排序。概率来自模型判断，不是赔率换算。</p>
+          <p>Sorted by model-estimated probability, not by implied betting odds.</p>
         </div>
         <span>Top ${picks.length}</span>
       </div>
       ${renderScorePredictions(result.scorePicks || [])}
       ${renderBttsPrediction(result.bttsPick)}
       <div class="prediction-cards">
-        ${picks.length ? picks.map((pick, index) => renderRankingPick(pick, marketMap, index)).join('') : '<p class="meta">这个模型没有给出有效选择。</p>'}
+        ${picks.length ? picks.map((pick, index) => renderRankingPick(pick, marketMap, index)).join('') : '<p class="meta">This model did not return a valid selection.</p>'}
       </div>
     </article>
   `;
@@ -1715,18 +1723,18 @@ function renderBttsPrediction(pick) {
   if (!pick) return '';
   const risks = Array.isArray(pick.risks) ? pick.risks.filter(Boolean).slice(0, 3) : [];
   return `
-    <section class="btts-prediction" aria-label="双方是否进球预测">
+    <section class="btts-prediction" aria-label="Both teams to score prediction">
       <div class="btts-answer">
-        <span>双方是否进球</span>
-        <strong>${escapeHtml(pick.selection || '暂无')}</strong>
+        <span>Both Teams to Score</span>
+        <strong>${escapeHtml(pick.selection || 'Unavailable')}</strong>
       </div>
       <div class="btts-metrics">
-        <div><span>AI 概率</span><strong>${percent(pick.estimatedProbability)}</strong></div>
-        <div><span>置信度</span><strong>${percent(pick.confidence)}</strong></div>
+        <div><span>AI Probability</span><strong>${percent(pick.estimatedProbability)}</strong></div>
+        <div><span>Confidence</span><strong>${percent(pick.confidence)}</strong></div>
       </div>
       <div class="btts-analysis">
-        <span>分析</span>
-        <p>${escapeHtml(pick.reason || '暂无分析')}</p>
+        <span>Analysis</span>
+        <p>${escapeHtml(pick.reason || 'No analysis provided')}</p>
         ${risks.length ? `<small>${risks.map(escapeHtml).join(' · ')}</small>` : ''}
       </div>
     </section>
@@ -1738,8 +1746,8 @@ function renderScorePredictions(scorePicks) {
   return `
     <section class="score-predictions">
       <div class="score-head">
-        <strong>比分预测</strong>
-        <span>2 个主线 + 1 个盘口匹配 + 1 个激进比分</span>
+        <strong>Score Predictions</strong>
+        <span>2 primary scores + 1 market-fit score + 1 aggressive score</span>
       </div>
       <div class="score-grid">
         ${picks.length ? picks.map((pick, index) => `
@@ -1747,10 +1755,10 @@ function renderScorePredictions(scorePicks) {
             <span>#${index + 1}</span>
             <em>${escapeHtml(scoreTypeLabel(pick.scoreType, index))}</em>
             <strong>${escapeHtml(pick.score || pick.market?.selection || '')}</strong>
-            <div>AI 概率 ${percent(pick.estimatedProbability)}</div>
-            <p>${escapeHtml(pick.reason || '无理由')}</p>
+            <div>AI Probability ${percent(pick.estimatedProbability)}</div>
+            <p>${escapeHtml(pick.reason || 'No reason provided')}</p>
           </article>
-        `).join('') : '<p class="meta">??????????????????????? 4 ????</p>'}
+        `).join('') : '<p class="meta">This model did not return four valid score predictions.</p>'}
       </div>
     </section>
   `;
@@ -1758,9 +1766,9 @@ function renderScorePredictions(scorePicks) {
 
 function scoreTypeLabel(type, index = 0) {
   const normalized = String(type || '').toLowerCase();
-  if (normalized === 'market_fit') return '盘口比分';
-  if (normalized === 'aggressive') return '激进比分';
-  return index <= 1 ? `主线比分 ${index + 1}` : index === 2 ? '盘口比分' : '激进比分';
+  if (normalized === 'market_fit') return 'Market-Fit Score';
+  if (normalized === 'aggressive') return 'Aggressive Score';
+  return index <= 1 ? `Primary Score ${index + 1}` : index === 2 ? 'Market-Fit Score' : 'Aggressive Score';
 }
 
 function renderRankingPick(pick, marketMap, index) {
@@ -1782,21 +1790,21 @@ function renderRankingPick(pick, marketMap, index) {
           ${winnerFlag}
           <h4>${escapeHtml(formatPredictionTitle(market))}</h4>
         </div>
-        <p>${escapeHtml(market.matchName || '未知比赛')}</p>
+        <p>${escapeHtml(market.matchName || 'Unknown Match')}</p>
       </div>
       <div class="prediction-metrics">
-        <div><span>${categoryKey === 'moneyline' ? '三选一' : '盘口'}</span><strong>${escapeHtml(categoryKey === 'moneyline' ? outcome : (displayMarketLine(market) || '无'))}</strong></div>
-        <div><span>AI 概率</span><strong>${percent(pick.estimatedProbability)}</strong></div>
-        <div><span>置信度</span><strong>${percent(pick.confidence)}</strong></div>
-        <div><span>选择</span><strong>${escapeHtml(market.selection || '无')}</strong></div>
+        <div><span>${categoryKey === 'moneyline' ? '1X2' : 'Line'}</span><strong>${escapeHtml(categoryKey === 'moneyline' ? outcome : (displayMarketLine(market) || 'None'))}</strong></div>
+        <div><span>AI Probability</span><strong>${percent(pick.estimatedProbability)}</strong></div>
+        <div><span>Confidence</span><strong>${percent(pick.confidence)}</strong></div>
+        <div><span>Selection</span><strong>${escapeHtml(market.selection || 'None')}</strong></div>
       </div>
       <div class="prediction-reason">
-        <span>分析</span>
-        <p>${escapeHtml(pick.reason || '无理由')}</p>
+        <span>Analysis</span>
+        <p>${escapeHtml(pick.reason || 'No reason provided')}</p>
       </div>
       <div class="prediction-risks">
-        <span>风险</span>
-        ${risks.length ? risks.map((risk) => `<b>${escapeHtml(risk)}</b>`).join('') : '<b>模型未列出具体风险</b>'}
+        <span>Risks</span>
+        ${risks.length ? risks.map((risk) => `<b>${escapeHtml(risk)}</b>`).join('') : '<b>The model did not list a specific risk</b>'}
       </div>
     </article>
   `;
@@ -1804,12 +1812,12 @@ function renderRankingPick(pick, marketMap, index) {
 
 function renderMoneylineFlag(market) {
   const selection = String(market?.selection || '').trim();
-  const isDraw = /å¹³|draw|tie/i.test(selection);
-  return `<span class="winner-flag" title="${escapeHtml(isDraw ? '平局' : selection)}">${escapeHtml(isDraw ? '平' : countryFlag(selection))}</span>`;
+  const isDraw = /平|draw|tie/i.test(selection);
+  return `<span class="winner-flag" title="${escapeHtml(isDraw ? 'Draw' : selection)}">${escapeHtml(isDraw ? 'D' : countryFlag(selection))}</span>`;
 }
 
 function renderReports(reports) {
-  reportsEl.innerHTML = reports.length ? '' : '<p class="meta">暂无历史报告。</p>';
+  reportsEl.innerHTML = reports.length ? '' : '<p class="meta">No prediction history yet.</p>';
   for (const report of reports) {
     const consensus = report.consensus;
     const card = document.createElement('article');
@@ -1824,10 +1832,10 @@ function renderReports(reports) {
         <span class="badge ${badgeClass}">${escapeHtml(consensus.bucket)}</span>
       </div>
       <div class="report-metrics">
-        <div><span>方向</span><strong>${escapeHtml(consensus.finalDirection)}</strong></div>
-        <div><span>综合概率</span><strong>${percent(consensus.combinedProbability)}</strong></div>
-        <div><span>一致度</span><strong>${percent(consensus.agreement)}</strong></div>
-        <div><span>风险</span><strong>${escapeHtml(consensus.riskLevel)}</strong></div>
+        <div><span>Direction</span><strong>${escapeHtml(consensus.finalDirection)}</strong></div>
+        <div><span>Combined Probability</span><strong>${percent(consensus.combinedProbability)}</strong></div>
+        <div><span>Agreement</span><strong>${percent(consensus.agreement)}</strong></div>
+        <div><span>Risk</span><strong>${escapeHtml(consensus.riskLevel)}</strong></div>
       </div>
     `;
     reportsEl.appendChild(card);
@@ -1843,8 +1851,8 @@ function renderAnalytics(analytics) {
   if (!analytics || !analytics.evaluatedCount) {
     analyticsContentEl.innerHTML = `
       <div class="empty-analytics">
-        <strong>暂无可计算准确率的数据</strong>
-        <p class="meta">已导入 ${analytics?.contextCount || 0} 场；已有赛果 ${analytics?.scoredContextCount || 0} 场；疑似完赛但缺比分 ${analytics?.finishedWithoutScoreCount || 0} 场。点击“刷新赛后数据”会重新抓这些完赛场次。</p>
+        <strong>No accuracy data is available yet</strong>
+        <p class="meta">${analytics?.contextCount || 0} matches imported; ${analytics?.scoredContextCount || 0} final scores captured; ${analytics?.finishedWithoutScoreCount || 0} likely completed matches are missing scores. Use Refresh Results to update them.</p>
       </div>
     `;
     return;
@@ -1852,14 +1860,14 @@ function renderAnalytics(analytics) {
 
   analyticsContentEl.innerHTML = `
     <div class="analytics-stats">
-      <article><span>已评估预测</span><strong>${analytics.evaluatedCount}</strong></article>
-      <article><span>完场比赛</span><strong>${analytics.matchCount}</strong></article>
-      <article><span>模型数</span><strong>${analytics.models.length}</strong></article>
+      <article><span>Evaluated Predictions</span><strong>${analytics.evaluatedCount}</strong></article>
+      <article><span>Completed Matches</span><strong>${analytics.matchCount}</strong></article>
+      <article><span>Models</span><strong>${analytics.models.length}</strong></article>
     </div>
     <div class="analytics-grid">
       <section class="analytics-card">
         <div class="section-heading compact-heading">
-          <h3>模型准确率</h3>
+          <h3>Model Accuracy</h3>
           <span class="count">${analytics.models.length}</span>
         </div>
         <div class="accuracy-bars">
@@ -1868,7 +1876,7 @@ function renderAnalytics(analytics) {
       </section>
       <section class="analytics-card">
         <div class="section-heading compact-heading">
-          <h3>玩法准确率</h3>
+          <h3>Market Accuracy</h3>
           <span class="count">${analytics.categories.length}</span>
         </div>
         <div class="accuracy-bars">
@@ -1877,20 +1885,20 @@ function renderAnalytics(analytics) {
       </section>
       <section class="analytics-card wide">
         <div class="section-heading compact-heading">
-          <h3>准确率走势</h3>
-          <p>按比赛日期聚合</p>
+          <h3>Accuracy Trend</h3>
+          <p>Grouped by match date</p>
         </div>
         ${renderTrendChart(analytics.trend || [])}
       </section>
       <section class="analytics-card wide">
         <div class="section-heading compact-heading">
-          <h3>赛后复盘明细</h3>
+          <h3>Post-Match Review</h3>
           <span class="count">${analytics.evaluations.length}</span>
         </div>
         <div class="analytics-table-wrap">
           <table class="analytics-table">
             <thead>
-              <tr><th>比赛</th><th>模型</th><th>玩法</th><th>预测</th><th>赛果</th><th>结果</th></tr>
+              <tr><th>Match</th><th>Model</th><th>Market</th><th>Prediction</th><th>Final Score</th><th>Result</th></tr>
             </thead>
             <tbody>
               ${analytics.evaluations.slice(0, 80).map(renderEvaluationRow).join('')}
@@ -1908,8 +1916,8 @@ function renderAnalyticsView() {
   if (!analytics || !analytics.evaluatedCount) {
     analyticsContentEl.innerHTML = `
       <div class="empty-analytics">
-        <strong>暂无可计算准确率的数据</strong>
-        <p class="meta">已导入 ${analytics?.contextCount || 0} 场；已有赛果 ${analytics?.scoredContextCount || 0} 场；疑似完赛但缺比分 ${analytics?.finishedWithoutScoreCount || 0} 场。点击“刷新赛后数据”会重新抓这些完赛场次。</p>
+        <strong>No accuracy data is available yet</strong>
+        <p class="meta">${analytics?.contextCount || 0} matches imported; ${analytics?.scoredContextCount || 0} final scores captured; ${analytics?.finishedWithoutScoreCount || 0} likely completed matches are missing scores. Use Refresh Results to update them.</p>
       </div>
     `;
     return;
@@ -1930,80 +1938,80 @@ function renderAnalyticsView() {
   analyticsContentEl.innerHTML = `
     <div class="analytics-filters">
       <label>
-        <span>比赛日期</span>
+        <span>Match Date</span>
         <select data-analytics-filter="date">
-          <option value="all"${analyticsState.date === 'all' ? ' selected' : ''}>全部日期（${allEvaluations.length} 条）</option>
-          ${dateOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.date === row.key ? ' selected' : ''}>${escapeHtml(row.key)}（${row.count} 条）</option>`).join('')}
+          <option value="all"${analyticsState.date === 'all' ? ' selected' : ''}>All Dates (${allEvaluations.length})</option>
+          ${dateOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.date === row.key ? ' selected' : ''}>${escapeHtml(row.key)} (${row.count})</option>`).join('')}
         </select>
       </label>
       <label>
-        <span>玩法</span>
+        <span>Market</span>
         <select data-analytics-filter="category">
-          <option value="all"${analyticsState.category === 'all' ? ' selected' : ''}>全部玩法</option>
+          <option value="all"${analyticsState.category === 'all' ? ' selected' : ''}>All Markets</option>
           ${categoryOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.category === row.key ? ' selected' : ''}>${escapeHtml(categoryName(row.key))}（${row.count}）</option>`).join('')}
         </select>
       </label>
       <label>
-        <span>比赛</span>
+        <span>Match</span>
         <select data-analytics-filter="match">
-          <option value="all"${analyticsState.match === 'all' ? ' selected' : ''}>全部比赛</option>
+          <option value="all"${analyticsState.match === 'all' ? ' selected' : ''}>All Matches</option>
           ${matchOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.match === row.key ? ' selected' : ''}>${escapeHtml(row.key)}（${row.count}）</option>`).join('')}
         </select>
       </label>
       <label>
-        <span>模型</span>
+        <span>Model</span>
         <select data-analytics-filter="model">
-          <option value="all"${analyticsState.model === 'all' ? ' selected' : ''}>全部模型</option>
+          <option value="all"${analyticsState.model === 'all' ? ' selected' : ''}>All Models</option>
           ${modelOptions.map((row) => `<option value="${escapeHtml(row.key)}"${analyticsState.model === row.key ? ' selected' : ''}>${escapeHtml(row.key)}（${row.count}）</option>`).join('')}
         </select>
       </label>
       <button class="analytics-hit-toggle ${analyticsState.hitsOnly ? 'active' : ''}" type="button" data-analytics-hit-toggle>
-        ${analyticsState.hitsOnly ? '只看命中' : '全部结果'}
+        ${analyticsState.hitsOnly ? 'Hits Only' : 'All Results'}
       </button>
     </div>
     <div class="analytics-stats">
-      <article><span>已评估预测</span><strong>${filtered.length}</strong></article>
-      <article><span>完场比赛</span><strong>${matchCount}</strong></article>
-      <article><span>模型数</span><strong>${models.length}</strong></article>
+      <article><span>Evaluated Predictions</span><strong>${filtered.length}</strong></article>
+      <article><span>Completed Matches</span><strong>${matchCount}</strong></article>
+      <article><span>Models</span><strong>${models.length}</strong></article>
     </div>
     <div class="analytics-grid">
       <section class="analytics-card">
         <div class="section-heading compact-heading">
-          <h3>模型准确率</h3>
+          <h3>Model Accuracy</h3>
           <span class="count">${models.length}</span>
         </div>
         <div class="accuracy-bars">
-          ${models.length ? models.map(renderAccuracyBar).join('') : '<p class="meta">当前筛选无模型数据。</p>'}
+          ${models.length ? models.map(renderAccuracyBar).join('') : '<p class="meta">No model data matches the current filters.</p>'}
         </div>
       </section>
       <section class="analytics-card">
         <div class="section-heading compact-heading">
-          <h3>玩法准确率</h3>
+          <h3>Market Accuracy</h3>
           <span class="count">${categories.length}</span>
         </div>
         <div class="accuracy-bars">
-          ${categories.length ? categories.map((row) => renderAccuracyBar({ ...row, key: categoryName(row.key) })).join('') : '<p class="meta">当前筛选无玩法数据。</p>'}
+          ${categories.length ? categories.map((row) => renderAccuracyBar({ ...row, key: categoryName(row.key) })).join('') : '<p class="meta">No market data matches the current filters.</p>'}
         </div>
       </section>
       <section class="analytics-card wide">
         <div class="section-heading compact-heading">
-          <h3>准确率走势</h3>
-          <p>按比赛日期和模型聚合；点位使用模型图标。</p>
+          <h3>Accuracy Trend</h3>
+          <p>Grouped by match date and model.</p>
         </div>
         ${renderTrendChart(trend)}
       </section>
       <section class="analytics-card wide">
         <div class="section-heading compact-heading">
-          <h3>赛后复盘明细</h3>
+          <h3>Post-Match Review</h3>
           <span class="count">${filtered.length}</span>
         </div>
         <div class="analytics-table-wrap">
           <table class="analytics-table">
             <thead>
-              <tr><th>比赛</th><th>日期</th><th>模型</th><th>玩法</th><th>预测</th><th>赛果</th><th>结果</th></tr>
+              <tr><th>Match</th><th>Date</th><th>Model</th><th>Market</th><th>Prediction</th><th>Final Score</th><th>Result</th></tr>
             </thead>
             <tbody>
-              ${filtered.slice(0, 160).map(renderEvaluationRowV2).join('') || '<tr><td colspan="7">当前筛选暂无明细。</td></tr>'}
+              ${filtered.slice(0, 160).map(renderEvaluationRowV2).join('') || '<tr><td colspan="7">No details match the current filters.</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -2090,12 +2098,12 @@ async function refreshAnalyticsData(event) {
   try {
     if (button) {
       button.disabled = true;
-      button.textContent = '刷新赛果中...';
+      button.textContent = 'Refreshing Results...';
     }
     const { analytics, refreshed, attempted, errors } = await api('/api/analytics/refresh', { method: 'POST' });
     renderAnalytics(analytics);
-    const suffix = errors?.length ? `，${errors.length} 场失败` : '';
-    alert(`已检查 ${attempted || 0} 场，刷新 ${refreshed || 0} 场${suffix}`);
+    const suffix = errors?.length ? `, ${errors.length} failed` : '';
+    alert(`Checked ${attempted || 0} matches and refreshed ${refreshed || 0}${suffix}`);
   } catch (error) {
     alert(error.message);
   } finally {
@@ -2121,7 +2129,7 @@ function renderAccuracyBar(row) {
 }
 
 function renderTrendChartWithIcons(trend) {
-  if (!trend.length) return '<p class="meta">暂无走势数据。</p>';
+  if (!trend.length) return '<p class="meta">No trend data is available.</p>';
   const points = trend.slice(-24);
   const width = 900;
   const height = 260;
@@ -2134,7 +2142,7 @@ function renderTrendChartWithIcons(trend) {
   }).join(' ');
   return `
     <div class="trend-chart">
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="准确率走势">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Accuracy trend">
         <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line>
         <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}"></line>
         <polyline points="${polyline}"></polyline>
@@ -2167,13 +2175,13 @@ function renderEvaluationRowV2(item) {
       <td>${escapeHtml(categoryName(item.category))}</td>
       <td>${escapeHtml(item.selection)}</td>
       <td>${escapeHtml(item.actualScore)}</td>
-      <td><b class="${item.counted ? item.hit ? 'hit' : 'miss' : 'push'}">${item.counted ? item.hit ? '命中' : '未中' : '走水'}</b></td>
+      <td><b class="${item.counted ? item.hit ? 'hit' : 'miss' : 'push'}">${item.counted ? item.hit ? 'Hit' : 'Miss' : 'Push'}</b></td>
     </tr>
   `;
 }
 
 function renderTrendChart(trend) {
-  if (!trend.length) return '<p class="meta">暂无走势数据。</p>';
+  if (!trend.length) return '<p class="meta">No trend data is available.</p>';
   const points = trend.slice(-32);
   const width = 900;
   const height = 260;
@@ -2186,7 +2194,7 @@ function renderTrendChart(trend) {
   }).join(' ');
   return `
     <div class="trend-chart">
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="准确率走势">
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Accuracy trend">
         <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line>
         <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}"></line>
         <polyline points="${polyline}"></polyline>
@@ -2219,24 +2227,24 @@ function renderEvaluationRow(item) {
       <td>${escapeHtml(categoryName(item.category))}</td>
       <td>${escapeHtml(item.selection)}</td>
       <td>${escapeHtml(item.actualScore)}</td>
-      <td><b class="${item.counted ? item.hit ? 'hit' : 'miss' : 'push'}">${item.counted ? item.hit ? '命中' : '未中' : '走水'}</b></td>
+      <td><b class="${item.counted ? item.hit ? 'hit' : 'miss' : 'push'}">${item.counted ? item.hit ? 'Hit' : 'Miss' : 'Push'}</b></td>
     </tr>
   `;
 }
 
 function categoryName(category) {
   return {
-    moneyline: '胜平负',
-    handicap: '亚洲让分盘',
-    total: '大小球',
-    score: '比分'
+    moneyline: 'Moneyline',
+    handicap: 'Asian Handicap',
+    total: 'Goals Total',
+    score: 'Correct Score'
   }[category] || category;
 }
 
 async function predict(id) {
   try {
     const { report } = await api(`/api/predict/${encodeURIComponent(id)}`, { method: 'POST' });
-    alert(`完成：${report.consensus.bucket}`);
+    alert(`Complete: ${report.consensus.bucket}`);
     history.pushState({}, '', `/match/${encodeURIComponent(id)}`);
     await refresh();
   } catch (error) {
@@ -2249,7 +2257,7 @@ async function runRanking(model, button) {
   let completed = false;
   try {
     button.disabled = true;
-    button.textContent = '预测中...';
+    button.textContent = 'Predicting...';
     await api('/api/rankings', {
       method: 'POST',
       body: JSON.stringify({ model, contextId: activeContextId, qwenVariant: selectedQwenVariant() })
@@ -2332,7 +2340,7 @@ function renderRoute(markets, reports, contexts = []) {
   const related = reports.filter((report) => report.market?.id === id || report.consensus?.marketId === id);
   if (matchPanel) matchPanel.hidden = false;
   if (!market) {
-    matchDetailEl.innerHTML = '<p class="meta">找不到这条盘口，可能已被清理。</p>';
+    matchDetailEl.innerHTML = '<p class="meta">This market could not be found and may have been removed.</p>';
     return;
   }
   matchDetailEl.innerHTML = `
@@ -2340,11 +2348,11 @@ function renderRoute(markets, reports, contexts = []) {
       <h3>${escapeHtml(market.matchName)}</h3>
       <div class="meta">
         <div>${escapeHtml(market.marketType)} · ${escapeHtml(market.selection)} ${escapeHtml(market.line)} @ ${formatOdds(market.odds)}</div>
-        <div>隐含概率：${percent(market.impliedProbability)}</div>
-        <div>历史报告数：${related.length}</div>
+        <div>Implied Probability: ${percent(market.impliedProbability)}</div>
+        <div>Historical Reports: ${related.length}</div>
       </div>
-      <button data-predict-detail="${market.id}">重新预测</button>
-      ${related[0] ? `<pre>${escapeHtml(JSON.stringify(related[0].consensus, null, 2))}</pre>` : '<p class="meta">暂无预测报告。</p>'}
+      <button data-predict-detail="${market.id}">Rerun Prediction</button>
+      ${related[0] ? `<pre>${escapeHtml(JSON.stringify(related[0].consensus, null, 2))}</pre>` : '<p class="meta">No prediction report is available.</p>'}
     </div>
   `;
   matchDetailEl.querySelector('button')?.addEventListener('click', () => predict(market.id));
@@ -2413,17 +2421,17 @@ function displayMarketType(type) {
 
 function formatCategorySummaryLabel(category, market) {
   if (category === 'moneyline') return marketOutcomeDisplay(market);
-  if (category === 'score') return `比分 ${market.selection || ''}`;
-  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} \u7403`;
+  if (category === 'score') return `Score ${market.selection || ''}`;
+  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} goals`;
   return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
 }
 
 function formatPredictionTitle(market) {
   const category = marketCategory(market);
   if (category === 'moneyline') return marketOutcomeDisplay(market);
-  if (category === 'score') return `比分 ${market.selection || ''}`.trim();
+  if (category === 'score') return `Score ${market.selection || ''}`.trim();
   if (category === 'handicap') return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
-  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} \u7403`.trim();
+  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} goals`.trim();
   return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
 }
 
@@ -2444,18 +2452,18 @@ function formatLineNumber(value) {
 
 function marketOutcomeLabel(market) {
   const selection = String(market.selection || '').trim();
-  if (/平|draw|tie/i.test(selection)) return '平';
+  if (/平|draw|tie/i.test(selection)) return 'Draw';
   const teams = splitMatchTeams(market.matchName);
   if (teams.length >= 2) {
-    if (sameTeam(selection, teams[0])) return '胜';
-    if (sameTeam(selection, teams[1])) return '负';
+    if (sameTeam(selection, teams[0])) return 'Home Win';
+    if (sameTeam(selection, teams[1])) return 'Away Win';
   }
-  return selection ? '胜/负' : '未知';
+  return selection ? 'Win/Loss' : 'Unknown';
 }
 
 function marketOutcomeDisplay(market) {
   const selection = String(market.selection || '').trim();
-  return marketOutcomeLabel(market) === '平' ? '平' : (selection || '未知');
+  return marketOutcomeLabel(market) === 'Draw' ? 'Draw' : (selection || 'Unknown');
 }
 
 function splitMatchTeams(matchName) {
@@ -2494,19 +2502,19 @@ function shortUrl(url) {
 function formatModelError(error) {
   const message = String(error || '');
   if (/OpenAI 401|invalid_api_key|Incorrect API key|Missing Authentication/i.test(message) && /openai|api\.openai/i.test(message)) {
-    return 'OpenAI 401：OpenAI API Key 无效或没有被 Worker 读取。请检查 OPENAI_API_KEY secret 后重跑 GPT。';
+    return 'OpenAI 401: The API key is invalid or unavailable to the Worker. Check the OPENAI_API_KEY secret and rerun GPT.';
   }
   if (/OpenRouter 401|Missing Authentication header/i.test(message)) {
-    return 'OpenRouter 401：OpenRouter API Key 缺失、无效，或密钥里混入不可见字符。请更新 OpenRouter key 后重跑该模型覆盖旧错误。';
+    return 'OpenRouter 401: The API key is missing, invalid, or contains hidden characters. Update the key and rerun the model.';
   }
   if (/APIMart 401|invalid API key/i.test(message)) {
-    return 'APIMart 401：APIMart API Key 无效或没有被 Worker 正确读取。请更新 APIMart key 后重跑该模型。';
+    return 'APIMart 401: The API key is invalid or unavailable to the Worker. Update the key and rerun the model.';
   }
   if (/more credits|credits|402|can only afford/i.test(message)) {
-    return 'OpenRouter 余额不足或请求过大。可以先单独重跑 Qwen/DeepSeek，或充值后再试。';
+    return 'OpenRouter has insufficient credits or the request is too large. Rerun Qwen or DeepSeek individually, or add credits.';
   }
   if (/JSON|property value|Unexpected/i.test(message)) {
-    return '模型返回格式不标准。系统已尝试自动修复；如果仍失败，请重跑该模型。';
+    return 'The model returned an invalid format. Automatic repair was attempted; rerun the model if the error continues.';
   }
   return message;
 }

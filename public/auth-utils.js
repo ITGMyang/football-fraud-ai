@@ -15,13 +15,13 @@ export function authRedirectUrl(siteUrl, path) {
 
 export function authErrorMessage(error) {
   const message = String(error?.message || error || '');
-  if (/invalid login credentials/i.test(message)) return '邮箱或密码不正确';
-  if (/email not confirmed/i.test(message)) return '请先打开确认邮件完成验证';
-  if (/already registered|already been registered/i.test(message)) return '这个邮箱已经注册，可以直接登录';
-  if (/password should be|weak password/i.test(message)) return '密码至少需要 8 位';
-  if (/rate limit|too many requests/i.test(message)) return '操作太频繁，请稍后再试';
-  if (/network|fetch|load failed/i.test(message)) return '登录服务暂时不可用，请稍后重试';
-  return message || '登录失败，请稍后重试';
+  if (/invalid login credentials/i.test(message)) return 'Incorrect email or password';
+  if (/email not confirmed/i.test(message)) return 'Open the confirmation email before signing in';
+  if (/already registered|already been registered/i.test(message)) return 'This email is already registered. Sign in instead.';
+  if (/password should be|weak password/i.test(message)) return 'Password must be at least 8 characters';
+  if (/rate limit|too many requests/i.test(message)) return 'Too many attempts. Try again later.';
+  if (/network|fetch|load failed/i.test(message)) return 'The sign-in service is temporarily unavailable';
+  return message || 'Sign-in failed. Try again later.';
 }
 
 export function guestAccessLabel({ authenticated = false, guestPredictionUsed = false, billing = {} } = {}) {
@@ -29,42 +29,42 @@ export function guestAccessLabel({ authenticated = false, guestPredictionUsed = 
     const expiry = formatBillingExpiry(billing.validUntil);
     return {
       tone: 'signed-in',
-      title: '订阅有效：全部 AI 模型已解锁',
-      detail: expiry ? `有效期至 ${expiry}，预测结果只保存在当前账号下。` : '预测结果只保存在当前账号下。'
+      title: 'Active Pass: All AI Models Unlocked',
+      detail: expiry ? `Valid until ${expiry}. Predictions remain private to this account.` : 'Predictions remain private to this account.'
     };
   }
   if (authenticated && billing.tier === 'locked') {
     return {
       tone: 'used',
-      title: '免费预测已用完',
-      detail: '选择 24 小时卡、周卡或月卡后可继续使用全部 AI 模型。'
+      title: 'Free Prediction Used',
+      detail: 'Choose a 24-hour, weekly, or monthly pass to continue with every AI model.'
     };
   }
   if (authenticated) {
     return {
       tone: 'available',
-      title: '免费账户：剩余 1 次 Qwen 预测',
-      detail: '预测结果会保存在当前账号下。订阅后可使用全部 AI 模型。'
+      title: 'Free Account: 1 Qwen Prediction Remaining',
+      detail: 'The result will be saved to this account. Purchase a pass to use every AI model.'
     };
   }
   if (guestPredictionUsed) {
     return {
       tone: 'used',
-      title: '访客体验次数已用完',
-      detail: '登录后可获得当前账号的一次免费 Qwen 预测。'
+      title: 'Guest Trial Used',
+      detail: 'Sign in to receive one free Qwen prediction for your account.'
     };
   }
   return {
     tone: 'available',
-    title: '访客体验：剩余 1 次 AI 预测',
-    detail: '无需登录即可浏览公开内容。本次体验使用 Qwen。'
+    title: 'Guest Trial: 1 AI Prediction Remaining',
+    detail: 'Browse public content without signing in. This trial uses Qwen.'
   };
 }
 
 function formatBillingExpiry(value) {
   const date = new Date(value || '');
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString('en-US', {
     timeZone: 'Asia/Shanghai',
     month: '2-digit',
     day: '2-digit',

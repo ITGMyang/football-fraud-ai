@@ -22,7 +22,7 @@ export async function pingAllScale(env = {}, fetchImpl = fetch) {
 
 export async function createAllScaleCheckout(input, env = {}, fetchImpl = fetch) {
   const plan = billingPlan(input?.planId);
-  if (!plan) throw new Error('无效的订阅套餐');
+  if (!plan) throw new Error('Invalid access pass');
   const body = {
     stable_coin: 1,
     amount_cents: plan.amountCents,
@@ -49,7 +49,7 @@ export async function createAllScaleCheckout(input, env = {}, fetchImpl = fetch)
 
 export async function getAllScaleCheckoutStatus(intentId, env = {}, fetchImpl = fetch) {
   const safeIntentId = encodeURIComponent(String(intentId || '').trim());
-  if (!safeIntentId) throw new Error('缺少 AllScale Checkout Intent ID');
+  if (!safeIntentId) throw new Error('Missing AllScale Checkout Intent ID');
   const response = await allScaleRequest(`/v1/checkout_intents/${safeIntentId}/status`, { method: 'GET' }, env, fetchImpl);
   return { status: Number(response.payload), requestId: response.request_id || '' };
 }
@@ -94,7 +94,7 @@ export async function verifyAllScaleWebhook(request, env = {}, now = Date.now())
 async function allScaleRequest(path, options, env, fetchImpl) {
   const apiKey = clean(env.ALLSCALE_API_KEY);
   const apiSecret = clean(env.ALLSCALE_API_SECRET);
-  if (!apiKey || !apiSecret) throw new Error('缺少 ALLSCALE_API_KEY 或 ALLSCALE_API_SECRET');
+  if (!apiKey || !apiSecret) throw new Error('Missing ALLSCALE_API_KEY or ALLSCALE_API_SECRET');
   const method = String(options?.method || 'GET').toUpperCase();
   const rawBody = options?.body ? JSON.stringify(options.body) : '';
   const signed = await signAllScaleRequest({ method, path, body: rawBody, apiSecret });

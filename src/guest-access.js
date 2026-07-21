@@ -21,25 +21,25 @@ export async function authorizeApiRequest(request, env = {}, fetchImpl = fetch) 
 
   if (method === 'POST' && pathname === '/api/rankings') {
     if (!clean(env.GUEST_USAGE_SECRET)) {
-      return { ok: false, status: 503, error: '访客预测功能尚未配置' };
+      return { ok: false, status: 503, error: 'Guest predictions are not configured' };
     }
     if (used) {
       return {
         ok: false,
         status: 403,
         code: 'GUEST_LIMIT_REACHED',
-        error: '访客预测次数已用完，请登录后继续'
+        error: 'The guest prediction has been used. Sign in to continue.'
       };
     }
     return { ok: true, role: 'guest', guestPredictionUsed: false, consumeGuestPrediction: true };
   }
 
-  return { ok: false, status: 401, error: '请先登录' };
+  return { ok: false, status: 401, error: 'Sign in required' };
 }
 
 export async function guestPredictionCookie(env = {}, request) {
   const secret = clean(env.GUEST_USAGE_SECRET);
-  if (!secret) throw new Error('缺少 GUEST_USAGE_SECRET');
+  if (!secret) throw new Error('Missing GUEST_USAGE_SECRET');
   const signature = await sign(COOKIE_MESSAGE, secret);
   const secure = requestProtocol(request) === 'https:' ? '; Secure' : '';
   return `${COOKIE_NAME}=v1.${signature}; HttpOnly${secure}; SameSite=Lax; Path=/; Max-Age=${COOKIE_MAX_AGE}`;

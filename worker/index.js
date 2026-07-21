@@ -117,15 +117,15 @@ async function routeApi(request, env, access) {
     return json({ billing: billingAccess(entitlement), plans: publicBillingPlans() });
   }
   if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
-    if (access.role !== 'user') return json({ error: '请先登录后购买套餐', code: 'LOGIN_REQUIRED' }, 401);
+    if (access.role !== 'user') return json({ error: 'Sign in before purchasing a pass', code: 'LOGIN_REQUIRED' }, 401);
     const recentOrders = await storage.countRecentBillingOrders(
       ownerId,
       new Date(Date.now() - 60 * 1000).toISOString()
     );
-    if (recentOrders >= 5) return json({ error: '创建支付太频繁，请一分钟后再试', code: 'BILLING_RATE_LIMIT' }, 429);
+    if (recentOrders >= 5) return json({ error: 'Too many checkout requests. Try again in one minute.', code: 'BILLING_RATE_LIMIT' }, 429);
     const body = await request.json();
     const plan = billingPlan(body.planId);
-    if (!plan) return json({ error: '无效的订阅套餐' }, 400);
+    if (!plan) return json({ error: 'Invalid access pass' }, 400);
     const orderId = crypto.randomUUID();
     await storage.createBillingOrder({
       id: orderId,
@@ -143,7 +143,7 @@ async function routeApi(request, env, access) {
         userName: access.user?.email || access.user?.user_metadata?.full_name || '',
         redirectUrl: `${siteUrl}/?checkout=return&order=${encodeURIComponent(orderId)}#subscriptionPanel`
       }, env, workerFetch);
-      if (!checkout.checkoutUrl || !checkout.intentId) throw new Error('AllScale 未返回支付地址');
+      if (!checkout.checkoutUrl || !checkout.intentId) throw new Error('AllScale did not return a checkout URL');
       await storage.updateBillingOrder(orderId, {
         intentId: checkout.intentId,
         checkoutUrl: checkout.checkoutUrl,
@@ -164,10 +164,10 @@ async function routeApi(request, env, access) {
   }
   const billingOrderMatch = url.pathname.match(/^\/api\/billing\/orders\/([^/]+)\/status$/);
   if (request.method === 'GET' && billingOrderMatch) {
-    if (access.role !== 'user') return json({ error: '请先登录' }, 401);
+    if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);
     const orderId = decodeURIComponent(billingOrderMatch[1]);
     const order = await storage.readBillingOrder(ownerId, orderId);
-    if (!order) return json({ error: '找不到这笔订单' }, 404);
+    if (!order) return json({ error: 'Order not found' }, 404);
     const currentBilling = billingAccess(await storage.readBillingEntitlement(ownerId));
     if (Number(order.status) === 20 || currentBilling.active) {
       return json({ orderId: order.id, status: 20, billing: currentBilling });
@@ -214,7 +214,7 @@ async function routeApi(request, env, access) {
     return json({ analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
   }
   if (request.method === 'GET' && url.pathname === '/api/backend/schedules') {
-    if (access.role !== 'user') return json({ error: '请先登录后查看数据后台' }, 401);
+    if (access.role !== 'user') return json({ error: 'Sign in to view the data console' }, 401);
     return json({
       schedules: filterApiFootballSchedules(await storage.listMatchSchedules()),
       generatedAt: new Date().toISOString()
@@ -222,7 +222,7 @@ async function routeApi(request, env, access) {
   }
   const backendFixtureMatch = url.pathname.match(/^\/api\/backend\/fixtures\/(\d+)$/);
   if (request.method === 'GET' && backendFixtureMatch) {
-    if (access.role !== 'user') return json({ error: '请先登录后查看比赛详情' }, 401);
+    if (access.role !== 'user') return json({ error: 'Sign in to view match details' }, 401);
     const context = await fetchApiFootballContext(backendFixtureMatch[1], apiFootballContextOptions(env, storage), workerFetch);
     return json({ context, generatedAt: new Date().toISOString() });
   }
@@ -340,7 +340,7 @@ async function routeApi(request, env, access) {
         return json({ ...filterApiFootballMatches(cached, date), cacheStatus: 'odds-check-delayed' });
       }
     }
-    if (!cached) return json({ error: '后台比赛数据正在首次准备，请稍后重试', code: 'SCHEDULE_CACHE_MISS' }, 503);
+    if (!cached) return json({ error: 'Match data is being prepared for the first time. Try again shortly.', code: 'SCHEDULE_CACHE_MISS' }, 503);
     return json({ ...filterApiFootballMatches(cached, date), cacheStatus: 'ready' });
   }
 
@@ -353,7 +353,7 @@ async function routeApi(request, env, access) {
   if (request.method === 'GET' && marketMatch) {
     const id = decodeURIComponent(marketMatch[1]);
     const market = (await storage.readDb({ ownerId })).markets.find((item) => item.id === id);
-    if (!market) return json({ error: '找不到盘口' }, 404);
+    if (!market) return json({ error: 'Market not found' }, 404);
     return json({ market });
   }
 
@@ -381,7 +381,7 @@ async function routeApi(request, env, access) {
   if (request.method === 'POST' && url.pathname === '/api/import/api-football') {
     const body = await request.json();
     const fixtureId = String(body.fixtureId || body.matchId || '').trim();
-    if (!fixtureId) return json({ error: '缺少 fixtureId' }, 400);
+    if (!fixtureId) return json({ error: 'Missing fixtureId' }, 400);
     const existing = findExistingContext((await storage.readDb({ ownerId })).matchContexts || [], fixtureId);
     if (existing && hasLineupPlayers(existing) && hasCompleteCatalog(existing)) {
       return json({ context: existing, alreadyImported: true, refreshed: false });
@@ -410,7 +410,7 @@ async function routeApi(request, env, access) {
   if (request.method === 'POST' && predictMatch) {
     const id = decodeURIComponent(predictMatch[1]);
     const market = (await storage.readDb({ ownerId })).markets.find((item) => item.id === id);
-    if (!market) return json({ error: '找不到盘口' }, 404);
+    if (!market) return json({ error: 'Market not found' }, 404);
     const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
     if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
     try {
@@ -430,7 +430,7 @@ async function routeApi(request, env, access) {
     const context = contextSelector
       ? findExistingContext(db.matchContexts || [], contextSelector)
       : (db.matchContexts || [])[0] || null;
-    if (!db.markets.length && !context) return json({ error: '还没有导入 API-Football 比赛数据' }, 400);
+    if (!db.markets.length && !context) return json({ error: 'No API-Football match data has been imported' }, 400);
     const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
     if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
     const requestedModel = predictionAccess.free ? 'Qwen' : (body.model || 'all');
@@ -495,7 +495,7 @@ async function reservePredictionAccess(access, storage, ownerId) {
     return {
       ok: false,
       code: 'SUBSCRIPTION_REQUIRED',
-      error: '免费预测已用完，请选择 24 小时卡、周卡或月卡'
+      error: 'Your free prediction has been used. Choose a 24-hour, weekly, or monthly pass.'
     };
   }
   return {

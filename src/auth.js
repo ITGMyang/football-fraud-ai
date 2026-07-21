@@ -21,13 +21,13 @@ export async function authenticateRequest(request, env = {}, fetchImpl = fetch) 
     return {
       ok: false,
       status: 503,
-      error: 'Supabase Auth 尚未配置，请添加 SUPABASE_PUBLISHABLE_KEY'
+      error: 'Supabase Auth is not configured. Add SUPABASE_PUBLISHABLE_KEY.'
     };
   }
 
   const authorization = String(readHeader(request, 'authorization') || '');
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match) return { ok: false, status: 401, error: '请先登录' };
+  if (!match) return { ok: false, status: 401, error: 'Sign in required' };
 
   let response;
   try {
@@ -38,10 +38,10 @@ export async function authenticateRequest(request, env = {}, fetchImpl = fetch) 
       }
     });
   } catch {
-    return { ok: false, status: 503, error: '暂时无法验证登录状态' };
+    return { ok: false, status: 503, error: 'Unable to verify the session right now' };
   }
 
-  if (!response.ok) return { ok: false, status: 401, error: '登录已失效，请重新登录' };
+  if (!response.ok) return { ok: false, status: 401, error: 'Your session has expired. Sign in again.' };
   return { ok: true, user: await response.json() };
 }
 

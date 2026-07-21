@@ -10,17 +10,17 @@ test('safe next path keeps local destinations and rejects external redirects', (
 });
 
 test('auth errors are translated without exposing implementation details', () => {
-  assert.equal(authErrorMessage({ message: 'Invalid login credentials' }), '邮箱或密码不正确');
-  assert.equal(authErrorMessage({ message: 'Email not confirmed' }), '请先打开确认邮件完成验证');
-  assert.equal(authErrorMessage({ message: 'User already registered' }), '这个邮箱已经注册，可以直接登录');
-  assert.equal(authErrorMessage({ message: 'network request failed' }), '登录服务暂时不可用，请稍后重试');
+  assert.equal(authErrorMessage({ message: 'Invalid login credentials' }), 'Incorrect email or password');
+  assert.equal(authErrorMessage({ message: 'Email not confirmed' }), 'Open the confirmation email before signing in');
+  assert.equal(authErrorMessage({ message: 'User already registered' }), 'This email is already registered. Sign in instead.');
+  assert.equal(authErrorMessage({ message: 'network request failed' }), 'The sign-in service is temporarily unavailable');
 });
 
 test('guest access label describes remaining prediction access', () => {
   assert.deepEqual(guestAccessLabel({ authenticated: false, guestPredictionUsed: false }), {
     tone: 'available',
-    title: '访客体验：剩余 1 次 AI 预测',
-    detail: '无需登录即可浏览公开内容。本次体验使用 Qwen。'
+    title: 'Guest Trial: 1 AI Prediction Remaining',
+    detail: 'Browse public content without signing in. This trial uses Qwen.'
   });
   assert.equal(guestAccessLabel({ authenticated: false, guestPredictionUsed: true }).tone, 'used');
   assert.deepEqual(guestAccessLabel({
@@ -28,8 +28,8 @@ test('guest access label describes remaining prediction access', () => {
     billing: { tier: 'free', active: false, freePredictionUsed: false }
   }), {
     tone: 'available',
-    title: '免费账户：剩余 1 次 Qwen 预测',
-    detail: '预测结果会保存在当前账号下。订阅后可使用全部 AI 模型。'
+    title: 'Free Account: 1 Qwen Prediction Remaining',
+    detail: 'The result will be saved to this account. Purchase a pass to use every AI model.'
   });
   assert.equal(guestAccessLabel({
     authenticated: true,

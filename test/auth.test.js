@@ -50,7 +50,7 @@ test('authentication rejects a request without a bearer token', async () => {
   assert.deepEqual(result, {
     ok: false,
     status: 401,
-    error: '请先登录'
+    error: 'Sign in required'
   });
 });
 
@@ -94,6 +94,6 @@ test('authentication rejects an expired or invalid Supabase token', async () => 
   assert.deepEqual(result, {
     ok: false,
     status: 401,
-    error: '登录已失效，请重新登录'
+    error: 'Your session has expired. Sign in again.'
   });
 });
