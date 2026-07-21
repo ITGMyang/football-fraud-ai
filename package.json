@@ -4,14 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/copy-supabase-client.js",
     "start": "node src/server.js",
     "cf:check": "wrangler check",
     "cf:dry-run": "wrangler deploy --dry-run",
     "cf:deploy": "wrangler deploy",
     "test:models": "node scripts/test-models.js",
-    "test": "node --test test"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@google/design.md": "^0.3.0",
+    "@supabase/supabase-js": "2.110.2",
     "undici": "^6.22.0"
   },
   "engines": {

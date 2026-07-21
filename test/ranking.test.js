@@ -18,11 +18,11 @@ test('ranks markets from one model and keeps top four sorted by AI probability',
         message: {
           content: JSON.stringify({
             picks: [
-              { marketId: 'b', estimatedProbability: 0.58, confidence: 0.5, reason: '总进球更稳', risks: [] },
-              { marketId: 'a', estimatedProbability: 0.44, confidence: 0.3, reason: '比分赔率高', risks: [] },
-              { marketId: 'e', estimatedProbability: 0.51, confidence: 0.4, reason: '平局可选', risks: [] },
-              { marketId: 'c', estimatedProbability: 0.61, confidence: 0.6, reason: '受让更稳', risks: [] },
-              { marketId: 'd', estimatedProbability: 0.2, confidence: 0.1, reason: '第五个应被截断', risks: [] }
+              { marketId: 'b', estimatedProbability: 0.63, confidence: 0.5, reason: '总进球更稳', risks: [] },
+              { marketId: 'a', estimatedProbability: 0.61, confidence: 0.3, reason: '比分赔率高', risks: [] },
+              { marketId: 'e', estimatedProbability: 0.62, confidence: 0.4, reason: '平局可选', risks: [] },
+              { marketId: 'c', estimatedProbability: 0.64, confidence: 0.6, reason: '受让更稳', risks: [] },
+              { marketId: 'd', estimatedProbability: 0.6, confidence: 0.1, reason: '第五个应被截断', risks: [] }
             ]
           })
         }
@@ -38,6 +38,106 @@ test('ranks markets from one model and keeps top four sorted by AI probability',
   assert.equal(ranking.results.length, 1);
   assert.equal(ranking.results[0].picks.length, 4);
   assert.deepEqual(ranking.results[0].picks.map((pick) => pick.marketId), ['c', 'b', 'e', 'a']);
+});
+
+test('accepts selections scorelinePredictions and bothTeamsToScore response fields', async () => {
+  const markets = [
+    buildMarket({ id: 'home', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 1.8 }),
+    buildMarket({ id: 'over', matchName: 'A v B', marketType: '足球 大小球', selection: '大', line: '2.5', odds: 1.9 }),
+    buildMarket({ id: 's21', matchName: 'A v B', marketType: '足球 比分', selection: '2:1', line: '正确比分', odds: 8 }),
+    buildMarket({ id: 's31', matchName: 'A v B', marketType: '足球 比分', selection: '3:1', line: '正确比分', odds: 7 }),
+    buildMarket({ id: 's22', matchName: 'A v B', marketType: '足球 比分', selection: '2:2', line: '正确比分', odds: 9 }),
+    buildMarket({ id: 's12', matchName: 'A v B', marketType: '足球 比分', selection: '1:2', line: '正确比分', odds: 10 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            fixtureId: 'fixture-1',
+            selections: [
+              {
+                rank: 1,
+                marketId: 'home',
+                estimatedProbability: 0.62,
+                confidenceFlag: true,
+                dataQuality: 'PARTIAL',
+                keyFactors: ['Stable home form', 'Stronger recent results', 'More complete squad']
+              },
+              {
+                rank: 2,
+                marketId: 'over',
+                estimatedProbability: 0.58,
+                confidenceFlag: true,
+                dataQuality: 'PARTIAL',
+                keyFactors: ['Efficient attacks', 'Defensive gaps', 'Fast expected tempo']
+              }
+            ],
+            scorelinePredictions: [
+              { scoreline: '2:1', estimatedProbability: 0.2 },
+              { scoreline: '3:1', estimatedProbability: 0.18 },
+              { scoreline: '2:2', estimatedProbability: 0.14 },
+              { scoreline: '1:2', estimatedProbability: 0.1 }
+            ],
+            bothTeamsToScore: {
+              selection: 'Yes',
+              estimatedProbability: 0.61,
+              keyFactors: ['Both attacks create chances', 'Limited clean-sheet strength']
+            },
+            analystNote: 'Data is incomplete and requires a cautious review.'
+          })
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.deepEqual(ranking.results[0].picks.map((pick) => pick.marketId), ['home']);
+  assert.equal(ranking.results[0].picks[0].confidence, 0.5);
+  assert.match(ranking.results[0].picks[0].reason, /Stable home form/);
+  assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['2:1', '3:1', '2:2', '1:2']);
+  assert.equal(ranking.results[0].bttsPick.selection, 'Yes');
+  assert.match(ranking.results[0].bttsPick.reason, /Both attacks create chances/);
+});
+
+test('keeps only independently selected markets at or above sixty percent', async () => {
+  const markets = [
+    buildMarket({ id: 'strong', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 1.8 }),
+    buildMarket({ id: 'weak', matchName: 'A v B', marketType: '足球 大小球', selection: '小', line: '2.5', odds: 1.9 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            picks: [
+              { marketId: 'strong', estimatedProbability: 0.64, confidence: 0.52, reason: 'Stronger evidence', risks: [] },
+              { marketId: 'weak', estimatedProbability: 0.59, confidence: 0.48, reason: 'Below threshold', risks: [] }
+            ],
+            scorePicks: [
+              { score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'Primary path' },
+              { score: '1:1', estimatedProbability: 0.18, confidence: 0.36, reason: 'Draw path' },
+              { score: '2:0', estimatedProbability: 0.14, confidence: 0.32, reason: 'Wider win' },
+              { score: '0:1', estimatedProbability: 0.1, confidence: 0.28, reason: 'Away upset' }
+            ]
+          })
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.deepEqual(ranking.results[0].picks.map((pick) => pick.marketId), ['strong']);
 });
 
 test('ranking request sends a capped core market set to the model', async () => {
@@ -87,6 +187,51 @@ test('ranking request sends a capped core market set to the model', async () => 
   assert.ok(sentMarketCount <= 40);
 });
 
+test('ranking prompt uses the English analyst policy without changing the response contract', async () => {
+  let system = '';
+  let user = null;
+  const fakeFetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    system = body.messages[0].content;
+    user = JSON.parse(body.messages[1].content);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.61, confidence: 0.5, reason: '主场状态较稳', risks: ['阵容尚未公布'] }],
+              scorePicks: [
+                { score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: '低比分路径' },
+                { score: '1:1', estimatedProbability: 0.18, confidence: 0.35, reason: '平局路径' },
+                { score: '2:0', estimatedProbability: 0.14, confidence: 0.3, reason: '主队扩大优势' },
+                { score: '0:1', estimatedProbability: 0.1, confidence: 0.2, reason: '客队反击路径' }
+              ],
+              bttsPick: { selection: '否', estimatedProbability: 0.58, confidence: 0.4, reason: '零封概率较高', risks: [] }
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  await rankMarkets([{ id: 'a', matchName: '主队 v 客队', marketType: '足球 胜平负', selection: '主队', line: '胜平负', odds: 1.8 }], 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch, { fixture: { season: 2026 }, catalog: { standings: ['主队第一'] } });
+
+  assert.match(system, /professional football betting market analyst/i);
+  assert.match(system, /independent assessment/i);
+  assert.match(system, /Do not invent missing data/i);
+  assert.match(system, /picks, scorePicks, and bttsPick/);
+  assert.match(system, /user-facing reason and risks strings must be written in English/i);
+  assert.ok(user.requiredShape.picks);
+  assert.ok(user.requiredShape.scorePicks);
+  assert.ok(user.requiredShape.bttsPick);
+  assert.deepEqual(user.matchContext.fixture, { season: 2026 });
+  assert.deepEqual(user.matchContext.catalog, { standings: ['主队第一'] });
+});
+
 test('ranking can use Dongqiudi context without imported odds markets', async () => {
   let sentMarkets = [];
   const fakeFetch = async (_url, options) => {
@@ -101,7 +246,7 @@ test('ranking can use Dongqiudi context without imported odds markets', async ()
             content: JSON.stringify({
               picks: user.markets.slice(0, 4).map((market, index) => ({
                 marketId: market.id,
-                estimatedProbability: 0.55 - index / 100,
+                estimatedProbability: 0.64 - index / 100,
                 confidence: 0.4,
                 reason: '懂球帝上下文候选',
                 risks: []
@@ -227,7 +372,7 @@ test('ranking parser repairs missing commas between JSON array items', async () 
     json: async () => ({
       choices: [{
         message: {
-          content: '{"picks":[{"marketId":"a","estimatedProbability":0.62,"confidence":0.5,"reason":"over","risks":["pace" "finishing"]} {"marketId":"b","estimatedProbability":0.58,"confidence":0.45,"reason":"home","risks":["rotation"]}],"scorePicks":[{"score":"2:1","estimatedProbability":0.18,"confidence":0.35,"reason":"fits"}]}'
+          content: '{"picks":[{"marketId":"a","estimatedProbability":0.62,"confidence":0.5,"reason":"over","risks":["pace" "finishing"]} {"marketId":"b","estimatedProbability":0.61,"confidence":0.45,"reason":"home","risks":["rotation"]}],"scorePicks":[{"score":"2:1","estimatedProbability":0.18,"confidence":0.35,"reason":"fits"}]}'
         }
       }]
     })
@@ -278,6 +423,50 @@ test('ranking keeps four score predictions separately', async () => {
   assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.scoreType), ['mainline', 'mainline', 'market_fit', 'aggressive']);
 });
 
+test('ranking keeps a separate both teams to score prediction', async () => {
+  const markets = [
+    buildMarket({ id: 'h', matchName: 'A v B', marketType: '足球 亚洲让分盘', selection: 'A', line: '-0.5', odds: 1.8 })
+  ];
+  const fakeFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            picks: [
+              { marketId: 'h', estimatedProbability: 0.6, confidence: 0.5, reason: '主队方向较稳', risks: [] }
+            ],
+            bttsPick: {
+              selection: '是',
+              estimatedProbability: 0.64,
+              confidence: 0.53,
+              reason: '双方进攻端都有制造机会的能力',
+              risks: ['临场阵容可能降低进攻效率']
+            },
+            scorePicks: [
+              { score: '1:1', estimatedProbability: 0.2, confidence: 0.4, reason: '平衡走势' },
+              { score: '2:1', estimatedProbability: 0.18, confidence: 0.36, reason: '主队略优' }
+            ]
+          })
+        }
+      }]
+    })
+  });
+
+  const ranking = await rankMarkets(markets, 'GPT', {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/test'
+  }, fakeFetch);
+
+  assert.deepEqual(ranking.results[0].bttsPick, {
+    selection: 'Yes',
+    estimatedProbability: 0.64,
+    confidence: 0.53,
+    reason: '双方进攻端都有制造机会的能力',
+    risks: ['临场阵容可能降低进攻效率']
+  });
+});
+
 test('ranking keeps score predictions even when model omits score market ids', async () => {
   const markets = [
     buildMarket({ id: 'h', matchName: 'A v B', marketType: '足球 亚洲让分盘', selection: 'A', line: '-0.5', odds: 1.8 })
@@ -311,7 +500,7 @@ test('ranking keeps score predictions even when model omits score market ids', a
   assert.ok(ranking.results[0].scorePicks.every((pick) => pick.marketId.startsWith('ai-score-')));
 });
 
-test('ranking infers main picks when model only returns score predictions', async () => {
+test('ranking does not infer main picks when model only returns score predictions', async () => {
   const markets = [
     buildMarket({ id: 'home', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 }),
     buildMarket({ id: 'draw', matchName: 'A v B', marketType: '足球 胜平负', selection: '平局', line: '胜平负', odds: 3 }),
@@ -343,9 +532,7 @@ test('ranking infers main picks when model only returns score predictions', asyn
   }, fakeFetch);
 
   assert.deepEqual(ranking.results[0].scorePicks.map((pick) => pick.score), ['0:2', '0:1', '1:2', '1:0']);
-  assert.ok(ranking.results[0].picks.length >= 2);
-  assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'away'));
-  assert.ok(ranking.results[0].picks.some((pick) => pick.marketId === 'under25'));
+  assert.deepEqual(ranking.results[0].picks, []);
 });
 
 test('ranking score predictions stay consistent with over total pick', async () => {
@@ -471,7 +658,7 @@ test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   assert.equal(requestBody.max_output_tokens, 8000);
   assert.equal(requestBody.temperature, undefined);
   assert.equal(requestBody.text.format.type, 'json_object');
-  assert.match(requestBody.instructions, /职业足球分析师/);
+  assert.match(requestBody.instructions, /professional football betting market analyst/i);
   assert.match(requestBody.input, /markets/);
   assert.equal(ranking.results[0].provider, 'OpenAI');
 });
@@ -606,7 +793,40 @@ test('Claude model can route through APIMart', async () => {
   assert.equal(ranking.results[0].provider, 'APIMart');
 });
 
-test('ranking retries once when model returns English user-facing text', async () => {
+test('Gemini through APIMart accepts SSE data chunks and receives a larger output budget', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let requestBody;
+  const content = JSON.stringify({
+    picks: [{ marketId: 'a', estimatedProbability: 0.61, confidence: 0.5, reason: 'home', risks: [] }],
+    scorePicks: []
+  });
+  const midpoint = Math.floor(content.length / 2);
+  const fakeFetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      text: async () => [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: content.slice(0, midpoint) } }] })}`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: content.slice(midpoint) }, finish_reason: 'stop' }] })}`,
+        'data: [DONE]'
+      ].join('\n\n')
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'Gemini', {
+    APIMART_API_KEY: 'test-apimart',
+    MODEL_GEMINI: 'gemini-3.1-pro-preview',
+    MODEL_GEMINI_PROVIDER: 'apimart'
+  }, fakeFetch);
+
+  assert.equal(requestBody.max_tokens, 8000);
+  assert.equal(ranking.results[0].error, undefined);
+  assert.equal(ranking.results[0].picks[0].marketId, 'a');
+});
+
+test('ranking accepts English user-facing text without retrying', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'England v Congo', marketType: '足球 胜平负', selection: 'England', line: '胜平负', odds: 1.4 }),
     buildMarket({ id: 'b', matchName: 'England v Congo', marketType: '足球 大小球', selection: '小', line: '2.5', odds: 1.8 })
@@ -614,8 +834,7 @@ test('ranking retries once when model returns English user-facing text', async (
   let calls = 0;
   const fakeFetch = async () => {
     calls += 1;
-    const content = calls === 1
-      ? {
+    const content = {
           picks: [
             {
               marketId: 'a',
@@ -627,20 +846,6 @@ test('ranking retries once when model returns English user-facing text', async (
           ],
           scorePicks: [
             { score: '1:0', scoreType: 'mainline', estimatedProbability: 0.18, confidence: 0.35, reason: 'England can win a controlled low scoring game.' }
-          ]
-        }
-      : {
-          picks: [
-            {
-              marketId: 'a',
-              estimatedProbability: 0.71,
-              confidence: 0.55,
-              reason: '英格兰整体实力占优，控场能力更稳定。',
-              risks: ['轮换可能降低进攻强度']
-            }
-          ],
-          scorePicks: [
-            { score: '1:0', scoreType: 'mainline', estimatedProbability: 0.18, confidence: 0.35, reason: '低比分赢球路径更符合当前信息。' }
           ]
         };
     return {
@@ -656,10 +861,10 @@ test('ranking retries once when model returns English user-facing text', async (
     MODEL_QWEN: 'qwen/qwen3.7-max'
   }, fakeFetch);
 
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
   assert.equal(ranking.results[0].error, undefined);
-  assert.match(ranking.results[0].picks[0].reason, /英格兰/);
-  assert.match(ranking.results[0].scorePicks[0].reason, /低比分/);
+  assert.match(ranking.results[0].picks[0].reason, /superior squad depth/);
+  assert.match(ranking.results[0].scorePicks[0].reason, /controlled low scoring game/);
 });
 
 test('model ids and api keys tolerate BOM and whitespace from secrets', async () => {

@@ -37,6 +37,23 @@ test('single model ranking merges into latest ranking instead of replacing other
   }
 });
 
+test('local prediction storage keeps rankings isolated by owner', async () => {
+  const originalCwd = process.cwd();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'football-storage-owner-'));
+  process.chdir(tempDir);
+  try {
+    const storage = await import(`../src/storage.js?test=${Date.now()}-owner`);
+    storage.saveRanking({ id: 'user-a-ranking', results: [] }, { ownerId: 'user-a' });
+    storage.saveRanking({ id: 'user-b-ranking', results: [] }, { ownerId: 'user-b' });
+
+    assert.deepEqual(storage.readDb({ ownerId: 'user-a' }).rankings.map((item) => item.id), ['user-a-ranking']);
+    assert.deepEqual(storage.readDb({ ownerId: 'user-b' }).rankings.map((item) => item.id), ['user-b-ranking']);
+  } finally {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('single model ranking merges into latest ranking for the same context', async () => {
   const originalCwd = process.cwd();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'football-storage-'));

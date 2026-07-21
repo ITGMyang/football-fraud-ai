@@ -7,8 +7,8 @@ loadEnv();
 const proxyUrl = process.env.OPENROUTER_PROXY_URL || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
 const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
-if (!process.env.OPENROUTER_API_KEY && !process.env.OPENAI_API_KEY) {
-  console.error('Missing OPENROUTER_API_KEY or OPENAI_API_KEY');
+if (!process.env.OPENROUTER_API_KEY && !process.env.OPENAI_API_KEY && !process.env.APIMART_API_KEY) {
+  console.error('Missing OPENROUTER_API_KEY, OPENAI_API_KEY or APIMART_API_KEY');
   process.exit(1);
 }
 
@@ -28,7 +28,8 @@ for (const [label, model,, provider] of configuredModels(process.env)) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 5,
+        max_tokens: 32,
+        stream: false,
         messages: [{ role: 'user', content: 'Say ok.' }]
       })
     });
@@ -59,6 +60,14 @@ function testClient(provider = 'openrouter') {
     return {
       baseUrl: (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
       apiKey: process.env.OPENAI_API_KEY,
+      extraHeaders: {}
+    };
+  }
+
+  if (provider === 'apimart') {
+    return {
+      baseUrl: (process.env.APIMART_BASE_URL || 'https://api.apimart.ai/api/v1').replace(/\/$/, ''),
+      apiKey: process.env.APIMART_API_KEY,
       extraHeaders: {}
     };
   }

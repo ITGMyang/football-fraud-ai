@@ -17,18 +17,30 @@ const matchDetailEl = $('#matchDetail');
 const contextModalEl = $('#contextModal');
 const contextModalBodyEl = $('#contextModalBody');
 const contextModalTitleEl = $('#contextModalTitle');
+const guestAccessEl = $('#guestAccess');
+const guestAccessTitleEl = $('#guestAccessTitle');
+const guestAccessDetailEl = $('#guestAccessDetail');
+const backendContentEl = $('#backendContent');
+const backendSummaryEl = $('#backendSummary');
+const billingStatusEl = $('#billingStatus');
+const billingStatusTitleEl = $('#billingStatusTitle');
+const billingStatusDetailEl = $('#billingStatusDetail');
+const billingMessageEl = $('#billingMessage');
 
 const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
 const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
 const AI_CONTEXT_RANGE_STORAGE_KEY = 'footballFraud.aiContextRange';
 const AI_CONTEXT_SORT_STORAGE_KEY = 'footballFraud.aiContextSort';
 const QWEN_VARIANT_STORAGE_KEY = 'footballFraud.qwenVariant';
+const BILLING_ORDER_STORAGE_KEY = 'footballFraud.billingOrderId';
 const RANK_MODELS = ['GPT', 'Claude', 'Gemini', 'DeepSeek', 'Qwen'];
 let activeRankingModel = 'all';
 let activeContextId = readStoredActiveContextId();
 let activeAiContextDate = readStoredValue(AI_CONTEXT_DATE_STORAGE_KEY);
 let activeAiContextRange = readStoredValue(AI_CONTEXT_RANGE_STORAGE_KEY) || 'week';
 let activeAiContextSort = readStoredValue(AI_CONTEXT_SORT_STORAGE_KEY) || 'imported';
+let accessState = { authenticated: false, guestPredictionUsed: false };
+let backendSchedules = [];
 const analyticsState = {
   raw: null,
   date: '',
@@ -53,15 +65,34 @@ bind('#loadSample', 'click', async () => {
 
 bind('#refresh', 'click', refresh);
 bind('#refreshAnalytics', 'click', refreshAnalyticsData);
-bind('#loadDongqiudiMatches', 'click', loadDongqiudiMatches);
-bind('#competitionFilter', 'change', loadDongqiudiMatches);
-bind('#matchDate', 'change', loadDongqiudiMatches);
+bind('#reloadBackend', 'click', loadBackendSchedules);
+bind('#backendSearch', 'input', renderBackendSchedules);
+bind('#backendCompetition', 'change', renderBackendSchedules);
+bind('#backendStatus', 'change', renderBackendSchedules);
+bind('#loadApiFootballMatches', 'click', loadApiFootballMatches);
+bind('#competitionFilter', 'change', loadApiFootballMatches);
+bind('#matchDate', 'change', loadApiFootballMatches);
+bind('#guestLogin', 'click', () => window.footballAuth?.open());
 bind('#aiContextDate', 'change', handleAiContextDateChange);
 bind('#aiContextRange', 'change', handleAiContextRangeChange);
 bind('#aiContextSort', 'change', handleAiContextSortChange);
 initQwenVariantSelector();
 
-bind('#importDongqiudiUrl', 'click', importDongqiudiUrl);
+document.querySelectorAll('[data-billing-plan]').forEach((button) => {
+  button.addEventListener('click', () => startBillingCheckout(button.dataset.billingPlan, button));
+});
+
+document.querySelectorAll('a[href="#subscriptionPanel"]').forEach((link) => {
+  link.addEventListener('click', (event) => {
+    const panel = $('#subscriptionPanel');
+    if (!panel) return;
+    event.preventDefault();
+    const navHeight = $('.floating-nav')?.getBoundingClientRect().height || 0;
+    const top = window.scrollY + panel.getBoundingClientRect().top - navHeight - 24;
+    window.history.replaceState({}, '', '#subscriptionPanel');
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  });
+});
 
 bind('#clearMarkets', 'click', async () => {
   await api('/api/markets/clear', { method: 'POST' });
@@ -97,6 +128,12 @@ document.addEventListener('click', (event) => {
   renderAnalyticsView();
 });
 
+document.addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-backend-fixture]');
+  if (!button) return;
+  openBackendFixture(button.dataset.backendFixture, button);
+});
+
 bind('#importText', 'click', async () => {
   const result = await importStakeText();
   alert(`导入 ${result.markets.length} 条盘口`);
@@ -112,10 +149,456 @@ bind('#manualForm', 'submit', async (event) => {
   await refresh();
 });
 
-window.addEventListener('popstate', refresh);
+window.addEventListener('popstate', () => {
+  if (window.footballAuth?.isAuthenticated()) refresh();
+});
+window.addEventListener('football-auth-change', (event) => {
+  accessState.authenticated = Boolean(event.detail?.session);
+  if (!window.footballAppInitialized) initializeApp();
+  else refreshForAccountChange();
+});
 initMatchDate();
-refresh();
-loadDongqiudiMatches();
+initializeApp();
+
+async function initializeApp() {
+  await (window.footballAuthReady || Promise.resolve());
+  if (window.footballAppInitialized) return;
+  window.footballAppInitialized = true;
+  if (location.pathname === '/backend') {
+    renderRoute([], [], []);
+    await syncAccessStatus();
+    await loadBackendSchedules();
+    return;
+  }
+  await Promise.all([refresh(), loadApiFootballMatches(), syncAccessStatus()]);
+  await resumeBillingCheckout();
+}
+
+async function refreshForAccountChange() {
+  await syncAccessStatus();
+  if (location.pathname === '/backend') {
+    await loadBackendSchedules();
+    return;
+  }
+  await refresh();
+}
+
+async function loadBackendSchedules() {
+  if (!backendContentEl) return;
+  backendContentEl.innerHTML = '<p class="backend-loading">正在读取 Supabase 缓存...</p>';
+  try {
+    const result = await api('/api/backend/schedules');
+    backendSchedules = Array.isArray(result.schedules)
+      ? result.schedules.filter((schedule) => schedule?.source === 'api-football')
+      : [];
+    renderBackendCompetitionOptions();
+    renderBackendSchedules();
+    const updated = $('#backendUpdatedAt');
+    if (updated) updated.textContent = `读取于 ${formatBackendTime(result.generatedAt)}`;
+  } catch (error) {
+    backendSchedules = [];
+    renderBackendSummary([]);
+    backendContentEl.innerHTML = `
+      <div class="backend-empty">
+        <strong>${error.status === 401 ? '请先登录' : '读取失败'}</strong>
+        <span>${escapeHtml(error.message)}</span>
+      </div>
+    `;
+  }
+}
+
+function renderBackendCompetitionOptions() {
+  const select = $('#backendCompetition');
+  if (!select) return;
+  const selected = select.value || 'all';
+  const options = backendSchedules
+    .map((schedule) => ({ id: String(schedule.competitionId || ''), name: backendCompetitionName(schedule) }))
+    .filter((item) => item.id)
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  select.innerHTML = '<option value="all">全部赛事</option>' + options
+    .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
+    .join('');
+  select.value = options.some((item) => item.id === selected) ? selected : 'all';
+}
+
+function renderBackendSchedules() {
+  if (!backendContentEl) return;
+  renderBackendSummary(backendSchedules);
+  const query = String($('#backendSearch')?.value || '').trim().toLowerCase();
+  const competition = $('#backendCompetition')?.value || 'all';
+  const status = $('#backendStatus')?.value || 'all';
+  const rows = backendSchedules.flatMap((schedule) => (schedule.matches || []).map((match) => ({
+    schedule,
+    match,
+    provider: schedule.providerChecks?.[match.date] || null
+  }))).filter(({ schedule, match, provider }) => {
+    if (competition !== 'all' && String(schedule.competitionId) !== competition) return false;
+    if (status === 'odds' && match.hasOdds !== true) return false;
+    if (status === 'delayed' && provider?.status !== 'rate-limited') return false;
+    if (!query) return true;
+    return [match.home, match.away, match.matchId, match.competition]
+      .some((value) => String(value || '').toLowerCase().includes(query));
+  }).sort((a, b) => Date.parse(b.match.kickoff || '') - Date.parse(a.match.kickoff || ''));
+
+  if (!rows.length) {
+    backendContentEl.innerHTML = '<div class="backend-empty"><strong>没有匹配的数据</strong><span>可以清除筛选条件后重试。</span></div>';
+    return;
+  }
+
+  backendContentEl.innerHTML = `
+    <div class="backend-table-wrap">
+      <table class="backend-table">
+        <thead><tr><th>赛事</th><th>比赛</th><th>北京时间</th><th>Fixture ID</th><th>盘口</th><th>刷新状态</th><th>写入时间</th><th>详情</th></tr></thead>
+        <tbody>${rows.map(renderBackendRow).join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderBackendSummary(schedules) {
+  if (!backendSummaryEl) return;
+  const matches = schedules.flatMap((schedule) => schedule.matches || []);
+  const oddsMatches = matches.filter((match) => match.hasOdds === true).length;
+  const delayed = schedules.filter((schedule) => Object.values(schedule.providerChecks || {})
+    .some((check) => check?.status === 'rate-limited')).length;
+  const latest = schedules.reduce((value, schedule) => Math.max(value, Date.parse(schedule.fetchedAt || '') || 0), 0);
+  backendSummaryEl.innerHTML = [
+    ['缓存赛事', schedules.length],
+    ['缓存比赛', matches.length],
+    ['有盘口', oddsMatches],
+    ['刷新异常', delayed],
+    ['最近写入', latest ? formatBackendTime(new Date(latest).toISOString()) : '暂无']
+  ].map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+}
+
+function renderBackendRow({ schedule, match, provider }) {
+  const providerStatus = provider?.status === 'rate-limited' ? '限流' : provider?.status === 'ready' ? '正常' : '缓存';
+  const providerTone = provider?.status === 'rate-limited' ? 'danger' : provider?.status === 'ready' ? 'ok' : 'neutral';
+  const fixtureId = String(match.matchId || match.id || '');
+  return `
+    <tr>
+      <td><b>${escapeHtml(backendCompetitionName(schedule))}</b><small>ID ${escapeHtml(schedule.competitionId || '')}</small></td>
+      <td><strong>${escapeHtml(match.home || '')}</strong><span>vs</span><strong>${escapeHtml(match.away || '')}</strong></td>
+      <td>${escapeHtml(formatBackendTime(match.kickoff))}</td>
+      <td><code>${escapeHtml(fixtureId)}</code></td>
+      <td><span class="backend-status ${match.hasOdds === true ? 'ok' : 'neutral'}">${match.hasOdds === true ? '已验证' : '无盘口'}</span></td>
+      <td><span class="backend-status ${providerTone}">${providerStatus}</span></td>
+      <td>${escapeHtml(formatBackendTime(schedule.fetchedAt))}</td>
+      <td><button class="backend-detail-button secondary" type="button" data-backend-fixture="${escapeHtml(fixtureId)}">查看</button></td>
+    </tr>
+  `;
+}
+
+async function openBackendFixture(fixtureId, button) {
+  if (!fixtureId || !contextModalEl || !contextModalBodyEl) return;
+  const original = button?.textContent || '查看';
+  try {
+    if (button) {
+      button.disabled = true;
+      button.textContent = '读取中';
+    }
+    if (contextModalTitleEl) contextModalTitleEl.textContent = `Fixture ${fixtureId}`;
+    contextModalBodyEl.innerHTML = '<p class="backend-loading">正在从 API-Football 读取比赛详情...</p>';
+    contextModalEl.hidden = false;
+    document.body.classList.add('modal-open');
+    const { context, generatedAt } = await api(`/api/backend/fixtures/${encodeURIComponent(fixtureId)}`);
+    if (contextModalTitleEl) contextModalTitleEl.textContent = context.matchName || `Fixture ${fixtureId}`;
+    contextModalBodyEl.innerHTML = renderBackendFixtureDetail(context, generatedAt);
+  } catch (error) {
+    contextModalBodyEl.innerHTML = `<div class="backend-empty"><strong>详情读取失败</strong><span>${escapeHtml(error.message)}</span></div>`;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+}
+
+function renderBackendFixtureDetail(context = {}, generatedAt = '') {
+  const fixture = context.fixture || {};
+  const catalog = context.catalog || {};
+  const lineupPlayers = context.lineup?.players || [];
+  const injuryNotes = (context.lineup?.notes || []).filter((note) => String(note).startsWith('伤停'));
+  const fixtureStats = context.analysis?.teamStatistics || [];
+  const playerStats = context.analysis?.playerStatistics || [];
+  const oddsCount = ['asia', 'size', 'euro'].reduce((sum, key) => sum + (context.index?.live?.[key]?.length || 0), 0);
+  const apiPrediction = context.analysis?.apiPrediction || {};
+  const fetchStatus = context.fetchStatus || {};
+  const coverage = [
+    ['Fixtures', 1, '单场', fetchStatus.fixtures],
+    ['H2H', context.analysis?.h2h?.length || 0, '单场', fetchStatus.h2h],
+    ['Live / Events', context.live?.length || 0, '单场', fetchStatus.events],
+    ['Odds', oddsCount, '单场', fetchStatus.odds],
+    ['Lineups', lineupPlayers.length, '单场', fetchStatus.lineups],
+    ['Fixture Statistics', fixtureStats.length, '单场', fetchStatus.fixtureStatistics],
+    ['Predictions', apiPrediction.advice || apiPrediction.winner ? 1 : 0, '单场', fetchStatus.predictions],
+    ['Injuries', injuryNotes.length, '单场', fetchStatus.injuries],
+    ['Players Statistics', playerStats.length, '单场', fetchStatus.playerStatistics],
+    ['Standings', catalog.standings?.length || 0, '联赛', fetchStatus.standings],
+    ['Top Scorers', catalog.topScorers?.length || 0, '联赛', fetchStatus.topScorers],
+    ['Teams Statistics', catalog.teamStatistics?.length || 0, '球队', fetchStatus.teamStatistics],
+    ['Players Squads', catalog.squads?.length || 0, '球队', fetchStatus.squads],
+    ['Coaches', catalog.coaches?.length || 0, '球队', fetchStatus.coaches],
+    ['Transfers / Trophies / Sidelined', 0, '非单场', { state: 'not-requested', count: 0 }]
+  ];
+  const teamSeasonStats = (catalog.teamStatistics || []).map((row) => [
+    row.team,
+    `赛 ${row.played || 0}`,
+    `胜 ${row.wins || 0}`,
+    `平 ${row.draws || 0}`,
+    `负 ${row.losses || 0}`,
+    `进 ${row.goalsFor || 0}`,
+    `失 ${row.goalsAgainst || 0}`,
+    `零封 ${row.cleanSheets || 0}`
+  ].join(' · '));
+  const matchStats = fixtureStats.map((row) => `${row.team} · ${Object.entries(row.values || {})
+    .map(([key, value]) => `${key}: ${value ?? '-'}`).join(' · ')}`);
+  const matchPlayerStats = playerStats.map((row) => {
+    const stats = row.statistics || {};
+    return [row.team, row.player, stats.games?.minutes ? `${stats.games.minutes}分钟` : '', stats.games?.rating ? `评分 ${stats.games.rating}` : '']
+      .filter(Boolean).join(' · ');
+  });
+  const predictionText = [
+    apiPrediction.winner ? `倾向：${apiPrediction.winner}` : '',
+    apiPrediction.advice ? `建议：${apiPrediction.advice}` : '',
+    ...Object.entries(apiPrediction.percent || {}).map(([key, value]) => `${key} ${value}`)
+  ].filter(Boolean);
+
+  return `
+    <article class="backend-fixture-detail">
+      <div class="backend-fixture-overview">
+        <div>
+          <span>API-FOOTBALL FIXTURE ${escapeHtml(context.matchId || '')}</span>
+          <h3>${escapeHtml(context.matchName || '比赛')}</h3>
+          <p>${escapeHtml(context.competition || '')} · ${escapeHtml(fixture.country || '国家未返回')} · ${escapeHtml(fixture.season || '赛季未返回')} · ${escapeHtml(fixture.round || '轮次未返回')}</p>
+        </div>
+        <small>读取于 ${escapeHtml(formatBackendTime(generatedAt))}</small>
+      </div>
+      <div class="backend-fixture-meta">
+        ${renderInfoTile('开赛时间', formatBackendTime(context.kickoff))}
+        ${renderInfoTile('比赛状态', context.status || '暂无')}
+        ${renderInfoTile('比赛场地', fixture.venue?.name ? `${fixture.venue.name}${fixture.venue.city ? ` · ${fixture.venue.city}` : ''}` : '暂无')}
+        ${renderInfoTile('裁判', fixture.referee || '暂无')}
+        ${renderInfoTile('阵型', context.lineup?.formation || '暂无')}
+        ${renderInfoTile('盘口记录', oddsCount ? `${oddsCount} 条` : '暂无')}
+      </div>
+      <section class="backend-coverage">
+        <div class="backend-detail-heading"><h4>接口抓取状态</h4><span>已区分空数据与请求失败</span></div>
+        <div class="backend-coverage-grid">
+          ${coverage.map(([label, count, scope, status]) => {
+            const display = backendCoverageDisplay(count, scope, status);
+            return `
+            <div class="backend-coverage-item ${display.className}"${display.detail ? ` title="${escapeHtml(display.detail)}"` : ''}>
+              <span>${escapeHtml(label)}</span>
+              <strong>${escapeHtml(display.label)}</strong>
+              <small>${escapeHtml(display.detail || `${scope}级`)}</small>
+            </div>
+          `;}).join('')}
+        </div>
+      </section>
+      <div class="backend-detail-modules">
+        ${renderBackendDetailModule('首发与球员', lineupPlayers)}
+        ${renderBackendDetailModule('伤停', injuryNotes)}
+        ${renderBackendDetailModule('交锋记录 H2H', context.analysis?.h2h || [])}
+        ${renderBackendDetailModule('比赛事件', context.live || [])}
+        ${renderBackendDetailModule('单场球队统计', matchStats)}
+        ${renderBackendDetailModule('单场球员统计', matchPlayerStats)}
+        ${renderBackendDetailModule('API 预测', predictionText)}
+        ${renderBackendDetailModule('积分榜', catalog.standings || [])}
+        ${renderBackendDetailModule('射手榜', catalog.topScorers || [])}
+        ${renderBackendDetailModule('赛季球队统计', teamSeasonStats)}
+        ${renderBackendDetailModule('球队名单', catalog.squads || [])}
+        ${renderBackendDetailModule('教练', catalog.coaches || [])}
+        ${renderOddsModule(context.index || {})}
+      </div>
+    </article>
+  `;
+}
+
+function backendCoverageDisplay(count, scope, status = {}) {
+  const availableCount = count || (status.state === 'available' ? status.count : 0);
+  if (availableCount) return { className: 'available', label: `已抓取 ${availableCount}`, detail: `${scope}级` };
+  if (status.state === 'error') {
+    return { className: 'error', label: '抓取失败', detail: status.error || '接口请求失败' };
+  }
+  if (status.state === 'empty') return { className: 'empty', label: '接口返回为空', detail: `${scope}级` };
+  if (status.state === 'not-requested' || scope === '非单场') {
+    return { className: 'scope', label: '未按比赛查询', detail: `${scope}级` };
+  }
+  return { className: 'empty', label: '状态未知', detail: '旧数据未记录接口状态' };
+}
+
+function renderBackendDetailModule(title, rows = []) {
+  const visible = rows.filter(Boolean).slice(0, 80);
+  return `
+    <section class="backend-detail-module">
+      <div class="backend-detail-heading"><h4>${escapeHtml(title)}</h4><span>${visible.length}</span></div>
+      ${visible.length ? `<ul>${visible.map((row) => `<li>${escapeHtml(row)}</li>`).join('')}</ul>` : '<p>API 当前暂无这类数据。</p>'}
+    </section>
+  `;
+}
+
+function backendCompetitionName(schedule) {
+  const names = {
+    '1': '世界杯', '2': '欧冠', '3': '欧联', '15': '世俱杯', '17': '亚冠精英',
+    '39': '英超', '61': '法甲', '78': '德甲', '135': '意甲', '140': '西甲',
+    '169': '中超', '170': '中甲', '171': '中乙', '188': '澳超', '307': '沙特联'
+  };
+  return names[String(schedule.competitionId || '')]
+    || schedule.matches?.find((match) => match.competition)?.competition
+    || `赛事 ${schedule.competitionId || ''}`;
+}
+
+function formatBackendTime(value) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return '暂无';
+  return date.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
+
+async function syncAccessStatus() {
+  try {
+    accessState = await api('/api/auth/status');
+    if (accessState.authenticated && !accessState.billing) {
+      const status = await api('/api/billing/status');
+      accessState.billing = status.billing;
+      accessState.plans = status.plans;
+    }
+  } catch {
+    accessState = {
+      authenticated: Boolean(window.footballAuth?.isAuthenticated()),
+      guestPredictionUsed: false
+    };
+  }
+  renderGuestAccess();
+  renderBillingStatus();
+}
+
+function renderGuestAccess() {
+  const copy = window.footballAuth?.guestAccessLabel?.(accessState);
+  if (!copy || !guestAccessEl) return;
+  guestAccessEl.dataset.tone = copy.tone;
+  guestAccessTitleEl.textContent = copy.title;
+  guestAccessDetailEl.textContent = copy.detail;
+  $('#guestLogin').hidden = accessState.authenticated;
+  const billing = accessState.billing || {};
+  const paid = Boolean(accessState.authenticated && billing.active);
+  const blocked = accessState.authenticated
+    ? billing.tier === 'locked'
+    : Boolean(accessState.guestPredictionUsed);
+  document.querySelectorAll('[data-rank-model]').forEach((button) => {
+    button.disabled = blocked || (!paid && button.dataset.rankModel !== 'Qwen');
+    button.title = !paid && !blocked && button.dataset.rankModel !== 'Qwen'
+      ? '免费体验仅运行 Qwen，订阅后可使用此模型'
+      : '';
+  });
+}
+
+function renderBillingStatus() {
+  if (!billingStatusEl) return;
+  const billing = accessState.billing || {};
+  if (billing.active) {
+    billingStatusEl.dataset.tone = 'paid';
+    billingStatusTitleEl.textContent = '全部 AI 已解锁';
+    billingStatusDetailEl.textContent = billing.validUntil
+      ? `有效期至 ${formatBillingDate(billing.validUntil)}`
+      : '订阅有效';
+  } else if (billing.tier === 'locked') {
+    billingStatusEl.dataset.tone = 'locked';
+    billingStatusTitleEl.textContent = '免费次数已用完';
+    billingStatusDetailEl.textContent = '购买套餐后继续预测';
+  } else {
+    billingStatusEl.dataset.tone = 'free';
+    billingStatusTitleEl.textContent = accessState.authenticated ? '剩余 1 次 Qwen 预测' : '免费体验';
+    billingStatusDetailEl.textContent = accessState.authenticated ? '订阅后解锁全部模型' : '登录后可购买套餐';
+  }
+}
+
+async function startBillingCheckout(planId, button) {
+  if (!accessState.authenticated) {
+    window.footballAuth?.open('请先登录后购买套餐');
+    return;
+  }
+  const original = button.textContent;
+  setBillingMessage('正在创建安全支付订单...');
+  try {
+    button.disabled = true;
+    button.textContent = '正在跳转...';
+    const result = await api('/api/billing/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ planId })
+    });
+    try {
+      localStorage.setItem(BILLING_ORDER_STORAGE_KEY, result.orderId);
+    } catch {
+      // The return URL also contains the order ID.
+    }
+    window.location.assign(result.checkoutUrl);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = original;
+    setBillingMessage(error.message, true);
+  }
+}
+
+async function resumeBillingCheckout() {
+  if (!accessState.authenticated) return;
+  const params = new URLSearchParams(location.search);
+  const orderId = params.get('order') || readStoredValue(BILLING_ORDER_STORAGE_KEY);
+  if (!orderId || params.get('checkout') !== 'return') return;
+  setBillingMessage('正在确认付款状态，请稍候...');
+  document.querySelector('#subscriptionPanel')?.scrollIntoView({ block: 'start' });
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      const result = await api(`/api/billing/orders/${encodeURIComponent(orderId)}/status`);
+      if (Number(result.status) === 20 || result.billing?.active) {
+        accessState.billing = result.billing;
+        renderGuestAccess();
+        renderBillingStatus();
+        setBillingMessage('付款已确认，全部 AI 模型已经解锁。');
+        clearBillingReturnState();
+        return;
+      }
+      if (Number(result.status) < 0) {
+        setBillingMessage('订单未完成，请重新选择套餐。', true);
+        return;
+      }
+    } catch (error) {
+      if (attempt === 11) setBillingMessage(error.message, true);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  setBillingMessage('付款仍在确认中，稍后刷新页面即可查看状态。');
+}
+
+function clearBillingReturnState() {
+  try {
+    localStorage.removeItem(BILLING_ORDER_STORAGE_KEY);
+  } catch {
+    // The entitlement is already persisted server-side.
+  }
+  const url = new URL(location.href);
+  url.searchParams.delete('checkout');
+  url.searchParams.delete('order');
+  history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function setBillingMessage(message, isError = false) {
+  if (!billingMessageEl) return;
+  billingMessageEl.textContent = message || '';
+  billingMessageEl.classList.toggle('error', isError);
+}
+
+function formatBillingDate(value) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
 
 function bind(selector, event, handler) {
   const element = $(selector);
@@ -240,21 +723,21 @@ async function refresh() {
 function initMatchDate() {
   const input = $('#matchDate');
   if (!input) return;
-  input.value = dateInShanghai(1);
+  input.value = dateInShanghai(0);
 }
 
-async function loadDongqiudiMatches(event) {
-  const button = event?.currentTarget || $('#loadDongqiudiMatches');
+async function loadApiFootballMatches(event) {
+  const button = $('#loadApiFootballMatches');
   const original = button?.textContent;
   try {
     if (button) {
       button.disabled = true;
-      button.textContent = '抓取中...';
+      button.textContent = '读取中...';
     }
-    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">正在抓取懂球帝比赛列表...</p>';
+    if (matchScheduleEl) matchScheduleEl.innerHTML = '<p class="meta">正在读取 API-Football 比赛列表...</p>';
     const date = $('#matchDate')?.value || '';
-    const competitionId = $('#competitionFilter')?.value || '125';
-    const schedule = await api(`/api/dongqiudi/matches?competitionId=${encodeURIComponent(competitionId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`);
+    const competitionId = $('#competitionFilter')?.value || '1';
+    const schedule = await api(`/api/football/matches?competitionId=${encodeURIComponent(competitionId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`);
     renderMatchSchedule(schedule);
   } catch (error) {
     if (matchScheduleEl) matchScheduleEl.innerHTML = `<p class="meta error-text">${escapeHtml(error.message)}</p>`;
@@ -268,16 +751,14 @@ async function loadDongqiudiMatches(event) {
 
 function renderMatchSchedule(schedule) {
   if (!matchScheduleEl) return;
-  const selectedDate = schedule.todayMatches || [];
-  const matches = selectedDate.length ? selectedDate : (schedule.matches || []).slice(0, 24);
+  const selectedDate = schedule.upcomingTodayMatches || [];
+  const matches = selectedDate.slice(0, 24);
   if (!matches.length) {
-    matchScheduleEl.innerHTML = '<p class="meta">没有抓到比赛列表。可以继续用上方懂球帝 URL 手动导入。</p>';
+    matchScheduleEl.replaceChildren();
     return;
   }
 
-  const notice = selectedDate.length
-    ? `${escapeHtml(schedule.date)} 共 ${selectedDate.length} 场`
-    : `没有匹配 ${escapeHtml(schedule.date)} 的场次，显示最近 ${matches.length} 场抓取结果`;
+  const notice = `${escapeHtml(schedule.date)} 未开始 ${matches.length} 场`;
 
   matchScheduleEl.innerHTML = `
     <div class="schedule-summary">
@@ -317,37 +798,37 @@ function renderScheduleCard(match) {
         <b>${escapeHtml(match.competition || '')}</b>
       </div>
       <div class="schedule-actions">
-        <a href="${escapeHtml(match.sourceUrl)}" target="_blank" rel="noreferrer">打开源页</a>
-        <button data-import-match="${escapeHtml(match.sourceUrl)}">导入并分析</button>
+        <span>API-Football</span>
+        <button data-import-match="${escapeHtml(match.matchId)}">导入并分析</button>
       </div>
     </article>
   `;
 }
 
-async function importScheduleMatch(sourceUrl, button) {
+async function importScheduleMatch(fixtureId, button) {
   const original = button?.textContent;
   try {
     if (button) {
       button.disabled = true;
       button.textContent = '导入中...';
     }
-    const { context, alreadyImported, refreshed } = await api('/api/import/dongqiudi-url', {
+    const { context, alreadyImported, refreshed } = await api('/api/import/api-football', {
       method: 'POST',
-      body: JSON.stringify({ sourceUrl })
+      body: JSON.stringify({ fixtureId })
     });
     setActiveContextId(contextKey(context));
     setActiveAiContextDate(contextDate(context));
     await refresh();
     if (refreshed) {
       $('#ai-panel')?.scrollIntoView({ block: 'start' });
-      alert(`已刷新该场数据：${context.matchName || sourceUrl}`);
+      alert(`已刷新该场数据：${context.matchName || fixtureId}`);
       return;
     }
     if (alreadyImported) {
-      alert(`该场次已导入：${context.matchName || sourceUrl}`);
+      alert(`该场次已导入：${context.matchName || fixtureId}`);
     } else {
       $('#ai-panel')?.scrollIntoView({ block: 'start' });
-      alert(`已导入：${context.matchName || sourceUrl}`);
+      alert(`已导入：${context.matchName || fixtureId}`);
     }
   } catch (error) {
     alert(error.message);
@@ -365,7 +846,7 @@ function renderContexts(contexts) {
     : null;
   const latest = active || contexts?.[0];
   if (!latest) {
-    contextsEl.innerHTML = '<p class="meta">尚未导入懂球帝比赛数据。AI 预测目前只能参考手动盘口。</p>';
+    contextsEl.innerHTML = '<p class="meta">尚未导入 API-Football 比赛数据。AI 预测目前只能参考手动盘口。</p>';
     return;
   }
 
@@ -375,11 +856,11 @@ function renderContexts(contexts) {
   contextsEl.innerHTML = `
     <div class="context-card">
       <div class="context-card-main">
-        <strong>已导入懂球帝数据：${escapeHtml(latest.matchName || '比赛')}</strong>
+        <strong>已导入 API-Football 数据：${escapeHtml(latest.matchName || '比赛')}</strong>
         <div class="context-teams" aria-label="比赛双方">
           ${teams.map((team, index) => `
             <span class="team-flag">
-              <b>${escapeHtml(countryFlag(team))}</b>
+              ${renderTeamCrest(contextTeamLogo(latest, index), team)}
               ${escapeHtml(team || (index === 0 ? '主队' : '客队'))}
             </span>
             ${index === 0 ? '<em>v</em>' : ''}
@@ -393,7 +874,7 @@ function renderContexts(contexts) {
         </div>
         <span>阵容/战绩/指数/专家/文字直播上下文会随 AI 预测发送</span>
       </div>
-      <a href="${escapeHtml(latest.sourceUrl || '#')}" target="_blank" rel="noreferrer">来源</a>
+      <a href="https://dashboard.api-football.com/" target="_blank" rel="noreferrer">API 来源</a>
     </div>
   `;
 }
@@ -445,14 +926,6 @@ function renderAiContextSelector(contexts = []) {
       event.stopPropagation();
       const context = contexts.find((item) => contextKey(item) === button.dataset.contextDetail);
       if (context) openContextModal(context, contexts);
-    });
-  });
-  aiContextTabsEl.querySelectorAll('[data-context-model]').forEach((button) => {
-    button.addEventListener('click', async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      selectAiContext(button.dataset.contextId, contexts, { silent: true });
-      await runRanking(button.dataset.contextModel, button);
     });
   });
 }
@@ -552,8 +1025,7 @@ function renderAiContextTab(context) {
   const key = contextKey(context);
   const teams = contextTeams(context);
   const players = playerInfoStatus(context);
-  const predictedModels = predictedModelsForContext(context);
-  const hasPrediction = predictedModels.size > 0;
+  const hasPrediction = Boolean(rankingForContext(context));
   const urgent = isInOneHourCountdown(context);
   const statusClass = urgent ? 'urgent' : hasPrediction ? 'predicted' : 'future';
   const statusLabel = urgent ? '红色 1 小时预警' : hasPrediction ? '已预测' : '未来预测';
@@ -561,9 +1033,9 @@ function renderAiContextTab(context) {
     <article class="ai-context-tab-card ${key === activeContextId ? 'active' : ''} ${urgent ? 'needs-predict' : ''}">
       <button class="ai-context-main" data-ai-context-tab="${escapeHtml(key)}" type="button">
         <div class="ai-context-teams">
-          ${renderAiContextTeam(teams[0], 'home')}
+          ${renderAiContextTeam(teams[0], 'home', contextTeamLogo(context, 0))}
           <span class="ai-context-v">v</span>
-          ${renderAiContextTeam(teams[1], 'away')}
+          ${renderAiContextTeam(teams[1], 'away', contextTeamLogo(context, 1))}
         </div>
         <div class="ai-context-meta-line">
           <span>${escapeHtml(formatBeijingKickoff(context.kickoff))}</span>
@@ -572,22 +1044,30 @@ function renderAiContextTab(context) {
         </div>
       </button>
       <div class="ai-context-actions">
-        <div class="context-model-icons" aria-label="单模型预测">
-          ${RANK_MODELS.map((model) => modelIconButton(model, key, predictedModels.has(modelBrandKey(model)))).join('')}
-        </div>
         <button class="context-detail-button" data-context-detail="${escapeHtml(key)}" type="button">详情</button>
       </div>
     </article>
   `;
 }
 
-function renderAiContextTeam(team, side) {
+function renderAiContextTeam(team, side, logo) {
   return `
     <div class="ai-context-team ${side}">
-      <b>${escapeHtml(countryFlag(team))}</b>
+      ${renderTeamCrest(logo, team)}
       <strong>${escapeHtml(team || '未知')}</strong>
     </div>
   `;
+}
+
+function contextTeamLogo(context, index) {
+  return String(index === 0
+    ? context?.fixture?.home?.logo || ''
+    : context?.fixture?.away?.logo || '');
+}
+
+function renderTeamCrest(logo, team) {
+  if (!logo) return '<span class="team-crest team-crest-placeholder" aria-hidden="true"></span>';
+  return `<img class="team-crest" src="${escapeHtml(logo)}" alt="${escapeHtml(team || '球队')}标志" loading="lazy" referrerpolicy="no-referrer">`;
 }
 
 function rankingForContext(context) {
@@ -595,39 +1075,11 @@ function rankingForContext(context) {
   return (window.currentRankings || []).find((ranking) => ranking.contextId === key) || null;
 }
 
-function predictedModelsForContext(context) {
-  const key = contextKey(context);
-  const models = new Set();
-  for (const ranking of window.currentRankings || []) {
-    if (ranking.contextId !== key) continue;
-    for (const model of predictedModelsForRanking(ranking)) models.add(model);
-  }
-  return models;
-}
-
-function predictedModelsForRanking(ranking) {
-  const models = new Set();
-  for (const result of ranking?.results || []) {
-    const hasResult = (result.picks || []).length || (result.scorePicks || []).length;
-    if (!hasResult || result.error) continue;
-    models.add(modelBrandKey(result.modelName));
-  }
-  return models;
-}
-
 function isInOneHourCountdown(context = {}) {
   const kickoff = parseKickoffTime(context.kickoff);
   if (!kickoff) return false;
   const diff = kickoff.getTime() - Date.now();
   return diff >= 0 && diff <= 60 * 60 * 1000;
-}
-
-function modelIconButton(model, contextId, predicted) {
-  return `
-    <button class="model-icon-button ${predicted ? 'predicted' : ''}" data-context-model="${escapeHtml(model)}" data-context-id="${escapeHtml(contextId)}" type="button" title="${escapeHtml(model)} 预测" aria-label="${escapeHtml(model)} 预测">
-      ${modelBrand(model)}
-    </button>
-  `;
 }
 
 function renderContextExplorer(contexts) {
@@ -671,6 +1123,7 @@ function renderContextExplorer(contexts) {
 }
 
 function renderContextDetailCard(context, activeIndex = 0) {
+  const playerCount = Array.isArray(context.lineup?.players) ? context.lineup.players.length : 0;
   return `
     <article class="data-match-card featured">
       <div class="data-match-head">
@@ -681,17 +1134,18 @@ function renderContextDetailCard(context, activeIndex = 0) {
         </div>
         <div class="data-actions">
           <button class="secondary" data-refresh-context="${escapeHtml(context.sourceUrl || '')}" type="button">刷新该场数据</button>
-          <a href="${escapeHtml(context.sourceUrl || '#')}" target="_blank" rel="noreferrer">源页</a>
+          <a href="https://dashboard.api-football.com/" target="_blank" rel="noreferrer">API 来源</a>
         </div>
       </div>
       <div class="data-snapshot">
         ${renderInfoTile('天气/场地', context.live?.join(' · ') || context.lineup?.notes?.join(' · ') || '未抓到')}
         ${renderInfoTile('阵型', context.lineup?.formation || '未抓到')}
         ${renderInfoTile('指数标签', context.index?.tabs?.join(' / ') || '未抓到')}
-        ${renderInfoTile('专家信息', `${context.experts?.length || 0} 条公开标题`)}
+        ${renderInfoTile('数据预测', `${context.experts?.length || 0} 条 API 预测`)}
+        ${renderInfoTile('球员信息', playerCount ? `已抓取 ${playerCount} 人` : '未抓到')}
       </div>
       <div class="data-modules">
-        ${renderDataModule('首发/球员', context.lineup?.players || [], 'players')}
+        ${renderDataModule(`球员信息${playerCount ? ` · 已抓取 ${playerCount} 人` : ' · 未抓到'}`, context.lineup?.players || [], 'players')}
         ${renderDataModule('近期战绩', flattenRecent(context.analysis?.recent), 'recent')}
         ${renderDataModule('积分/排名', context.analysis?.standings || [], 'standings')}
         ${renderOddsModule(context.index)}
@@ -723,7 +1177,7 @@ function closeContextModal() {
 
 function contextKey(context = {}) {
   const sourceUrl = String(context.sourceUrl || '');
-  return context.matchId || sourceUrl.match(/dongqiudi\.com\/match\/(\d+)/i)?.[1] || sourceUrl || context.matchName || '';
+  return context.matchId || sourceUrl || context.matchName || '';
 }
 
 function contextDate(context = {}) {
@@ -864,28 +1318,18 @@ function lineupTiming(context = {}) {
 }
 
 function playerInfoStatus(context = {}) {
-  const kickoff = parseKickoffTime(context.kickoff);
-  const captured = context.capturedAt ? new Date(context.capturedAt) : null;
-  if (!kickoff || !captured || Number.isNaN(captured.getTime())) {
-    return {
-      state: 'unknown',
-      label: '队员信息状态未知',
-      shortLabel: '队员未知'
-    };
-  }
-  const diff = kickoff.getTime() - captured.getTime();
-  const inOneHourWindow = diff >= 0 && diff <= 60 * 60 * 1000;
-  if (inOneHourWindow) {
+  const playerCount = Array.isArray(context.lineup?.players) ? context.lineup.players.length : 0;
+  if (playerCount > 0) {
     return {
       state: 'has-players',
-      label: '赛前 1 小时内导入：含队员信息',
-      shortLabel: '含队员'
+      label: `已抓取 ${playerCount} 名球员信息，包含球队、号码和位置（以 API-Football 返回为准）`,
+      shortLabel: `已抓取 ${playerCount} 名球员`
     };
   }
   return {
     state: 'no-players',
-    label: '非赛前 1 小时导入：无队员信息',
-    shortLabel: '无队员'
+    label: '当前没有抓到球员信息，建议赛前 1 小时刷新该场数据',
+    shortLabel: '未抓到球员'
   };
 }
 
@@ -1010,14 +1454,14 @@ function renderExpertModule(experts) {
   const visible = (experts || []).slice(0, 8);
   return `
     <section class="data-module experts">
-      <h4>专家公开信息 <span>${visible.length}</span></h4>
+      <h4>API 数据预测 <span>${visible.length}</span></h4>
       ${visible.length ? visible.map((item) => `
         <article class="expert-row">
           <strong>${escapeHtml(item.author || '未知')}</strong>
           <p>${escapeHtml(item.title || '')}</p>
           <span>${escapeHtml([item.market, ...(item.tags || [])].filter(Boolean).join(' · '))}</span>
         </article>
-      `).join('') : '<p class="meta">未抓到专家公开信息。</p>'}
+      `).join('') : '<p class="meta">当前没有 API 数据预测。</p>'}
     </section>
   `;
 }
@@ -1037,37 +1481,10 @@ async function importStakeText() {
   return result;
 }
 
-async function importDongqiudiUrl(event) {
-  const button = event?.currentTarget;
-  const original = button?.textContent;
-  try {
-    if (button) {
-      button.disabled = true;
-      button.textContent = '提取中...';
-    }
-    const sourceUrl = $('#dongqiudiUrl')?.value?.trim();
-    const { context } = await api('/api/import/dongqiudi-url', {
-      method: 'POST',
-      body: JSON.stringify({ sourceUrl })
-    });
-    setActiveContextId(contextKey(context));
-    setActiveAiContextDate(contextDate(context));
-    await refresh();
-    alert(`已导入：${context.matchName || '懂球帝比赛'}`);
-  } catch (error) {
-    alert(error.message);
-  } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = original;
-    }
-  }
-}
-
 function renderMarkets(markets) {
   if (!marketsEl) return;
   if (!markets.length) {
-    marketsEl.innerHTML = '<p class="meta">旧盘口已清空。当前 AI 预测会基于懂球帝上下文生成候选项。</p>';
+    marketsEl.innerHTML = '<p class="meta">旧盘口已清空。当前 AI 预测会基于 API-Football 上下文生成候选项。</p>';
     return;
   }
 
@@ -1256,6 +1673,7 @@ function updateRankButtons(rankings = []) {
     }
     button.textContent = hasRanking ? `重跑 ${model}` : `开始 ${model}`;
   });
+  renderGuestAccess();
 }
 
 function isActiveRankingItem(item) {
@@ -1285,10 +1703,33 @@ function renderModelRanking(result, marketMap) {
         <span>Top ${picks.length}</span>
       </div>
       ${renderScorePredictions(result.scorePicks || [])}
+      ${renderBttsPrediction(result.bttsPick)}
       <div class="prediction-cards">
         ${picks.length ? picks.map((pick, index) => renderRankingPick(pick, marketMap, index)).join('') : '<p class="meta">这个模型没有给出有效选择。</p>'}
       </div>
     </article>
+  `;
+}
+
+function renderBttsPrediction(pick) {
+  if (!pick) return '';
+  const risks = Array.isArray(pick.risks) ? pick.risks.filter(Boolean).slice(0, 3) : [];
+  return `
+    <section class="btts-prediction" aria-label="双方是否进球预测">
+      <div class="btts-answer">
+        <span>双方是否进球</span>
+        <strong>${escapeHtml(pick.selection || '暂无')}</strong>
+      </div>
+      <div class="btts-metrics">
+        <div><span>AI 概率</span><strong>${percent(pick.estimatedProbability)}</strong></div>
+        <div><span>置信度</span><strong>${percent(pick.confidence)}</strong></div>
+      </div>
+      <div class="btts-analysis">
+        <span>分析</span>
+        <p>${escapeHtml(pick.reason || '暂无分析')}</p>
+        ${risks.length ? `<small>${risks.map(escapeHtml).join(' · ')}</small>` : ''}
+      </div>
+    </section>
   `;
 }
 
@@ -1816,13 +2257,26 @@ async function runRanking(model, button) {
     activeRankingModel = model === 'all'
       ? 'all'
       : model;
+    await syncAccessStatus();
     await refresh();
     completed = true;
   } catch (error) {
-    alert(error.message);
+    if (error.code === 'GUEST_LIMIT_REACHED') {
+      accessState.guestPredictionUsed = true;
+      renderGuestAccess();
+      window.footballAuth?.open(error.message);
+    } else if (error.code === 'SUBSCRIPTION_REQUIRED') {
+      accessState.billing = { tier: 'locked', active: false, freePredictionUsed: true };
+      renderGuestAccess();
+      renderBillingStatus();
+      setBillingMessage(error.message, true);
+      $('#subscriptionPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      alert(error.message);
+    }
   } finally {
-    button.disabled = false;
     if (!completed) button.innerHTML = originalHtml;
+    renderGuestAccess();
   }
 }
 
@@ -1834,16 +2288,29 @@ function renderRoute(markets, reports, contexts = []) {
   const aiPanel = $('#ai-panel');
   const historyPanel = $('#historyPanel');
   const analyticsPanel = $('#analyticsPanel');
+  const backendPanel = $('#backendPanel');
+  const subscriptionPanel = $('#subscriptionPanel');
   const isHome = location.pathname === '/';
   const isAnalytics = location.pathname === '/analytics';
+  const isBackend = location.pathname === '/backend';
+
+  document.body.classList.toggle('backend-route', isBackend);
 
   if (matchPanel) matchPanel.hidden = true;
   if (dataPage) dataPage.hidden = location.pathname !== '/data';
+  if (backendPanel) backendPanel.hidden = !isBackend;
   if (dataBackHome) dataBackHome.hidden = isHome;
-  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || Boolean(match);
-  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || Boolean(match);
-  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || isAnalytics || Boolean(match);
+  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || isBackend || Boolean(match);
+  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || isBackend || Boolean(match);
+  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || isAnalytics || isBackend || Boolean(match);
   if (analyticsPanel) analyticsPanel.hidden = !isAnalytics;
+  if (subscriptionPanel) subscriptionPanel.hidden = isBackend || location.pathname === '/data' || isAnalytics || Boolean(match);
+
+  if (isBackend) {
+    backendPanel?.scrollIntoView({ block: 'start' });
+    setupRevealAnimations();
+    return;
+  }
 
   if (location.pathname === '/data') {
     renderContextExplorer(contexts);
@@ -1904,12 +2371,24 @@ function parseKickoffTime(value) {
 }
 
 async function api(path, options = {}) {
+  await (window.footballAuthReady || Promise.resolve());
+  const accessToken = window.footballAuth?.getAccessToken() || '';
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+    }
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  if (response.status === 401) window.footballAuth?.open();
+  if (!response.ok) {
+    const error = new Error(data.error || `HTTP ${response.status}`);
+    error.status = response.status;
+    error.code = data.code || '';
+    throw error;
+  }
   return data;
 }
 

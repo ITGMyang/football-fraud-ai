@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractDongqiudiMatchId, fetchDongqiudiContext, parseDongqiudiMatchList } from '../src/dongqiudi-fetcher.js';
+import { extractDongqiudiMatchId, fetchDongqiudiContext, parseDongqiudiMatchList, filterDongqiudiMatches } from '../src/dongqiudi-fetcher.js';
 
 test('extracts Dongqiudi match id from url', () => {
   assert.equal(extractDongqiudiMatchId('https://www.dongqiudi.com/match/54329995'), '54329995');
@@ -56,6 +56,34 @@ test('parses Dongqiudi mobile match list cards', () => {
   assert.equal(matches[0].score, '1 - 4');
   assert.equal(matches[1].date, '2026-06-27');
   assert.equal(matches[1].sourceUrl, 'https://www.dongqiudi.com/match/54330012');
+});
+
+test('filters a cached schedule without fetching a source', () => {
+  const cached = {
+    source: 'dongqiudi',
+    fetchedAt: '2026-06-27T00:00:00.000Z',
+    matches: [
+      { matchId: '1', date: '2026-06-27', status: 'scheduled' },
+      { matchId: '2', date: '2026-06-27', status: 'finished' },
+      { matchId: '3', date: '2026-06-28', status: 'scheduled' }
+    ]
+  };
+
+  const result = filterDongqiudiMatches(cached, '2026-06-27');
+  assert.deepEqual(result.todayMatches.map((match) => match.matchId), ['1', '2']);
+  assert.deepEqual(result.upcomingTodayMatches.map((match) => match.matchId), ['1']);
+  assert.equal(result.cached, true);
+});
+
+test('keeps the competition id in a schedule snapshot for cache upserts', async () => {
+  const result = await (await import('../src/dongqiudi-fetcher.js')).fetchDongqiudiMatches({
+    competitionId: '125',
+    date: '2026-06-27'
+  }, async () => ({
+    ok: true,
+    text: async () => '<ul></ul>'
+  }));
+  assert.equal(result.competitionId, '125');
 });
 
 function responseForUrl(url) {

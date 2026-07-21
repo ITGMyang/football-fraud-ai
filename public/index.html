@@ -4,19 +4,23 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>足球诈骗</title>
-    <link rel="stylesheet" href="/styles.css?v=20260629-0040">
+    <link rel="stylesheet" href="/styles.css?v=20260720-001">
   </head>
   <body>
     <nav class="floating-nav" aria-label="主导航">
       <a class="brand" href="/">足球诈骗</a>
       <div class="nav-links">
-        <a href="#matchSchedule">如果使用</a>
+        <a href="#matchSchedule">如何使用</a>
         <a href="/data">已抓取数据</a>
+        <a href="/backend">数据后台</a>
         <a href="/analytics">赛后准确率</a>
         <a href="#historyPanel">查看历史</a>
         <a href="#subscriptionPanel">订阅费</a>
       </div>
-      <a class="nav-auth" href="/login?next=/">登录 + 注册</a>
+      <div class="nav-account">
+        <button id="authTrigger" class="nav-auth" type="button">登录 + 注册</button>
+        <button id="signOutButton" class="nav-signout" type="button" hidden>退出</button>
+      </div>
     </nav>
 
     <header class="hero">
@@ -25,14 +29,8 @@
         <p class="hero-kicker">World Cup AI Odds Lab</p>
         <h1>足球诈骗</h1>
         <p class="hero-tagline">榨干你的每一滴！！！</p>
-        <p class="hero-copy">把明日赛程、阵容、指数、天气、专家公开信息塞进多模型预测机。每个 AI 独立下注脑内演练，只留下 Top 4、比分候选、风险理由和可复盘证据。</p>
-        <div class="hero-proof" aria-label="平台能力">
-          <span>懂球帝公开数据</span>
-          <span>多模型交叉预测</span>
-          <span>不自动下注</span>
-        </div>
         <div class="hero-actions">
-          <a class="button" href="#matchSchedule">查看明日场次</a>
+          <a class="button" href="#matchSchedule">查看今日场次</a>
           <a class="button secondary" href="/data">已抓取数据</a>
           <a class="button secondary" href="#historyPanel">查看历史</a>
         </div>
@@ -43,32 +41,31 @@
       <section class="panel match-center reveal">
         <div class="section-title-row">
           <div>
-            <h2>明日开场</h2>
-            <p class="meta">默认展示明日世界杯场次。也可以切换到中超、中甲等赛事类型，再点击场次导入详情数据。</p>
+            <h2>赛程情报台</h2>
           </div>
           <div class="match-center-controls">
             <label>日期 <input id="matchDate" type="date"></label>
             <label>赛事类型
               <select id="competitionFilter">
-                <option value="125" selected>世界杯</option>
-                <option value="10">重要比赛</option>
-                <option value="5">中超</option>
-                <option value="100">中甲</option>
-                <option value="101">中乙</option>
-                <option value="111">世俱杯</option>
-                <option value="105">亚冠精英</option>
-                <option value="6">英超</option>
-                <option value="7">西甲</option>
-                <option value="8">德甲</option>
-                <option value="9">意甲</option>
-                <option value="30">法甲</option>
-                <option value="31">欧冠</option>
-                <option value="34">欧联</option>
-                <option value="98">澳超</option>
-                <option value="99">沙特联</option>
+                <option value="all">全部赛事</option>
+                <option value="1" selected>世界杯</option>
+                <option value="169">中超</option>
+                <option value="170">中甲</option>
+                <option value="171">中乙</option>
+                <option value="15">世俱杯</option>
+                <option value="17">亚冠精英</option>
+                <option value="39">英超</option>
+                <option value="140">西甲</option>
+                <option value="78">德甲</option>
+                <option value="135">意甲</option>
+                <option value="61">法甲</option>
+                <option value="2">欧冠</option>
+                <option value="3">欧联</option>
+                <option value="188">澳超</option>
+                <option value="307">沙特联</option>
               </select>
             </label>
-            <button id="loadDongqiudiMatches">刷新场次</button>
+            <button id="loadApiFootballMatches">刷新场次</button>
           </div>
         </div>
         <div id="matchSchedule" class="schedule-grid"></div>
@@ -77,13 +74,54 @@
       <section id="dataPage" class="panel data-viewer reveal" hidden>
         <div class="section-title-row">
           <div>
-            <h2>当日已抓取数据</h2>
-            <p class="meta">按场次展示阵容、天气、场地、近期战绩、积分、指数和专家公开信息。</p>
+            <h2>已导入比赛数据</h2>
+            <p class="meta">每个模块明确标记已抓取内容和缺失内容，球员信息会显示实际抓取人数。</p>
           </div>
           <a id="dataBackHome" class="button secondary" href="/">返回首页</a>
         </div>
         <div id="contextTabs" class="context-tabs"></div>
         <div id="contextExplorer" class="context-explorer"></div>
+      </section>
+
+      <section id="backendPanel" class="backend-panel reveal" hidden>
+        <header class="backend-head">
+          <div>
+            <span class="backend-eyebrow">SUPABASE CACHE MONITOR</span>
+            <h2>数据后台</h2>
+            <p>查看定时任务已经写入 Supabase 的共享比赛缓存。</p>
+          </div>
+          <div class="backend-actions">
+            <span id="backendUpdatedAt">尚未读取</span>
+            <button id="reloadBackend" type="button">重新读取</button>
+          </div>
+        </header>
+
+        <div id="backendSummary" class="backend-summary" aria-label="缓存概况"></div>
+
+        <div class="backend-note">
+          <strong>这里显示什么</strong>
+          <span>共享缓存保存球队、开赛时间、赛事状态、Fixture ID 和盘口是否存在。阵容、球员、具体赔率及 AI 结果在用户点击导入后按账号保存，不在这里展示。</span>
+        </div>
+
+        <div class="backend-toolbar">
+          <label>搜索比赛
+            <input id="backendSearch" type="search" placeholder="球队或 Fixture ID">
+          </label>
+          <label>赛事
+            <select id="backendCompetition"><option value="all">全部赛事</option></select>
+          </label>
+          <label>数据状态
+            <select id="backendStatus">
+              <option value="all">全部状态</option>
+              <option value="odds">有盘口</option>
+              <option value="delayed">刷新异常</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="backendContent" class="backend-content" aria-live="polite">
+          <p class="meta">登录后读取 Supabase 缓存。</p>
+        </div>
       </section>
 
       <section id="ai-panel" class="panel reveal">
@@ -109,6 +147,13 @@
           <div id="aiContextTabs" class="ai-context-tabs"></div>
         </div>
         <div id="contexts" class="contexts"></div>
+        <div id="guestAccess" class="guest-access" data-tone="available">
+          <div>
+            <strong id="guestAccessTitle">访客体验：剩余 1 次 AI 预测</strong>
+            <span id="guestAccessDetail">无需登录即可浏览全部公开内容。登录后可继续预测并保存记录。</span>
+          </div>
+          <button id="guestLogin" class="secondary" type="button">登录继续</button>
+        </div>
         <div class="ai-controls">
           <div>
             <strong>AI 总预测</strong>
@@ -120,7 +165,8 @@
             <button class="secondary" data-rank-model="Claude">重跑 Claude</button>
             <button class="secondary" data-rank-model="Gemini">重跑 Gemini</button>
             <button class="secondary" data-rank-model="DeepSeek">重跑 DeepSeek</button>
-            <button class="secondary" data-rank-model="Qwen">重跑 Qwen</button>`r`n            <label class="qwen-model-select">
+            <button class="secondary" data-rank-model="Qwen">重跑 Qwen</button>
+            <label class="qwen-model-select">
               <span>Qwen</span>
               <select id="qwenVariant">
                 <option value="plus">Plus 稳定</option>
@@ -153,15 +199,49 @@
         <div id="analyticsContent"></div>
       </section>
 
-      <section id="subscriptionPanel" class="panel subscription-panel reveal">
-        <div>
-          <h2>订阅费</h2>
-          <p class="meta">后续可以接 Stripe、加会员权限、限制每日预测次数。当前版本先保留展示入口。</p>
+      <section id="subscriptionPanel" class="pricing-section reveal" aria-labelledby="pricingTitle">
+        <div class="pricing-head">
+          <div>
+            <span class="section-kicker">USDT MEMBERSHIP</span>
+            <h2 id="pricingTitle">选择使用时长</h2>
+            <p>每个账号可免费运行一次 Qwen。订阅有效期内可运行全部 AI 模型，所有结果按账号独立保存。</p>
+          </div>
+          <div id="billingStatus" class="billing-status" data-tone="free">
+            <span>当前状态</span>
+            <strong id="billingStatusTitle">免费体验</strong>
+            <small id="billingStatusDetail">登录后可购买套餐</small>
+          </div>
         </div>
-        <div class="subscription-price">
-          <span>当前</span>
-          <strong>内测免费</strong>
+
+        <div class="pricing-grid">
+          <article class="pricing-plan free-plan">
+            <span class="plan-name">免费体验</span>
+            <div class="plan-price"><strong>0</strong><span>USDT</span></div>
+            <p>每个账号 1 次 Qwen 预测</p>
+            <button class="secondary" type="button" disabled>自动启用</button>
+          </article>
+          <article class="pricing-plan">
+            <span class="plan-name">24 小时卡</span>
+            <div class="plan-price"><strong>2.99</strong><span>USDT / 24h</span></div>
+            <p>24 小时内解锁全部 AI 模型</p>
+            <button type="button" data-billing-plan="day">购买 24 小时卡</button>
+          </article>
+          <article class="pricing-plan">
+            <span class="plan-name">7 天周卡</span>
+            <div class="plan-price"><strong>11.99</strong><span>USDT / 7 天</span></div>
+            <p>7 天内解锁全部 AI 模型</p>
+            <button type="button" data-billing-plan="week">购买周卡</button>
+          </article>
+          <article class="pricing-plan recommended">
+            <span class="plan-badge">推荐</span>
+            <span class="plan-name">30 天月卡</span>
+            <div class="plan-price"><strong>29.99</strong><span>USDT / 30 天</span></div>
+            <p>30 天内解锁全部 AI 模型</p>
+            <button type="button" data-billing-plan="month">购买月卡</button>
+          </article>
         </div>
+        <p id="billingMessage" class="billing-message" role="status" aria-live="polite"></p>
+        <p class="pricing-provider">支付由 AllScale Checkout 处理。付款金额由服务器校验。</p>
       </section>
     </main>
 
@@ -179,8 +259,46 @@
       </section>
     </div>
 
-    <script src="/app.js?v=20260703-0002"></script>
+    <div id="authModal" class="auth-shell" hidden>
+      <div class="auth-backdrop" data-auth-backdrop></div>
+      <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+        <button id="authClose" class="auth-close" type="button" aria-label="关闭登录窗口">×</button>
+        <div class="auth-brand">
+          <span>FOOTBALL AI ACCESS</span>
+          <h2 id="authTitle">进入足球诈骗</h2>
+          <p>保存你的预测记录，并在不同设备继续分析。</p>
+        </div>
+        <div id="authStandardView">
+          <button id="googleLogin" class="google-login" type="button"><b>G</b><span>使用 Google 登录</span></button>
+          <button id="telegramLogin" class="telegram-login" type="button" disabled><b>➤</b><span>Telegram 登录（待配置）</span></button>
+          <div class="auth-divider"><span>或使用邮箱</span></div>
+          <div class="auth-tabs" role="tablist" aria-label="邮箱认证方式">
+            <button class="active" type="button" role="tab" aria-selected="true" data-auth-mode="login">邮箱登录</button>
+            <button type="button" role="tab" aria-selected="false" data-auth-mode="signup">注册账号</button>
+          </div>
+          <form id="authForm" class="auth-form">
+            <label for="authEmail">邮箱</label>
+            <input id="authEmail" type="email" autocomplete="email" placeholder="name@example.com" required>
+            <label for="authPassword">密码</label>
+            <input id="authPassword" type="password" autocomplete="current-password" minlength="8" placeholder="至少 8 位" required>
+            <button id="authSubmit" type="submit">登录</button>
+            <button id="forgotPassword" class="auth-link" type="button">忘记密码</button>
+          </form>
+        </div>
+        <div id="authResetView" hidden>
+          <form id="resetPasswordForm" class="auth-form">
+            <label for="newPassword">设置新密码</label>
+            <input id="newPassword" type="password" autocomplete="new-password" minlength="8" placeholder="至少 8 位" required>
+            <button id="resetPasswordSubmit" type="submit">保存新密码</button>
+          </form>
+        </div>
+        <p id="authStatus" class="auth-status" aria-live="polite"></p>
+        <p class="auth-terms">继续即表示你同意仅将预测用于信息分析，不自动下注。</p>
+      </section>
+    </div>
+
+    <script src="/vendor/supabase.js"></script>
+    <script type="module" src="/auth-client.js?v=20260712-001"></script>
+    <script defer src="/app.js?v=20260720-001"></script>
   </body>
 </html>
-
-

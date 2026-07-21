@@ -20,6 +20,7 @@ export async function fetchDongqiudiMatches({ competitionId = '10', date = today
   const matches = parseDongqiudiMatchList(html, url);
   return {
     source: 'dongqiudi',
+    competitionId: String(competitionId),
     sourceUrl: url,
     date,
     fetchedAt: new Date().toISOString(),
@@ -27,6 +28,26 @@ export async function fetchDongqiudiMatches({ competitionId = '10', date = today
     todayMatches: matches.filter((match) => match.date === date),
     upcomingTodayMatches: matches.filter((match) => match.date === date && match.status === 'scheduled')
   };
+}
+
+export function filterDongqiudiMatches(schedule, date = todayInShanghai()) {
+  const matches = Array.isArray(schedule?.matches) ? schedule.matches : [];
+  return {
+    ...schedule,
+    date,
+    todayMatches: matches.filter((match) => match.date === date),
+    upcomingTodayMatches: matches.filter((match) => match.date === date && match.status === 'scheduled'),
+    cached: true
+  };
+}
+
+export function todayInShanghai() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
 }
 
 export function extractDongqiudiMatchId(value) {
@@ -308,15 +329,6 @@ export function parseDongqiudiMatchList(html, sourceUrl = 'https://m.dongqiudi.c
   }
 
   return matches;
-}
-
-function todayInShanghai() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).format(new Date());
 }
 
 function isUpcoming(date, time) {

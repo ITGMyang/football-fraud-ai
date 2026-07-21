@@ -11,9 +11,16 @@ const initialState = {
   matchContexts: []
 };
 
-export function readDb() {
+export function readDb({ ownerId = 'legacy' } = {}) {
   ensureDb();
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  const db = readAllDb();
+  return {
+    ...db,
+    markets: (db.markets || []).filter((item) => (item.ownerId || 'legacy') === ownerId),
+    reports: (db.reports || []).filter((item) => (item.ownerId || 'legacy') === ownerId),
+    rankings: (db.rankings || []).filter((item) => (item.ownerId || 'legacy') === ownerId),
+    matchContexts: (db.matchContexts || []).filter((item) => (item.ownerId || 'legacy') === ownerId)
+  };
 }
 
 export function writeDb(db) {
@@ -21,40 +28,43 @@ export function writeDb(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
-export function upsertMarkets(markets) {
-  const db = readDb();
+export function upsertMarkets(markets, { ownerId = 'legacy' } = {}) {
+  const db = readAllDb();
   for (const market of markets) {
-    const idx = db.markets.findIndex((item) => item.id === market.id || marketKey(item) === marketKey(market));
-    if (idx >= 0) db.markets[idx] = market;
-    else db.markets.unshift(market);
+    const idx = db.markets.findIndex((item) => (item.ownerId || 'legacy') === ownerId && (item.id === market.id || marketKey(item) === marketKey(market)));
+    const ownedMarket = { ...market, ownerId };
+    if (idx >= 0) db.markets[idx] = ownedMarket;
+    else db.markets.unshift(ownedMarket);
   }
   writeDb(db);
   return markets;
 }
 
-export function clearMarkets() {
-  const db = readDb();
-  db.markets = [];
-  db.reports = [];
-  db.rankings = [];
+export function clearMarkets({ ownerId = 'legacy' } = {}) {
+  const db = readAllDb();
+  db.markets = db.markets.filter((item) => (item.ownerId || 'legacy') !== ownerId);
+  db.reports = db.reports.filter((item) => (item.ownerId || 'legacy') !== ownerId);
+  db.rankings = db.rankings.filter((item) => (item.ownerId || 'legacy') !== ownerId);
+  db.matchContexts = db.matchContexts.filter((item) => (item.ownerId || 'legacy') !== ownerId);
   writeDb(db);
 }
 
-export function saveReport(report) {
-  const db = readDb();
-  db.reports.unshift(report);
+export function saveReport(report, { ownerId = 'legacy' } = {}) {
+  const db = readAllDb();
+  db.reports.unshift({ ...report, ownerId });
   writeDb(db);
   return report;
 }
 
-export function saveRanking(ranking, { mergeLatest = false } = {}) {
-  const db = readDb();
+export function saveRanking(ranking, { mergeLatest = false, ownerId = 'legacy' } = {}) {
+  const db = readAllDb();
   if (!Array.isArray(db.rankings)) db.rankings = [];
-  if (mergeLatest && db.rankings.length) {
+  const ownerRankings = db.rankings.filter((item) => (item.ownerId || 'legacy') === ownerId);
+  if (mergeLatest && ownerRankings.length) {
     const mergeIndex = ranking.contextId
-      ? db.rankings.findIndex((item) => item.contextId === ranking.contextId)
+      ? db.rankings.findIndex((item) => (item.ownerId || 'legacy') === ownerId && item.contextId === ranking.contextId)
       : 0;
-    const latest = db.rankings[mergeIndex >= 0 ? mergeIndex : 0];
+    const latest = db.rankings[mergeIndex >= 0 ? mergeIndex : db.rankings.findIndex((item) => (item.ownerId || 'legacy') === ownerId)];
     const incoming = ranking.results || [];
     const existingResults = (latest.results || []).map((result) => ({
       ...result,
@@ -75,8 +85,9 @@ export function saveRanking(ranking, { mergeLatest = false } = {}) {
     writeDb(db);
     return latest;
   }
-  db.rankings.unshift(ranking);
-  db.rankings = db.rankings.slice(0, 50);
+  db.rankings.unshift({ ...ranking, ownerId });
+  db.rankings = db.rankings.filter((item) => (item.ownerId || 'legacy') === ownerId).slice(0, 50)
+    .concat(db.rankings.filter((item) => (item.ownerId || 'legacy') !== ownerId));
   writeDb(db);
   return ranking;
 }
@@ -91,12 +102,13 @@ function resultModelKey(modelName = '') {
   return text || 'ai';
 }
 
-export function upsertMatchContext(context) {
-  const db = readDb();
+export function upsertMatchContext(context, { ownerId = 'legacy' } = {}) {
+  const db = readAllDb();
   if (!Array.isArray(db.matchContexts)) db.matchContexts = [];
-  const idx = db.matchContexts.findIndex((item) => item.id === context.id || item.sourceUrl === context.sourceUrl);
-  if (idx >= 0) db.matchContexts[idx] = context;
-  else db.matchContexts.unshift(context);
+  const idx = db.matchContexts.findIndex((item) => (item.ownerId || 'legacy') === ownerId && (item.id === context.id || item.sourceUrl === context.sourceUrl));
+  const ownedContext = { ...context, ownerId };
+  if (idx >= 0) db.matchContexts[idx] = ownedContext;
+  else db.matchContexts.unshift(ownedContext);
   db.matchContexts = db.matchContexts.slice(0, 20);
   writeDb(db);
   return context;
@@ -105,6 +117,11 @@ export function upsertMatchContext(context) {
 function ensureDb() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify(initialState, null, 2));
+}
+
+function readAllDb() {
+  ensureDb();
+  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
 }
 
 function marketKey(market) {

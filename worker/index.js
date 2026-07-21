@@ -1,237 +1,243 @@
 import { buildMarket } from '../src/domain.js';
-import { parseDongqiudiSections } from '../src/dongqiudi.js';
-import { fetchDongqiudiContext, fetchDongqiudiMatches } from '../src/dongqiudi-fetcher.js';
+import {
+  fetchApiFootballContext,
+  fetchApiFootballMatches,
+  fetchApiFootballOddsFixtureIds,
+  filterApiFootballMatches,
+  filterMatchesWithOdds,
+  scheduleFromMatches
+} from '../src/api-football.js';
+import {
+  aggregateApiFootballSchedules,
+  enrichContextsWithScheduleTeams,
+  filterApiFootballSchedules,
+  isOddsCheckDue,
+  mergeScheduleDate,
+  refreshApiFootballScheduleCache
+} from '../src/api-football-cache.js';
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from '../src/context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
+import { authConfig } from '../src/auth.js';
+import { authorizeApiRequest, guestPredictionCookie } from '../src/guest-access.js';
+import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.js';
+import { billingAccess, billingPlan, publicBillingPlans } from '../src/billing.js';
+import {
+  createAllScaleCheckout,
+  getAllScaleCheckoutStatus,
+  verifyAllScaleWebhook
+} from '../src/allscale.js';
+
+const APP_SHELL_ROUTES = new Set([
+  '/',
+  '/analytics',
+  '/auth/callback',
+  '/auth/reset',
+  '/backend',
+  '/data',
+  '/history',
+  '/login'
+]);
 
 export default {
   async fetch(request, env) {
     try {
-      const authResponse = await protect(request, env);
-      if (authResponse) return authResponse;
-      const apiResponse = await routeApi(request, env);
+      const url = new URL(request.url);
+      if (request.method === 'GET' && url.pathname === '/api/auth/config') return json(authConfig(env));
+      if (request.method === 'GET' && url.pathname === '/auth/telegram/.well-known/openid-configuration') {
+        return proxyTelegramDiscovery(url.origin);
+      }
+      if (request.method === 'GET' && url.pathname === '/auth/telegram/jwks.json') {
+        return proxyTelegramJwks(fetch);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/billing/webhook') {
+        return handleAllScaleWebhook(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/internal/api-football-cache/refresh') {
+        const expected = String(env.CRON_SECRET || '').trim();
+        if (!expected || request.headers.get('X-Cron-Secret') !== expected) {
+          return json({ error: 'Unauthorized' }, 401);
+        }
+        return json(await refreshApiFootballScheduleCache(env));
+      }
+      if (request.method === 'OPTIONS' && url.pathname === '/api/import/chrome') return corsJson({}, 204);
+      let access = null;
+      if (url.pathname.startsWith('/api/')) {
+        access = await authorizeApiRequest(request, env, fetch);
+        if (!access.ok) return json({ error: access.error, code: access.code }, access.status);
+      }
+      const apiResponse = await routeApi(request, env, access);
       if (apiResponse) return apiResponse;
+      if (request.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || url.pathname.startsWith('/match/'))) {
+        const shellResponse = await env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
+        const headers = new Headers(shellResponse.headers);
+        headers.set('Cache-Control', 'no-cache');
+        return new Response(shellResponse.body, { status: shellResponse.status, headers });
+      }
       return env.ASSETS.fetch(request);
     } catch (error) {
       return json({ error: error.message }, 500);
     }
+  },
+
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(refreshApiFootballScheduleCache(env).then((result) => {
+      console.log(JSON.stringify({ event: 'api_football_schedule_cache_refresh', ...result }));
+    }).catch((error) => {
+      console.error(JSON.stringify({ event: 'api_football_schedule_cache_refresh_failed', error: error.message }));
+    }));
   }
 };
 
-const AUTH_COOKIE = 'football_fraud_access';
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
-
-async function protect(request, env) {
-  if (!env.ACCESS_PASSWORD) return null;
-
-  const url = new URL(request.url);
-  if (url.pathname === '/login' && request.method === 'GET') {
-    return loginPage(url.searchParams.get('next') || '/');
-  }
-  if (url.pathname === '/login' && request.method === 'POST') {
-    return handleLogin(request, env);
-  }
-  if (url.pathname === '/logout') {
-    return new Response('', {
-      status: 302,
-      headers: {
-        Location: '/login',
-        'Set-Cookie': `${AUTH_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`
-      }
-    });
-  }
-
-  const token = parseCookies(request.headers.get('Cookie') || '')[AUTH_COOKIE];
-  if (token && await verifySessionToken(token, env.ACCESS_PASSWORD)) return null;
-
-  if (url.pathname.startsWith('/api/')) {
-    return json({ error: '需要先输入访问密码' }, 401);
-  }
-
-  return new Response('', {
-    status: 302,
-    headers: { Location: `/login?next=${encodeURIComponent(url.pathname + url.search)}` }
-  });
-}
-
-async function handleLogin(request, env) {
-  const form = await request.formData();
-  const password = String(form.get('password') || '');
-  const next = sanitizeNext(form.get('next'));
-
-  if (password !== env.ACCESS_PASSWORD) {
-    return loginPage(next, '密码不对');
-  }
-
-  const token = await createSessionToken(env.ACCESS_PASSWORD);
-  return new Response('', {
-    status: 302,
-    headers: {
-      Location: next,
-      'Set-Cookie': `${AUTH_COOKIE}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_SECONDS}`
-    }
-  });
-}
-
-function loginPage(next = '/', error = '') {
-  return new Response(`<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>足球诈骗 | 访问验证</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background: #071017;
-      color: #f4f7fb;
-      font-family: Arial, "Microsoft YaHei", sans-serif;
-    }
-    main {
-      width: min(420px, calc(100vw - 32px));
-      border: 1px solid rgba(255,255,255,.14);
-      background: #101a24;
-      padding: 28px;
-      border-radius: 10px;
-      box-shadow: 0 24px 80px rgba(0,0,0,.36);
-    }
-    h1 { margin: 0 0 8px; font-size: 32px; letter-spacing: 0; }
-    p { margin: 0 0 22px; color: #aebdca; line-height: 1.5; }
-    label { display: block; margin-bottom: 8px; color: #d8e0e8; font-weight: 700; }
-    input {
-      width: 100%;
-      height: 46px;
-      border: 1px solid rgba(255,255,255,.18);
-      border-radius: 8px;
-      background: #071017;
-      color: #fff;
-      padding: 0 14px;
-      font-size: 16px;
-      outline: none;
-    }
-    input:focus { border-color: #f2c94c; }
-    button {
-      width: 100%;
-      height: 46px;
-      margin-top: 16px;
-      border: 0;
-      border-radius: 8px;
-      background: #f2c94c;
-      color: #071017;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .error { margin: 14px 0 0; color: #ff8f8f; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>足球诈骗</h1>
-    <p>输入访问密码后继续。</p>
-    <form method="post" action="/login">
-      <input type="hidden" name="next" value="${escapeHtml(sanitizeNext(next))}">
-      <label for="password">访问密码</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" autofocus>
-      <button type="submit">进入网站</button>
-      ${error ? `<p class="error">${escapeHtml(error)}</p>` : ''}
-    </form>
-  </main>
-</body>
-</html>`, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' }
-  });
-}
-
-async function createSessionToken(secret) {
-  const expires = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
-  const signature = await hmac(`${expires}`, secret);
-  return `${expires}.${signature}`;
-}
-
-async function verifySessionToken(token, secret) {
-  const [expires, signature] = String(token || '').split('.');
-  const expiry = Number(expires);
-  if (!Number.isFinite(expiry) || expiry < Math.floor(Date.now() / 1000) || !signature) return false;
-  return signature === await hmac(expires, secret);
-}
-
-async function hmac(message, secret) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
-  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-function parseCookies(cookieHeader) {
-  return Object.fromEntries(cookieHeader.split(';').map((part) => {
-    const [name, ...rest] = part.trim().split('=');
-    return [name, rest.join('=')];
-  }).filter(([name]) => name));
-}
-
-function sanitizeNext(value) {
-  const next = String(value || '/');
-  return next.startsWith('/') && !next.startsWith('//') ? next : '/';
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[char]));
-}
-
-async function routeApi(request, env) {
+async function routeApi(request, env, access) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return null;
 
   const workerFetch = (input, init) => fetch(input, init);
   const storage = createSupabaseStorage(env, workerFetch);
+  const ownerId = access?.user?.id || 'guest';
 
+  if (request.method === 'GET' && url.pathname === '/api/auth/status') {
+    const entitlement = access.role === 'user'
+      ? await storage.readBillingEntitlement(ownerId)
+      : { freePredictionUsed: access.guestPredictionUsed };
+    return json({
+      authenticated: access.role === 'user',
+      guestPredictionUsed: access.role === 'guest' && access.guestPredictionUsed,
+      billing: billingAccess(entitlement),
+      plans: publicBillingPlans()
+    });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/billing/status') {
+    const entitlement = access.role === 'user'
+      ? await storage.readBillingEntitlement(ownerId)
+      : { freePredictionUsed: access.guestPredictionUsed };
+    return json({ billing: billingAccess(entitlement), plans: publicBillingPlans() });
+  }
+  if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
+    if (access.role !== 'user') return json({ error: '请先登录后购买套餐', code: 'LOGIN_REQUIRED' }, 401);
+    const recentOrders = await storage.countRecentBillingOrders(
+      ownerId,
+      new Date(Date.now() - 60 * 1000).toISOString()
+    );
+    if (recentOrders >= 5) return json({ error: '创建支付太频繁，请一分钟后再试', code: 'BILLING_RATE_LIMIT' }, 429);
+    const body = await request.json();
+    const plan = billingPlan(body.planId);
+    if (!plan) return json({ error: '无效的订阅套餐' }, 400);
+    const orderId = crypto.randomUUID();
+    await storage.createBillingOrder({
+      id: orderId,
+      ownerId,
+      planId: plan.id,
+      amountCents: plan.amountCents,
+      status: 0
+    });
+    try {
+      const siteUrl = String(env.AUTH_SITE_URL || url.origin).replace(/\/$/, '');
+      const checkout = await createAllScaleCheckout({
+        planId: plan.id,
+        orderId,
+        userId: ownerId,
+        userName: access.user?.email || access.user?.user_metadata?.full_name || '',
+        redirectUrl: `${siteUrl}/?checkout=return&order=${encodeURIComponent(orderId)}#subscriptionPanel`
+      }, env, workerFetch);
+      if (!checkout.checkoutUrl || !checkout.intentId) throw new Error('AllScale 未返回支付地址');
+      await storage.updateBillingOrder(orderId, {
+        intentId: checkout.intentId,
+        checkoutUrl: checkout.checkoutUrl,
+        status: 1,
+        requestId: checkout.requestId
+      });
+      return json({
+        orderId,
+        checkoutUrl: checkout.checkoutUrl,
+        intentId: checkout.intentId,
+        amount: (plan.amountCents / 100).toFixed(2),
+        currency: 'USDT'
+      });
+    } catch (error) {
+      await storage.updateBillingOrder(orderId, { status: -1, requestId: error.requestId || '' }).catch(() => null);
+      throw error;
+    }
+  }
+  const billingOrderMatch = url.pathname.match(/^\/api\/billing\/orders\/([^/]+)\/status$/);
+  if (request.method === 'GET' && billingOrderMatch) {
+    if (access.role !== 'user') return json({ error: '请先登录' }, 401);
+    const orderId = decodeURIComponent(billingOrderMatch[1]);
+    const order = await storage.readBillingOrder(ownerId, orderId);
+    if (!order) return json({ error: '找不到这笔订单' }, 404);
+    const currentBilling = billingAccess(await storage.readBillingEntitlement(ownerId));
+    if (Number(order.status) === 20 || currentBilling.active) {
+      return json({ orderId: order.id, status: 20, billing: currentBilling });
+    }
+    if (!order.intentId) return json({ order, status: order.status, billing: currentBilling });
+    const lastCheck = Date.parse(order.updatedAt || '');
+    if (Number.isFinite(lastCheck) && Date.now() - lastCheck < 4000) {
+      return json({ orderId: order.id, status: order.status, billing: currentBilling, retryAfterMs: 4000 });
+    }
+    const remote = await getAllScaleCheckoutStatus(order.intentId, env, workerFetch);
+    await storage.updateBillingOrder(order.id, { status: remote.status, requestId: remote.requestId });
+    if (remote.status === 20) {
+      await storage.confirmAllScalePayment({
+        intentId: order.intentId,
+        webhookId: `poll:${order.intentId}`,
+        nonce: crypto.randomUUID(),
+        payload: { source: 'status-poll', request_id: remote.requestId }
+      });
+    }
+    return json({
+      orderId: order.id,
+      status: remote.status,
+      billing: billingAccess(await storage.readBillingEntitlement(ownerId))
+    });
+  }
   if (request.method === 'GET' && url.pathname === '/api/markets') {
-    return json({ markets: (await storage.readDb()).markets });
+    return json({ markets: (await storage.readDb({ ownerId })).markets });
   }
   if (request.method === 'GET' && url.pathname === '/api/reports') {
-    return json({ reports: (await storage.readDb()).reports });
+    return json({ reports: (await storage.readDb({ ownerId })).reports });
   }
   if (request.method === 'GET' && url.pathname === '/api/rankings') {
-    return json({ rankings: (await storage.readDb()).rankings || [] });
+    return json({ rankings: (await storage.readDb({ ownerId })).rankings || [] });
   }
   if (request.method === 'GET' && url.pathname === '/api/contexts') {
-    return json({ contexts: (await storage.readDb()).matchContexts || [] });
+    const db = await storage.readDb({ ownerId });
+    const schedules = await storage.listMatchSchedules();
+    return json({
+      contexts: enrichContextsWithScheduleTeams(db.matchContexts || [], schedules)
+    });
   }
   if (request.method === 'GET' && url.pathname === '/api/analytics') {
-    const db = await storage.readDb();
+    const db = await storage.readDb({ ownerId });
     return json({ analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
   }
+  if (request.method === 'GET' && url.pathname === '/api/backend/schedules') {
+    if (access.role !== 'user') return json({ error: '请先登录后查看数据后台' }, 401);
+    return json({
+      schedules: filterApiFootballSchedules(await storage.listMatchSchedules()),
+      generatedAt: new Date().toISOString()
+    });
+  }
+  const backendFixtureMatch = url.pathname.match(/^\/api\/backend\/fixtures\/(\d+)$/);
+  if (request.method === 'GET' && backendFixtureMatch) {
+    if (access.role !== 'user') return json({ error: '请先登录后查看比赛详情' }, 401);
+    const context = await fetchApiFootballContext(backendFixtureMatch[1], apiFootballContextOptions(env, storage), workerFetch);
+    return json({ context, generatedAt: new Date().toISOString() });
+  }
   if (request.method === 'POST' && url.pathname === '/api/analytics/refresh') {
-    const db = await storage.readDb();
-    const targets = (db.matchContexts || []).filter(shouldRefreshForAnalytics).slice(0, 12);
+    const db = await storage.readDb({ ownerId });
+    const targets = (db.matchContexts || []).filter((context) => context.source === 'api-football' && shouldRefreshForAnalytics(context)).slice(0, 12);
     const errors = [];
     for (const context of targets) {
       try {
-        await storage.upsertMatchContext(await fetchDongqiudiContext(context.sourceUrl, workerFetch));
+        await storage.upsertMatchContext(await fetchApiFootballContext(context.matchId || context.sourceUrl, apiFootballContextOptions(env, storage), workerFetch), { ownerId });
       } catch (error) {
         errors.push({ sourceUrl: context.sourceUrl, error: error.message });
       }
     }
-    const nextDb = await storage.readDb();
+    const nextDb = await storage.readDb({ ownerId });
     return json({
       refreshed: targets.length - errors.length,
       attempted: targets.length,
@@ -240,40 +246,131 @@ async function routeApi(request, env) {
     });
   }
 
-  if (request.method === 'GET' && url.pathname === '/api/dongqiudi/matches') {
-    const competitionId = url.searchParams.get('competitionId') || '10';
+  if (request.method === 'GET' && url.pathname === '/api/football/matches') {
+    const competitionId = url.searchParams.get('competitionId') || '1';
     const date = url.searchParams.get('date') || undefined;
-    const sourceUrl = url.searchParams.get('sourceUrl') || '';
-    return json(await fetchDongqiudiMatches({ competitionId, date, sourceUrl }, workerFetch));
+    let cached;
+    if (competitionId === 'all') {
+      let schedules = filterApiFootballSchedules(await storage.listMatchSchedules());
+      if (!schedules.length) {
+        await refreshApiFootballScheduleCache(env, workerFetch);
+        schedules = filterApiFootballSchedules(await storage.listMatchSchedules());
+      }
+      cached = aggregateApiFootballSchedules(schedules, date);
+    } else {
+      cached = await storage.readMatchSchedule(competitionId);
+      if (!cached) await refreshApiFootballScheduleCache(env, workerFetch);
+      if (!cached) cached = await storage.readMatchSchedule(competitionId);
+    }
+    const needsWorldCupDate = competitionId === '1'
+      && String(date || '').startsWith('2026-')
+      && !cached?.matches?.some((match) => match.date === date && match.hasOdds === true)
+      && (!cached?.providerChecks?.[date]
+        || cached.providerChecks?.[date]?.rateLimit === undefined
+        || cached?.oddsCheckModes?.[date] !== 'fixture'
+        || isOddsCheckDue(cached, date));
+    if (needsWorldCupDate) {
+      let checkStage = 'fixtures';
+      let fixtureCount = 0;
+      try {
+        const fetched = await fetchApiFootballMatches({
+          leagueId: '1',
+          date,
+          ...apiFootballOptions(env)
+        }, workerFetch);
+        fixtureCount = fetched.matches.length;
+        checkStage = 'odds';
+        const oddsFixtureIds = new Set();
+        for (const match of fetched.matches) {
+          const verifiedIds = await fetchApiFootballOddsFixtureIds({
+            fixtureId: match.matchId,
+            ...apiFootballOptions(env)
+          }, workerFetch);
+          for (const fixtureId of verifiedIds) oddsFixtureIds.add(fixtureId);
+        }
+        const verifiedMatches = filterMatchesWithOdds(fetched.matches, oddsFixtureIds);
+        cached = scheduleFromMatches(
+          mergeScheduleDate(cached?.matches || [], verifiedMatches, date),
+          { date, competitionId: '1', fetchedAt: fetched.fetchedAt }
+        );
+        cached.oddsCheckedDates = {
+          ...(cached.oddsCheckedDates || {}),
+          [date]: fetched.fetchedAt
+        };
+        cached.oddsCheckModes = {
+          ...(cached.oddsCheckModes || {}),
+          [date]: 'fixture'
+        };
+        cached.providerChecks = {
+          ...(cached.providerChecks || {}),
+          [date]: {
+            status: 'ready',
+            stage: 'complete',
+            fixtureCount,
+            oddsCount: verifiedMatches.length,
+            checkedAt: fetched.fetchedAt
+          }
+        };
+        await storage.upsertMatchSchedules([cached]);
+      } catch (error) {
+        if (!cached || !/too many requests/i.test(String(error?.message || ''))) throw error;
+        cached = {
+          ...cached,
+          oddsCheckedDates: {
+            ...(cached.oddsCheckedDates || {}),
+            [date]: new Date().toISOString()
+          },
+          oddsCheckModes: {
+            ...(cached.oddsCheckModes || {}),
+            [date]: 'fixture'
+          },
+          providerChecks: {
+            ...(cached.providerChecks || {}),
+            [date]: {
+              status: 'rate-limited',
+              stage: checkStage,
+              fixtureCount,
+              oddsCount: 0,
+              rateLimit: error.rateLimit || null,
+              checkedAt: new Date().toISOString()
+            }
+          }
+        };
+        await storage.upsertMatchSchedules([cached]);
+        return json({ ...filterApiFootballMatches(cached, date), cacheStatus: 'odds-check-delayed' });
+      }
+    }
+    if (!cached) return json({ error: '后台比赛数据正在首次准备，请稍后重试', code: 'SCHEDULE_CACHE_MISS' }, 503);
+    return json({ ...filterApiFootballMatches(cached, date), cacheStatus: 'ready' });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/markets/clear') {
-    await storage.clearMarkets();
+    await storage.clearMarkets({ ownerId });
     return json({ ok: true });
   }
 
   const marketMatch = url.pathname.match(/^\/api\/markets\/([^/]+)$/);
   if (request.method === 'GET' && marketMatch) {
     const id = decodeURIComponent(marketMatch[1]);
-    const market = (await storage.readDb()).markets.find((item) => item.id === id);
+    const market = (await storage.readDb({ ownerId })).markets.find((item) => item.id === id);
     if (!market) return json({ error: '找不到盘口' }, 404);
     return json({ market });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/sample') {
-    const markets = await storage.upsertMarkets(sampleMarkets('sample://cloudflare'));
+    const markets = await storage.upsertMarkets(sampleMarkets('sample://cloudflare'), { ownerId });
     return json({ markets });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/import/text') {
     const body = await request.json();
-    const markets = await storage.upsertMarkets(parseStakeText(body.text, body.sourceUrl));
+    const markets = await storage.upsertMarkets(parseStakeText(body.text, body.sourceUrl), { ownerId });
     return json({ markets });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/import/chrome') {
     const body = await request.json();
-    const markets = await storage.upsertMarkets(parseStakeText(body.text, body.sourceUrl));
+    const markets = await storage.upsertMarkets(parseStakeText(body.text, body.sourceUrl), { ownerId });
     return corsJson({ imported: markets.length, markets });
   }
 
@@ -281,66 +378,161 @@ async function routeApi(request, env) {
     return corsJson({}, 204);
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/import/dongqiudi') {
+  if (request.method === 'POST' && url.pathname === '/api/import/api-football') {
     const body = await request.json();
-    const context = await storage.upsertMatchContext(parseDongqiudiSections(body));
-    return json({ context });
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/import/dongqiudi-url') {
-    const body = await request.json();
-    const sourceUrl = body.sourceUrl || body.url;
-    const existing = findExistingContext((await storage.readDb()).matchContexts || [], sourceUrl);
-    if (existing && hasLineupPlayers(existing)) return json({ context: existing, alreadyImported: true, refreshed: false });
+    const fixtureId = String(body.fixtureId || body.matchId || '').trim();
+    if (!fixtureId) return json({ error: '缺少 fixtureId' }, 400);
+    const existing = findExistingContext((await storage.readDb({ ownerId })).matchContexts || [], fixtureId);
+    if (existing && hasLineupPlayers(existing) && hasCompleteCatalog(existing)) {
+      return json({ context: existing, alreadyImported: true, refreshed: false });
+    }
     if (existing) {
-      const context = await storage.upsertMatchContext(await fetchDongqiudiContext(sourceUrl, workerFetch));
+      const context = await storage.upsertMatchContext(await fetchApiFootballContext(fixtureId, apiFootballContextOptions(env, storage), workerFetch), { ownerId });
       return json({ context, alreadyImported: true, refreshed: true });
     }
-    const context = await storage.upsertMatchContext(await fetchDongqiudiContext(sourceUrl, workerFetch));
+    const context = await storage.upsertMatchContext(await fetchApiFootballContext(fixtureId, apiFootballContextOptions(env, storage), workerFetch), { ownerId });
     return json({ context, alreadyImported: false });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/contexts/refresh') {
     const body = await request.json();
-    const context = await storage.upsertMatchContext(await fetchDongqiudiContext(body.sourceUrl || body.url, workerFetch));
+    const context = await storage.upsertMatchContext(await fetchApiFootballContext(body.fixtureId || body.matchId || body.sourceUrl, apiFootballContextOptions(env, storage), workerFetch), { ownerId });
     return json({ context, refreshed: true });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/markets') {
     const market = buildMarket(await request.json());
-    await storage.upsertMarkets([market]);
+    await storage.upsertMarkets([market], { ownerId });
     return json({ market });
   }
 
   const predictMatch = url.pathname.match(/^\/api\/predict\/([^/]+)$/);
   if (request.method === 'POST' && predictMatch) {
     const id = decodeURIComponent(predictMatch[1]);
-    const market = (await storage.readDb()).markets.find((item) => item.id === id);
+    const market = (await storage.readDb({ ownerId })).markets.find((item) => item.id === id);
     if (!market) return json({ error: '找不到盘口' }, 404);
-    const report = await predictMarket(market, env, workerFetch);
-    await storage.saveReport(report);
-    return json({ report });
+    const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
+    if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
+    try {
+      const report = await predictMarket(market, env, workerFetch);
+      await storage.saveReport(report, { ownerId });
+      return json({ report, billing: predictionAccess.billing });
+    } catch (error) {
+      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
+      throw error;
+    }
   }
 
   if (request.method === 'POST' && url.pathname === '/api/rankings') {
     const body = await request.json();
-    const db = await storage.readDb();
+    const db = await storage.readDb({ ownerId });
     const contextSelector = body.contextId || body.sourceUrl || body.matchId;
     const context = contextSelector
       ? findExistingContext(db.matchContexts || [], contextSelector)
       : (db.matchContexts || [])[0] || null;
-    if (!db.markets.length && !context) return json({ error: '还没有导入懂球帝比赛数据' }, 400);
-    const requestedModel = body.model || 'all';
-    const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(env, body), workerFetch, context);
-    ranking.contextId = context ? contextKey(context) : '';
-    ranking.contextName = context?.matchName || '';
-    const savedRanking = await storage.saveRanking(ranking, {
-      mergeLatest: requestedModel !== 'all'
-    });
-    return json({ ranking: savedRanking });
+    if (!db.markets.length && !context) return json({ error: '还没有导入 API-Football 比赛数据' }, 400);
+    const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
+    if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
+    const requestedModel = predictionAccess.free ? 'Qwen' : (body.model || 'all');
+    try {
+      const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(env, body), workerFetch, context);
+      ranking.contextId = context ? contextKey(context) : '';
+      ranking.contextName = context?.matchName || '';
+      const savedRanking = await storage.saveRanking(ranking, {
+        mergeLatest: requestedModel !== 'all',
+        ownerId
+      });
+      const headers = access.consumeGuestPrediction
+        ? { 'Set-Cookie': await guestPredictionCookie(env, request) }
+        : {};
+      return json({ ranking: savedRanking, billing: predictionAccess.billing, model: requestedModel }, 200, headers);
+    } catch (error) {
+      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
+      throw error;
+    }
   }
 
   return json({ error: 'Not found' }, 404);
+}
+
+async function handleAllScaleWebhook(request, env) {
+  let verified;
+  try {
+    verified = await verifyAllScaleWebhook(request, env);
+  } catch (error) {
+    return json({ error: error.message }, 400);
+  }
+  try {
+    const payload = verified.payload;
+    const storage = createSupabaseStorage(env, (input, init) => fetch(input, init));
+    const result = await storage.confirmAllScalePayment({
+      intentId: String(payload.all_scale_checkout_intent_id || ''),
+      webhookId: verified.webhookId,
+      nonce: verified.nonce,
+      transactionId: String(payload.all_scale_transaction_id || ''),
+      amountCents: Number.isFinite(Number(payload.amount_cents)) ? Number(payload.amount_cents) : null,
+      payload
+    });
+    return json({ ok: true, duplicate: Boolean(result?.duplicate) });
+  } catch {
+    return json({ error: 'Payment processing temporarily unavailable' }, 500);
+  }
+}
+
+async function reservePredictionAccess(access, storage, ownerId) {
+  if (access.role === 'guest') {
+    return {
+      ok: true,
+      free: true,
+      release: false,
+      billing: billingAccess({ freePredictionUsed: false })
+    };
+  }
+  const current = billingAccess(await storage.readBillingEntitlement(ownerId));
+  if (current.active) return { ok: true, free: false, release: false, billing: current };
+  const consumed = await storage.consumeFreePrediction(ownerId);
+  if (!consumed) {
+    return {
+      ok: false,
+      code: 'SUBSCRIPTION_REQUIRED',
+      error: '免费预测已用完，请选择 24 小时卡、周卡或月卡'
+    };
+  }
+  return {
+    ok: true,
+    free: true,
+    release: true,
+    billing: billingAccess({ freePredictionUsed: true })
+  };
+}
+
+function apiFootballOptions(env) {
+  return {
+    apiKey: env.API_FOOTBALL_KEY,
+    baseUrl: env.API_FOOTBALL_BASE_URL,
+    proxySecret: env.API_FOOTBALL_PROXY_SECRET
+  };
+}
+
+function apiFootballContextOptions(env, storage) {
+  return {
+    ...apiFootballOptions(env),
+    includeCatalog: true,
+    catalogCache: {
+      read: (cacheKey) => storage.readApiFootballCatalog(cacheKey),
+      write: (cacheKey, catalog) => storage.upsertApiFootballCatalog(cacheKey, catalog)
+    }
+  };
+}
+
+function hasCompleteCatalog(context) {
+  const catalog = context?.catalog;
+  return Boolean(catalog
+    && Array.isArray(catalog.standings)
+    && Array.isArray(catalog.topScorers)
+    && Array.isArray(catalog.teamStatistics)
+    && Array.isArray(catalog.squads)
+    && Array.isArray(catalog.coaches));
 }
 
 function rankingEnv(env, body = {}) {
@@ -354,10 +546,10 @@ function rankingEnv(env, body = {}) {
   return env;
 }
 
-function json(body, status = 200) {
+function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' }
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers }
   });
 }
 
@@ -368,7 +560,7 @@ function corsJson(body, status = 200) {
       'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     }
   });
 }

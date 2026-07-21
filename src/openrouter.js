@@ -123,7 +123,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
       throw new Error(`${client.name} ${response.status}: ${body.slice(0, 300)}`);
     }
 
-    const data = await response.json();
+    const data = await readModelResponse(response);
     const content = extractModelContent(data);
     const parsed = parseModelJson(content);
     return {
@@ -169,30 +169,27 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       throw new Error(`${client.name} ${response.status}: ${body.slice(0, 300)}`);
     }
 
-    const data = await response.json();
+    const data = await readModelResponse(response);
     const content = extractModelContent(data);
-    const parsed = parseModelJson(content);
+    const parsed = normalizeRankingResponse(parseModelJson(content));
     const rawPicks = validateRankingPicks(parsed, markets);
     const rawScorePicks = validateScorePicks(parsed, markets);
-    if (hasEnglishUserFacingText(rawPicks, rawScorePicks)) {
-      if (!retry) {
-        throw new Error('模型返回英文说明，系统已自动重跑一次。');
-      }
-      replaceEnglishUserFacingText(rawPicks, rawScorePicks);
-    }
+    const rawBttsPick = validateBttsPick(parsed);
+    const picks = rawPicks.filter((pick) => pick.estimatedProbability >= 0.6).slice(0, 4);
     const scorePicks = ensureScorePickCount(
-      alignScorePicksWithTotals(rawScorePicks, rawPicks, markets),
-      rawPicks,
+      alignScorePicksWithTotals(rawScorePicks, picks, markets),
+      picks,
       markets
     ).slice(0, SCORE_PICK_COUNT);
-    const picks = completeRankingPicks(rawPicks, scorePicks, markets).slice(0, 4);
+    const bttsPick = rawBttsPick || inferBttsPick(scorePicks);
     return {
       modelName: label,
       modelId: model,
       provider: client.name,
       generatedAt: new Date().toISOString(),
       picks,
-      scorePicks
+      scorePicks,
+      bttsPick
     };
   } catch (error) {
     return {
@@ -202,7 +199,8 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       generatedAt: new Date().toISOString(),
       error: error.message,
       picks: [],
-      scorePicks: []
+      scorePicks: [],
+      bttsPick: null
     };
   }
 }
@@ -321,21 +319,22 @@ function rankingSystemPrompt() {
 
 function rankingSystemPromptV2() {
   return [
-    '你是一名经验丰富、极度谨慎的职业足球分析师，同时具备博彩公司赔率分析师的盘口思维。',
-    '你将收到一组已导入盘口，只能从给定的 market id 中选择，禁止创建新的 market id 或新的盘口。',
-    '你的目标不是单纯预测比赛结果，而是在给定盘口中找出主观命中概率最高、长期期望价值更合理的选择。',
-    '分析优先级：球队真实实力、近期状态、战术匹配、主客场或场地因素、已提供的伤停和轮换、战意、盘口变化、赔率结构、市场倾向；历史交锋只作为低权重参考。',
-    '任何单一因素不得主导最终判断。信息不足时必须降低 confidence，不得虚构伤停、首发、天气、内幕或不存在的信息。',
-    '选择最多 4 个信息优势最明显、不确定性最低、盘口逻辑最合理的盘口；若质量不足，可以少于 4 个。',
-    '高度相关的盘口不要重复推荐，例如同方向的胜平负和让球盘，应优先选择信息增量更高的盘口。',
-    'estimatedProbability 是你对该盘口的主观命中概率，范围 0 到 1，不是赔率隐含概率。',
-    '概率校准：0.90-0.95 属于极高把握，必须极少使用；0.80-0.89 为高把握；0.70-0.79 为较高把握；0.60-0.69 为一般把握；低于 0.60 原则上不推荐。',
-    '始终以长期期望价值为目标，不盲从热门盘口，也不要为了激进而选择低概率选项。',
-    '当命中率与赔率价值冲突时，在保证合理命中率的前提下，优先选择长期 EV 更高的盘口。',
-    'picks 必须按 estimatedProbability 从高到低排序。',
-    '你还必须按用户 prompt 要求返回 scorePicks。比分预测与 picks 分开，除非明确要求，否则不要把比分盘口放入 picks。',
-    'JSON key 和 scoreType 枚举值必须保持英文；所有给用户看的文字内容必须使用简体中文，包括 reason、risks、scorePicks.reason。',
-    '只输出合法 JSON，不输出 Markdown、解释文本、推理过程、投注建议、资金管理建议或 JSON 之外的任何内容。'
+    'You are a professional football betting market analyst with strict probability-calibration discipline.',
+    'Evaluate only the supplied match and candidate markets. Never invent a marketId, selection, injury, lineup, statistic, weather condition, or team fact.',
+    'Your goal is to identify the most predictable, best-supported value opportunities with the clearest information advantage and lowest uncertainty.',
+    'Use every data block that is actually present. Do not invent missing data, and do not treat a missing value as evidence for either team.',
+    'Evidence priority: (1) current standings, recent form, home/away splits, confirmed lineups and injuries; (2) team and player statistics, tactical matchup and squad availability; (3) bookmaker odds and market movement as consensus signals only; (4) H2H, third-party predictions, coaches, venue and competition stage as supporting context.',
+    'H2H must never dominate when the sample is small, old, or drawn from materially different squads.',
+    'estimatedProbability is your independent assessment from 0 to 1. Never back-calculate it from the offered odds.',
+    'Calibrate conservatively: 0.90-0.95 is exceptional and must be extremely rare; 0.80-0.89 is high; 0.70-0.79 is strong; 0.60-0.69 is acceptable. Return only picks at or above 0.60 and reduce confidence when evidence is incomplete.',
+    'Missing information is uncertainty, not evidence of strength or weakness. Never invent a favorable fallback or penalize a team unless a true disadvantage is confirmed in the supplied data.',
+    'Return up to 4 picks, but do not force weak or redundant recommendations. Avoid highly correlated markets when one adds no new information.',
+    'Use odds to assess market consensus and potential value, not as ground truth. The application calculates implied probability and edge.',
+    'Return the existing response contract with picks, scorePicks, and bttsPick. Keep correct-score predictions and both-teams-to-score separate from picks.',
+    'Sort picks and scorePicks by estimatedProbability descending. Keep all probabilities logically consistent with totals, handicaps, scorelines, and bttsPick.',
+    'All JSON keys and enum values must remain in English. All user-facing reason and risks strings must be written in English. All notes must also be in English.',
+    'Never recommend stake sizes, guarantee profit, or claim certainty.',
+    'Output one valid raw JSON object only. Do not output Markdown, prose outside JSON, hidden reasoning, or commentary.'
   ].join('\n');
 }
 
@@ -345,8 +344,12 @@ function completionTokenLimit(provider, limit) {
     : { max_tokens: limit };
 }
 
-function completionTokenBudget(provider, fallback) {
-  return String(provider).toLowerCase() === 'openai' ? 8000 : fallback;
+function completionTokenBudget(provider, fallback, model = '') {
+  const normalizedProvider = String(provider).toLowerCase();
+  const normalizedModel = String(model).toLowerCase();
+  if (normalizedProvider === 'openai') return 8000;
+  if (normalizedProvider === 'apimart' && normalizedModel.includes('gemini')) return 8000;
+  return fallback;
 }
 
 function modelTemperature(provider, value) {
@@ -363,7 +366,7 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
         model,
         instructions: system,
         input: user,
-        max_output_tokens: completionTokenBudget(provider, maxTokens),
+        max_output_tokens: completionTokenBudget(provider, maxTokens, model),
         text: { format: { type: 'json_object' } }
       }
     };
@@ -374,7 +377,7 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
     body: {
       model,
       ...modelTemperature(provider, temperature),
-      ...completionTokenLimit(provider, completionTokenBudget(provider, maxTokens)),
+      ...completionTokenLimit(provider, completionTokenBudget(provider, maxTokens, model)),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user }
@@ -391,9 +394,51 @@ function extractModelContent(data) {
   if (content) return content;
   if (message.refusal) throw new Error(`模型拒绝返回: ${message.refusal}`);
   if (choice.finish_reason === 'length') {
-    throw new Error('模型输出被截断：OpenAI GPT 5.5 消耗了全部 max_completion_tokens，请重跑一次或减少输入数据。');
+    throw new Error('模型输出被截断：已消耗全部输出 token，请重跑一次或减少输入数据。');
   }
   throw new Error(`模型没有返回 content${choice.finish_reason ? `，finish_reason=${choice.finish_reason}` : ''}`);
+}
+
+async function readModelResponse(response) {
+  if (typeof response.text !== 'function') return response.json();
+  const body = await response.text();
+  try {
+    return JSON.parse(body);
+  } catch (error) {
+    const streamed = parseSseCompletion(body);
+    if (streamed) return streamed;
+    throw error;
+  }
+}
+
+function parseSseCompletion(body) {
+  const chunks = String(body || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trim())
+    .filter((line) => line && line !== '[DONE]');
+  if (!chunks.length) return null;
+
+  let content = '';
+  let finishReason = '';
+  let latest = null;
+  for (const chunk of chunks) {
+    const parsed = JSON.parse(chunk);
+    const choice = parsed?.choices?.[0] || {};
+    content += normalizeContent(choice.delta?.content || choice.message?.content || choice.text);
+    finishReason = choice.finish_reason || finishReason;
+    latest = parsed;
+  }
+  if (!latest) return null;
+  return {
+    ...latest,
+    choices: [{
+      ...(latest.choices?.[0] || {}),
+      message: { ...(latest.choices?.[0]?.message || {}), content },
+      finish_reason: finishReason || latest.choices?.[0]?.finish_reason
+    }]
+  };
 }
 
 function responseOutputText(data) {
@@ -462,8 +507,8 @@ function rankingUserPrompt(markets, matchContext, retry) {
 function rankingUserPromptV2(markets, matchContext, retry) {
   return JSON.stringify({
     task: retry
-      ? '上次输出无效。请严格返回 JSON 对象：最多 4 个盘口 picks，并且 exactly 4 个比分预测 scorePicks。所有 reason 和 risks 必须使用简体中文。'
-      : '按 estimatedProbability 从高到低选择最佳盘口，并提供 exactly 4 个比分预测：2 个主线比分、1 个盘口匹配比分、1 个激进比分。所有 reason 和 risks 必须使用简体中文。',
+      ? 'The previous output was invalid. Return one valid JSON object with up to 4 qualifying picks, exactly 4 scorePicks, and exactly 1 bttsPick. Use English for every reason, risk, and note.'
+      : 'Return up to 4 best-supported markets with independent estimatedProbability of at least 0.60, then provide exactly 4 correct-score paths and 1 both-teams-to-score assessment. Use English for every reason, risk, and note.',
     markets,
     matchContext: compactMatchContext(matchContext),
     requiredShape: {
@@ -472,8 +517,8 @@ function rankingUserPromptV2(markets, matchContext, retry) {
           marketId: 'must come from markets[].id',
           estimatedProbability: 0.61,
           confidence: 0.45,
-          reason: '一句简体中文理由',
-          risks: ['最多 3 条简体中文风险']
+          reason: 'One concise evidence-based reason in English',
+          risks: ['Up to 3 concise risks in English']
         }
       ],
       scorePicks: [
@@ -483,25 +528,34 @@ function rankingUserPromptV2(markets, matchContext, retry) {
           scoreType: 'mainline | market_fit | aggressive',
           estimatedProbability: 0.18,
           confidence: 0.36,
-          reason: '一句简体中文比分理由'
+          reason: 'One concise scoreline reason in English'
         }
-      ]
+      ],
+      bttsPick: {
+        selection: 'Yes | No',
+        estimatedProbability: 0.62,
+        confidence: 0.48,
+        reason: 'One concise evidence-based reason in English',
+        risks: ['Up to 3 concise risks in English']
+      }
     },
     rules: [
-      '只返回 JSON，不要 Markdown。',
-      'picks 必须包含 3 到 4 个非比分盘口选择，并且只能使用 markets[].id 中存在的 id。',
-      '条件允许时，picks 应覆盖常见类型：一个胜平负/moneyline、一个亚洲让分盘/handicap、一个大小球/total，再加一个最强额外选择。',
-      '除非没有其他盘口，否则不要把正确比分盘口放入 picks；正确比分只放在 scorePicks。',
-      'scorePicks 必须 exactly 4 个：前两个 scoreType=mainline，第三个 scoreType=market_fit，第四个 scoreType=aggressive。',
-      'mainline 是最现实的两个比分；market_fit 必须匹配你的让球/大小球方向；aggressive 是更高方差但仍合理的比分。',
-      '先判断大小球方向，再预测具体比分。scorePicks 必须与你最强的大小球/total pick 保持一致。',
-      '如果 picks 选择 大/over 2.5，则每个 scorePick 总进球必须 >= 3；如果选择 小/under 2.5，则每个 scorePick 总进球必须 <= 2。',
-      '如果 picks 选择 大/over 3.5，则每个 scorePick 总进球必须 >= 4；如果选择 小/under 3.5，则每个 scorePick 总进球必须 <= 3。',
-      'scorePicks 有可用比分 marketId 时使用对应 id；没有合适比分 marketId 时仍然提供 score 文本。',
-      'estimatedProbability 是 AI 主观预测概率，不是赔率换算概率。',
-      'picks 和 scorePicks 都按 estimatedProbability 从高到低排序。',
-      '所有 reason、risks、scorePicks.reason 必须使用简体中文，不要夹杂英文句子。',
-      '不要承诺盈利，不要建议下注金额。'
+      'Return raw JSON only, with no Markdown.',
+      'picks may contain 0-4 non-score selections, every estimatedProbability must be at least 0.60, and every marketId must exist in markets[].id.',
+      'Return fewer picks when fewer than 4 markets meet the threshold. Never fill the list with a weaker selection.',
+      'When evidence permits, diversify across moneyline, handicap, and total markets, but do not add a correlated market merely to cover a category.',
+      'Do not place correct-score markets in picks unless no other valid market exists; correct scores belong in scorePicks.',
+      'scorePicks must contain exactly 4 entries: two mainline, one market_fit, and one aggressive.',
+      'The mainline scores are the two most realistic paths; market_fit must fit the strongest handicap/total view; aggressive is higher variance but still plausible.',
+      'Assess the total-goals direction before selecting scorelines, and keep every scorePick consistent with the strongest total pick.',
+      'If picks contains Over 2.5, every scorePick must total at least 3 goals; if it contains Under 2.5, every scorePick must total at most 2 goals.',
+      'If picks contains Over 3.5, every scorePick must total at least 4 goals; if it contains Under 3.5, every scorePick must total at most 3 goals.',
+      'Use an existing score marketId when available; otherwise still provide the score text.',
+      'bttsPick selection must be exactly "Yes" or "No" and must be logically consistent with the weighted scorePicks.',
+      'estimatedProbability is an independent model probability, not an odds conversion.',
+      'Sort picks and scorePicks by estimatedProbability descending.',
+      'Write reason, risks, scorePicks.reason, and bttsPick.reason in English only.',
+      'Do not promise profit or recommend a stake amount.'
     ]
   });
 }
@@ -511,6 +565,8 @@ function compactMatchContext(context) {
     source: context.source,
     matchName: context.matchName,
     kickoff: context.kickoff,
+    fixture: context.fixture,
+    catalog: context.catalog,
     analysis: context.analysis,
     lineup: context.lineup,
     index: context.index,
@@ -724,6 +780,59 @@ function sameTeam(selection, team) {
   return a && b && (a.includes(b) || b.includes(a));
 }
 
+function normalizeRankingResponse(parsed) {
+  if (!parsed || typeof parsed !== 'object') return parsed;
+  const selections = Array.isArray(parsed.selections) ? parsed.selections : [];
+  const scorelines = Array.isArray(parsed.scorelinePredictions) ? parsed.scorelinePredictions : [];
+  const fallbackQuality = selections.find((item) => item?.dataQuality)?.dataQuality;
+  const analystNote = String(parsed.analystNote || '').trim();
+
+  return {
+    ...parsed,
+    picks: Array.isArray(parsed.picks)
+      ? parsed.picks
+      : selections.map((item) => ({
+          ...item,
+          confidence: alternateConfidence(item, fallbackQuality),
+          reason: alternateReason(item, analystNote),
+          risks: Array.isArray(item?.risks) ? item.risks : []
+        })),
+    scorePicks: Array.isArray(parsed.scorePicks)
+      ? parsed.scorePicks
+      : scorelines.map((item) => ({
+          ...item,
+          score: item?.score ?? item?.scoreline,
+          confidence: alternateConfidence(item, fallbackQuality),
+          reason: alternateReason(item, 'Model scoreline projection.')
+        })),
+    bttsPick: parsed.bttsPick || (parsed.bothTeamsToScore
+      ? {
+          ...parsed.bothTeamsToScore,
+          confidence: alternateConfidence(parsed.bothTeamsToScore, fallbackQuality),
+          reason: alternateReason(parsed.bothTeamsToScore, analystNote),
+          risks: Array.isArray(parsed.bothTeamsToScore.risks) ? parsed.bothTeamsToScore.risks : []
+        }
+      : null)
+  };
+}
+
+function alternateConfidence(item, fallbackQuality) {
+  const explicit = normalizeModelProbability(item?.confidence);
+  if (explicit !== null) return explicit;
+  const quality = String(item?.dataQuality || fallbackQuality || '').toUpperCase();
+  const qualityConfidence = quality === 'FULL' ? 0.65 : quality === 'PARTIAL' ? 0.5 : quality === 'MINIMAL' ? 0.35 : 0.4;
+  return item?.confidenceFlag === false ? Math.min(qualityConfidence, 0.35) : qualityConfidence;
+}
+
+function alternateReason(item, fallback = '') {
+  const reason = String(item?.reason || '').trim();
+  if (reason) return reason;
+  const factors = Array.isArray(item?.keyFactors)
+    ? item.keyFactors.map((factor) => String(factor).trim()).filter(Boolean)
+    : [];
+  return factors.length ? factors.join('; ') : fallback;
+}
+
 function validateRankingPicks(parsed, markets) {
   const allowed = new Map(markets.map((market) => [market.id, market]));
   const rawPicks = Array.isArray(parsed?.picks) ? parsed.picks : [];
@@ -906,7 +1015,7 @@ function inferMoneylinePick(markets, margin, scorePick) {
       ? sameTeam(market.selection, teams[0])
       : sameTeam(market.selection, teams[1]);
   });
-  return target ? inferredPick(target, scorePick, '根据模型最高比分推导出的胜平负方向') : null;
+  return target ? inferredPick(target, scorePick, 'Match result direction inferred from the model\'s highest-probability scoreline.') : null;
 }
 
 function inferTotalPick(markets, totalGoals, scorePick) {
@@ -919,7 +1028,7 @@ function inferTotalPick(markets, totalGoals, scorePick) {
       ? /大|over/i.test(String(market.selection || ''))
       : /小|under/i.test(String(market.selection || ''));
   });
-  return target ? inferredPick(target, scorePick, '根据模型最高比分总进球推导出的大小球方向') : null;
+  return target ? inferredPick(target, scorePick, 'Goals-total direction inferred from the model\'s highest-probability scoreline.') : null;
 }
 
 function inferHandicapPick(markets, margin, scorePick) {
@@ -932,7 +1041,7 @@ function inferHandicapPick(markets, margin, scorePick) {
       if (margin < 0) return sameTeam(market.selection, teams[1]);
       return Number(String(market.line || '').replace('+', '')) > 0;
     });
-  return target ? inferredPick(target, scorePick, '根据模型最高比分净胜球推导出的让球方向') : null;
+  return target ? inferredPick(target, scorePick, 'Handicap direction inferred from the model\'s highest-probability scoreline.') : null;
 }
 
 function inferredPick(market, scorePick, reason) {
@@ -944,7 +1053,7 @@ function inferredPick(market, scorePick, reason) {
     confidence: Math.max(0.25, Math.min(0.55, Number(scorePick?.confidence || 0.32))),
     reason,
     inferred: true,
-    risks: ['该盘口由比分预测自动补齐，非模型直接选择；请结合直接盘口卡片一起看。']
+    risks: ['This market was inferred from score predictions rather than selected directly by the model.']
   };
 }
 
@@ -1011,6 +1120,52 @@ function validateScorePicks(parsed, markets) {
     .map((pick, index) => ({ ...pick, scoreType: normalizeScoreType(pick.scoreType, index) }));
 }
 
+function validateBttsPick(parsed) {
+  const raw = parsed?.bttsPick;
+  if (!raw || typeof raw !== 'object') return null;
+  const selection = normalizeBttsSelection(raw.selection ?? raw.bothTeamsToScore);
+  const estimatedProbability = normalizeModelProbability(raw.estimatedProbability);
+  const confidence = normalizeModelProbability(raw.confidence);
+  if (!selection || estimatedProbability === null || confidence === null) return null;
+  return {
+    selection,
+    estimatedProbability,
+    confidence,
+    reason: String(raw.reason || '').trim().slice(0, 240),
+    risks: Array.isArray(raw.risks) ? raw.risks.map(String).slice(0, 3) : []
+  };
+}
+
+function normalizeBttsSelection(value) {
+  if (value === true) return 'Yes';
+  if (value === false) return 'No';
+  const text = String(value || '').trim().toLowerCase();
+  if (['是', 'yes', 'y', 'both', 'btts yes'].includes(text)) return 'Yes';
+  if (['否', 'no', 'n', 'not both', 'btts no'].includes(text)) return 'No';
+  return '';
+}
+
+function inferBttsPick(scorePicks = []) {
+  const weighted = scorePicks
+    .map((pick) => ({ pick, score: parseScorePair(pick.score), weight: Number(pick.estimatedProbability) }))
+    .filter((item) => item.score && Number.isFinite(item.weight) && item.weight > 0);
+  if (!weighted.length) return null;
+  const yesWeight = weighted
+    .filter((item) => item.score[0] > 0 && item.score[1] > 0)
+    .reduce((sum, item) => sum + item.weight, 0);
+  const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+  const yes = yesWeight >= totalWeight - yesWeight;
+  const estimatedProbability = yes ? yesWeight / totalWeight : (totalWeight - yesWeight) / totalWeight;
+  const confidence = weighted.reduce((sum, item) => sum + Number(item.pick.confidence || 0), 0) / weighted.length;
+  return {
+    selection: yes ? 'Yes' : 'No',
+    estimatedProbability: Math.max(0.5, Math.min(0.85, estimatedProbability)),
+    confidence: Math.max(0.2, Math.min(0.65, confidence * 0.8)),
+    reason: yes ? 'The highest-probability scorelines more often contain goals by both teams.' : 'The highest-probability scorelines more often contain a clean sheet for at least one team.',
+    risks: ['This assessment was inferred from score predictions and should be reviewed against confirmed lineups.']
+  };
+}
+
 function normalizeScoreType(value, index = 0) {
   const text = String(value || '').toLowerCase().replace(/[\s-]+/g, '_');
   if (['mainline', 'main', 'primary'].includes(text)) return 'mainline';
@@ -1048,41 +1203,4 @@ function normalizeModelProbability(value) {
   if (num > 1 && num <= 100) return num / 100;
   if (num >= 0 && num <= 1) return num;
   return null;
-}
-
-function hasEnglishUserFacingText(picks = [], scorePicks = []) {
-  return [...picks, ...scorePicks].some((pick) => {
-    if (looksLikeEnglishSentence(pick.reason)) return true;
-    return Array.isArray(pick.risks) && pick.risks.some(looksLikeEnglishSentence);
-  });
-}
-
-function replaceEnglishUserFacingText(picks = [], scorePicks = []) {
-  for (const pick of picks) {
-    if (looksLikeEnglishSentence(pick.reason)) {
-      pick.reason = '模型返回了英文分析，系统已隐藏原文；建议结合该盘口方向、概率和置信度复核。';
-    }
-    if (Array.isArray(pick.risks)) {
-      pick.risks = pick.risks.map((risk) => (
-        looksLikeEnglishSentence(risk)
-          ? '模型返回了英文风险说明，建议重跑该模型获取中文风险。'
-          : risk
-      ));
-    }
-  }
-  for (const pick of scorePicks) {
-    if (looksLikeEnglishSentence(pick.reason)) {
-      pick.reason = '模型返回了英文比分理由，系统已隐藏原文。';
-    }
-  }
-}
-
-function looksLikeEnglishSentence(value = '') {
-  const text = String(value || '').trim();
-  if (!text) return false;
-  const latinWords = text.match(/[A-Za-z]{3,}/g) || [];
-  if (latinWords.length < 4) return false;
-  const latinChars = latinWords.join('').length;
-  const cjkChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
-  return latinChars > Math.max(18, cjkChars * 1.5);
 }

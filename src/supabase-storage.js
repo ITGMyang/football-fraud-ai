@@ -2,12 +2,16 @@ const TABLES = {
   markets: 'markets',
   reports: 'reports',
   rankings: 'rankings',
-  matchContexts: 'match_contexts'
+  matchContexts: 'match_contexts',
+  matchSchedules: 'match_schedules',
+  apiFootballCatalogCache: 'api_football_catalog_cache',
+  billingOrders: 'billing_orders',
+  billingEntitlements: 'billing_entitlements'
 };
 
 export function createSupabaseStorage(env, fetchImpl = fetch) {
   const baseUrl = String(env.SUPABASE_URL || '').replace(/^\uFEFF/, '').trim().replace(/\/$/, '');
-  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_KEY || '';
+  const serviceKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY || '';
   if (!baseUrl || !serviceKey) {
     throw new Error('Cloudflare 部署需要配置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 或 SUPABASE_SECRET_KEY');
   }
@@ -15,46 +19,49 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
   const client = new SupabaseRestClient(baseUrl, serviceKey, fetchImpl);
 
   return {
-    async readDb() {
+    async readDb({ ownerId = 'guest' } = {}) {
       const [markets, reports, rankings, matchContexts] = await Promise.all([
-        readPayloads(client, TABLES.markets, 'updated_at.desc', 500),
-        readPayloads(client, TABLES.reports, 'created_at.desc', 100),
-        readPayloads(client, TABLES.rankings, 'created_at.desc', 50),
-        readPayloads(client, TABLES.matchContexts, 'updated_at.desc', 20)
+        readPayloads(client, TABLES.markets, 'updated_at.desc', 500, ownerId),
+        readPayloads(client, TABLES.reports, 'created_at.desc', 100, ownerId),
+        readPayloads(client, TABLES.rankings, 'created_at.desc', 50, ownerId),
+        readPayloads(client, TABLES.matchContexts, 'updated_at.desc', 20, ownerId)
       ]);
       return { markets, reports, rankings, matchContexts };
     },
 
-    async upsertMarkets(markets) {
+    async upsertMarkets(markets, { ownerId = 'guest' } = {}) {
       if (!markets.length) return [];
       await client.upsert(TABLES.markets, markets.map((market) => ({
         id: market.id,
+        owner_id: ownerId,
         payload: market,
         updated_at: new Date().toISOString()
-      })));
+      })), 'owner_id,id');
       return markets;
     },
 
-    async clearMarkets() {
+    async clearMarkets({ ownerId = 'guest' } = {}) {
       await Promise.all([
-        client.deleteAll(TABLES.markets),
-        client.deleteAll(TABLES.reports),
-        client.deleteAll(TABLES.rankings)
+        client.deleteAll(TABLES.markets, ownerId),
+        client.deleteAll(TABLES.reports, ownerId),
+        client.deleteAll(TABLES.rankings, ownerId),
+        client.deleteAll(TABLES.matchContexts, ownerId)
       ]);
     },
 
-    async saveReport(report) {
+    async saveReport(report, { ownerId = 'guest' } = {}) {
       await client.upsert(TABLES.reports, [{
         id: report.id,
+        owner_id: ownerId,
         payload: report,
         created_at: report.createdAt || new Date().toISOString()
-      }]);
+      }], 'owner_id,id');
       return report;
     },
 
-    async saveRanking(ranking, { mergeLatest = false } = {}) {
+    async saveRanking(ranking, { mergeLatest = false, ownerId = 'guest' } = {}) {
       if (mergeLatest) {
-        const rankings = await readPayloads(client, TABLES.rankings, 'created_at.desc', 50);
+        const rankings = await readPayloads(client, TABLES.rankings, 'created_at.desc', 50, ownerId);
         const latest = ranking.contextId
           ? rankings.find((item) => item.contextId === ranking.contextId)
           : rankings[0];
@@ -73,31 +80,181 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
           if (ranking.contextName) latest.contextName = ranking.contextName;
           await client.upsert(TABLES.rankings, [{
             id: latest.id,
+            owner_id: ownerId,
             payload: latest,
             created_at: latest.createdAt
-          }]);
+          }], 'owner_id,id');
           return latest;
         }
       }
 
       await client.upsert(TABLES.rankings, [{
         id: ranking.id,
+        owner_id: ownerId,
         payload: ranking,
         created_at: ranking.createdAt || new Date().toISOString()
-      }]);
+      }], 'owner_id,id');
       return ranking;
     },
 
-    async upsertMatchContext(context) {
+    async upsertMatchContext(context, { ownerId = 'guest' } = {}) {
       await client.upsert(TABLES.matchContexts, [{
         id: context.id,
+        owner_id: ownerId,
         source_url: context.sourceUrl || context.id,
         payload: context,
         captured_at: context.capturedAt || new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }]);
+      }], 'owner_id,id');
       return context;
+    },
+
+    async readMatchSchedule(competitionId) {
+      const rows = await client.select(TABLES.matchSchedules, 'updated_at.desc', 1, '', `competition_id=eq.${encodeURIComponent(competitionId)}`);
+      return rows[0]?.payload || null;
+    },
+
+    async listMatchSchedules() {
+      return readPayloads(client, TABLES.matchSchedules, 'updated_at.desc', 100);
+    },
+
+    async upsertMatchSchedules(schedules) {
+      if (!schedules.length) return [];
+      const now = new Date().toISOString();
+      await client.upsert(TABLES.matchSchedules, schedules.map((schedule) => ({
+        id: `competition:${schedule.competitionId}`,
+        competition_id: String(schedule.competitionId),
+        payload: schedule,
+        fetched_at: schedule.fetchedAt || now,
+        updated_at: now
+      })), 'competition_id');
+      return schedules;
+    },
+
+    async readApiFootballCatalog(cacheKey, { now = Date.now(), maxAgeMs = 60 * 60 * 1000 } = {}) {
+      const rows = await client.select(
+        TABLES.apiFootballCatalogCache,
+        'updated_at.desc',
+        1,
+        '',
+        `cache_key=eq.${cacheKey}`
+      );
+      const cached = rows[0]?.payload;
+      const fetchedAt = Date.parse(cached?.fetchedAt || '');
+      if (!cached?.catalog || !Number.isFinite(fetchedAt) || now - fetchedAt > maxAgeMs) return null;
+      return cached.catalog;
+    },
+
+    async upsertApiFootballCatalog(cacheKey, catalog) {
+      const now = new Date().toISOString();
+      await client.upsert(TABLES.apiFootballCatalogCache, [{
+        cache_key: cacheKey,
+        payload: { catalog, fetchedAt: now },
+        fetched_at: now,
+        updated_at: now
+      }], 'cache_key');
+      return catalog;
+    },
+
+    async createBillingOrder(order) {
+      const now = new Date().toISOString();
+      await client.upsert(TABLES.billingOrders, [{
+        id: order.id,
+        owner_id: order.ownerId,
+        plan_id: order.planId,
+        amount_cents: order.amountCents,
+        allscale_intent_id: order.intentId || null,
+        checkout_url: order.checkoutUrl || null,
+        status: Number.isFinite(Number(order.status)) ? Number(order.status) : 1,
+        request_id: order.requestId || null,
+        created_at: order.createdAt || now,
+        updated_at: now
+      }]);
+      return order;
+    },
+
+    async updateBillingOrder(orderId, fields = {}) {
+      const fieldsToUpdate = {
+        ...(fields.intentId ? { allscale_intent_id: fields.intentId } : {}),
+        ...(fields.checkoutUrl ? { checkout_url: fields.checkoutUrl } : {}),
+        ...(Number.isFinite(Number(fields.status)) ? { status: Number(fields.status) } : {}),
+        ...(fields.requestId ? { request_id: fields.requestId } : {}),
+        updated_at: new Date().toISOString()
+      };
+      await client.updateRows(TABLES.billingOrders, fieldsToUpdate, { id: `eq.${orderId}` });
+      return fields;
+    },
+
+    async readBillingOrder(ownerId, orderId) {
+      const rows = await client.selectRows(TABLES.billingOrders, '*', {
+        owner_id: `eq.${ownerId}`,
+        id: `eq.${orderId}`,
+        limit: '1'
+      });
+      return rows[0] ? mapBillingOrder(rows[0]) : null;
+    },
+
+    async countRecentBillingOrders(ownerId, since) {
+      const rows = await client.selectRows(TABLES.billingOrders, 'id', {
+        owner_id: `eq.${ownerId}`,
+        created_at: `gte.${since}`,
+        limit: '10'
+      });
+      return rows.length;
+    },
+
+    async readBillingEntitlement(ownerId) {
+      const rows = await client.selectRows(TABLES.billingEntitlements, '*', {
+        owner_id: `eq.${ownerId}`,
+        limit: '1'
+      });
+      return rows[0] ? mapBillingEntitlement(rows[0]) : {};
+    },
+
+    async consumeFreePrediction(ownerId) {
+      return Boolean(await client.rpc('consume_free_prediction', { p_owner_id: ownerId }));
+    },
+
+    async releaseFreePrediction(ownerId) {
+      await client.rpc('release_free_prediction', { p_owner_id: ownerId });
+    },
+
+    async confirmAllScalePayment(input) {
+      return client.rpc('confirm_allscale_payment', {
+        p_intent_id: input.intentId,
+        p_webhook_id: input.webhookId,
+        p_nonce: input.nonce,
+        p_transaction_id: input.transactionId || null,
+        p_amount_cents: input.amountCents ?? null,
+        p_payload: input.payload || {}
+      });
     }
+  };
+}
+
+function mapBillingOrder(row) {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    planId: row.plan_id,
+    amountCents: row.amount_cents,
+    intentId: row.allscale_intent_id,
+    checkoutUrl: row.checkout_url,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    confirmedAt: row.confirmed_at,
+    expiresAt: row.expires_at
+  };
+}
+
+function mapBillingEntitlement(row) {
+  return {
+    ownerId: row.owner_id,
+    planId: row.plan_id,
+    validUntil: row.valid_until,
+    freePredictionUsed: Boolean(row.free_prediction_used),
+    updatedAt: row.updated_at
   };
 }
 
@@ -111,8 +268,8 @@ function resultModelKey(modelName = '') {
   return text || 'ai';
 }
 
-async function readPayloads(client, table, order, limit) {
-  const rows = await client.select(table, order, limit);
+async function readPayloads(client, table, order, limit, ownerId = '') {
+  const rows = await client.select(table, order, limit, ownerId);
   return rows.map((row) => row.payload).filter(Boolean);
 }
 
@@ -123,25 +280,57 @@ class SupabaseRestClient {
     this.fetchImpl = fetchImpl;
   }
 
-  async select(table, order, limit) {
+  async select(table, order, limit, ownerId = '', filter = '') {
     const query = new URLSearchParams({
       select: 'payload',
       order,
       limit: String(limit)
     });
+    if (ownerId) query.set('owner_id', `eq.${ownerId}`);
+    if (filter) {
+      const [column, value] = filter.split('=', 2);
+      if (column && value) query.set(column, value);
+    }
     return this.request(`${table}?${query.toString()}`);
   }
 
-  async upsert(table, rows) {
-    return this.request(`${table}?on_conflict=id`, {
+  async upsert(table, rows, conflict = 'id') {
+    return this.request(`${table}?on_conflict=${conflict}`, {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(rows)
     });
   }
 
-  async deleteAll(table) {
-    return this.request(`${table}?id=not.is.null`, {
+  async selectRows(table, columns = '*', filters = {}) {
+    const query = new URLSearchParams({ select: columns });
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+    }
+    return this.request(`${table}?${query.toString()}`);
+  }
+
+  async rpc(name, body) {
+    return this.request(`rpc/${name}`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }
+
+  async updateRows(table, fields, filters = {}) {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) query.set(key, String(value));
+    return this.request(`${table}?${query.toString()}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify(fields)
+    });
+  }
+
+  async deleteAll(table, ownerId = '') {
+    const query = new URLSearchParams({ id: 'not.is.null' });
+    if (ownerId) query.set('owner_id', `eq.${ownerId}`);
+    return this.request(`${table}?${query.toString()}`, {
       method: 'DELETE',
       headers: { Prefer: 'return=minimal' }
     });
