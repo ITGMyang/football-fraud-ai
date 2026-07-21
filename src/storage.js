@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { predictionModelKey } from './prediction-cache.js';
 
 const DATA_DIR = path.resolve('data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -8,7 +9,8 @@ const initialState = {
   markets: [],
   reports: [],
   rankings: [],
-  matchContexts: []
+  matchContexts: [],
+  sharedPredictionResults: []
 };
 
 export function readDb({ ownerId = 'legacy' } = {}) {
@@ -92,15 +94,28 @@ export function saveRanking(ranking, { mergeLatest = false, ownerId = 'legacy' }
   return ranking;
 }
 
-function resultModelKey(modelName = '') {
-  const text = String(modelName || '').toLowerCase();
-  if (text.includes('gpt') || text.includes('openai')) return 'gpt';
-  if (text.includes('claude')) return 'claude';
-  if (text.includes('gemini')) return 'gemini';
-  if (text.includes('deepseek')) return 'deepseek';
-  if (text.includes('qwen') || text.includes('通义')) return 'qwen';
-  return text || 'ai';
+export function readSharedPredictionResults(fixtureId) {
+  const db = readAllDb();
+  return (db.sharedPredictionResults || [])
+    .filter((row) => row.fixtureId === String(fixtureId))
+    .map(({ modelKey, result }) => ({ modelKey, result }));
 }
+
+export function saveSharedPredictionResults(fixtureId, results = []) {
+  const db = readAllDb();
+  if (!Array.isArray(db.sharedPredictionResults)) db.sharedPredictionResults = [];
+  for (const result of results) {
+    const modelKey = predictionModelKey(result.modelName || result.modelId);
+    const index = db.sharedPredictionResults.findIndex((row) => row.fixtureId === String(fixtureId) && row.modelKey === modelKey);
+    const row = { fixtureId: String(fixtureId), modelKey, result };
+    if (index >= 0) db.sharedPredictionResults[index] = row;
+    else db.sharedPredictionResults.push(row);
+  }
+  writeDb(db);
+  return results;
+}
+
+const resultModelKey = predictionModelKey;
 
 export function upsertMatchContext(context, { ownerId = 'legacy' } = {}) {
   const db = readAllDb();

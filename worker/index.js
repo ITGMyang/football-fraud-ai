@@ -17,6 +17,7 @@ import {
 } from '../src/api-football-cache.js';
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
+import { resolveSharedRanking } from '../src/prediction-cache.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from '../src/context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
@@ -456,10 +457,27 @@ async function routeApi(request, env, access) {
     if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
     const requestedModel = predictionAccess.free ? 'Qwen' : (body.model || 'all');
     try {
-      const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(env, body), workerFetch, context);
+      const fixtureId = String(context?.matchId || '');
+      const shared = fixtureId
+        ? await resolveSharedRanking({
+          fixtureId,
+          contextName: context?.matchName || '',
+          markets: db.markets,
+          requestedModel,
+          env: rankingEnv(env, body),
+          fetchImpl: workerFetch,
+          storage,
+          matchContext: context
+        })
+        : {
+          cacheHit: false,
+          freshResults: null,
+          ranking: await rankMarkets(db.markets, requestedModel, rankingEnv(env, body), workerFetch, context)
+        };
+      const ranking = shared.ranking;
       ranking.contextId = context ? contextKey(context) : '';
       ranking.contextName = context?.matchName || '';
-      await recordAiUsage(storage, ranking.results, {
+      await recordAiUsage(storage, shared.freshResults || ranking.results, {
         ownerId, requestKind: 'ranking', contextId: ranking.contextId
       });
       const savedRanking = await storage.saveRanking(ranking, {
@@ -469,7 +487,12 @@ async function routeApi(request, env, access) {
       const headers = access.consumeGuestPrediction
         ? { 'Set-Cookie': await guestPredictionCookie(env, request) }
         : {};
-      return json({ ranking: savedRanking, billing: predictionAccess.billing, model: requestedModel }, 200, headers);
+      return json({
+        ranking: savedRanking,
+        billing: predictionAccess.billing,
+        model: requestedModel,
+        cached: shared.cacheHit
+      }, 200, headers);
     } catch (error) {
       if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
       throw error;

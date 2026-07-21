@@ -37,6 +37,36 @@ test('Supabase storage scopes predictions to the authenticated owner', async () 
   assert.match(rankingWrite.options.body, /"owner_id":"user-123"/);
 });
 
+test('Supabase shared prediction cache is keyed by fixture and model without an owner filter', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (!options.method) {
+      return new Response(JSON.stringify([{
+        fixture_id: '1591866', model_key: 'qwen', payload: { modelName: 'Qwen 3.7 Max' }
+      }]), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(null, { status: 204 });
+  });
+
+  const cached = await storage.readSharedPredictionResults('1591866');
+  await storage.saveSharedPredictionResults('1591866', [{
+    modelName: 'Qwen 3.7 Max', modelId: 'qwen/qwen3.7-max', picks: []
+  }]);
+
+  assert.deepEqual(cached, [{ modelKey: 'qwen', result: { modelName: 'Qwen 3.7 Max' } }]);
+  const read = requests.find(({ options }) => !options.method);
+  const write = requests.find(({ options }) => options.method === 'POST');
+  assert.match(read.url, /shared_prediction_results\?/);
+  assert.match(read.url, /fixture_id=eq\.1591866/);
+  assert.doesNotMatch(read.url, /owner_id/);
+  assert.match(write.options.body, /"fixture_id":"1591866"/);
+  assert.match(write.options.body, /"model_key":"qwen"/);
+});
+
 test('Supabase schedule cache upserts by competition id', async () => {
   const requests = [];
   const storage = createSupabaseStorage({

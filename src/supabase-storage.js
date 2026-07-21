@@ -1,3 +1,5 @@
+import { predictionModelKey } from './prediction-cache.js';
+
 const TABLES = {
   markets: 'markets',
   reports: 'reports',
@@ -8,7 +10,8 @@ const TABLES = {
   aiUsageEvents: 'ai_usage_events',
   systemEvents: 'system_events',
   billingOrders: 'billing_orders',
-  billingEntitlements: 'billing_entitlements'
+  billingEntitlements: 'billing_entitlements',
+  sharedPredictionResults: 'shared_prediction_results'
 };
 
 export function createSupabaseStorage(env, fetchImpl = fetch) {
@@ -97,6 +100,27 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         created_at: ranking.createdAt || new Date().toISOString()
       }], 'owner_id,id');
       return ranking;
+    },
+
+    async readSharedPredictionResults(fixtureId) {
+      const rows = await client.selectRows(TABLES.sharedPredictionResults, 'model_key,payload', {
+        fixture_id: `eq.${fixtureId}`,
+        order: 'created_at.asc'
+      });
+      return rows.map((row) => ({ modelKey: row.model_key, result: row.payload }));
+    },
+
+    async saveSharedPredictionResults(fixtureId, results = []) {
+      if (!results.length) return [];
+      await client.upsert(TABLES.sharedPredictionResults, results.map((result) => ({
+        fixture_id: String(fixtureId),
+        model_key: predictionModelKey(result.modelName || result.modelId),
+        model_id: result.modelId || null,
+        payload: result,
+        created_at: result.generatedAt || new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })), 'fixture_id,model_key');
+      return results;
     },
 
     async upsertMatchContext(context, { ownerId = 'guest' } = {}) {

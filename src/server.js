@@ -7,11 +7,21 @@ import { fetchApiFootballContext, fetchApiFootballMatches } from './api-football
 import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
+import { resolveSharedRanking } from './prediction-cache.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from './context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from './evaluation.js';
 import { authConfig } from './auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from './guest-access.js';
-import { clearMarkets, readDb, saveRanking, saveReport, upsertMarkets, upsertMatchContext } from './storage.js';
+import {
+  clearMarkets,
+  readDb,
+  readSharedPredictionResults,
+  saveRanking,
+  saveReport,
+  saveSharedPredictionResults,
+  upsertMarkets,
+  upsertMatchContext
+} from './storage.js';
 
 loadEnv();
 
@@ -189,7 +199,23 @@ async function route(req, res) {
       : (db.matchContexts || [])[0] || null;
     if (!db.markets.length && !context) return json(res, 400, { error: 'No API-Football match data has been imported' });
     const requestedModel = body.model || 'all';
-    const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(process.env, body), openRouterFetch, context);
+    const fixtureId = String(context?.matchId || '');
+    const shared = fixtureId
+      ? await resolveSharedRanking({
+        fixtureId,
+        contextName: context?.matchName || '',
+        markets: db.markets,
+        requestedModel,
+        env: rankingEnv(process.env, body),
+        fetchImpl: openRouterFetch,
+        storage: { readSharedPredictionResults, saveSharedPredictionResults },
+        matchContext: context
+      })
+      : {
+        cacheHit: false,
+        ranking: await rankMarkets(db.markets, requestedModel, rankingEnv(process.env, body), openRouterFetch, context)
+      };
+    const ranking = shared.ranking;
     ranking.contextId = context ? contextKey(context) : '';
     ranking.contextName = context?.matchName || '';
     const savedRanking = saveRanking(ranking, {
@@ -199,7 +225,7 @@ async function route(req, res) {
     const headers = access.consumeGuestPrediction
       ? { 'Set-Cookie': await guestPredictionCookie(process.env, req) }
       : {};
-    return json(res, 200, { ranking: savedRanking }, headers);
+    return json(res, 200, { ranking: savedRanking, cached: shared.cacheHit }, headers);
   }
 
   return json(res, 404, { error: 'Not found' });
