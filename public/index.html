@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Football Fraud</title>
-    <link rel="stylesheet" href="/styles.css?v=20260721-001">
+    <link rel="stylesheet" href="/styles.css?v=20260721-003">
   </head>
   <body>
     <nav class="floating-nav" aria-label="Main navigation">
@@ -13,6 +13,7 @@
         <a href="#matchSchedule">How It Works</a>
         <a href="/data">Imported Data</a>
         <a href="/backend">Data Console</a>
+        <a id="adminNavLink" href="/admin" hidden>Operations</a>
         <a href="/analytics">Accuracy</a>
         <a href="#historyPanel">History</a>
         <a href="#subscriptionPanel">Pricing</a>
@@ -122,6 +123,55 @@
         <div id="backendContent" class="backend-content" aria-live="polite">
           <p class="meta">Sign in to read the Supabase cache.</p>
         </div>
+      </section>
+
+      <section id="adminDashboard" class="admin-dashboard" hidden>
+        <header class="admin-head">
+          <div>
+            <span class="admin-eyebrow">FUTBOTS CONTROL ROOM</span>
+            <h2>Operations Dashboard</h2>
+            <p>Live product usage, model cost, access, and revenue signals.</p>
+          </div>
+          <div class="admin-head-actions">
+            <span id="adminUpdatedAt">Not loaded</span>
+            <button id="reloadAdmin" type="button">Refresh</button>
+          </div>
+        </header>
+
+        <div id="adminNotice" class="admin-notice" role="status" aria-live="polite"></div>
+        <div id="adminCoreMetrics" class="admin-core-grid" aria-label="Core operations metrics"></div>
+
+        <section class="admin-module" aria-labelledby="adminModelsTitle">
+          <div class="admin-module-head">
+            <div><span>MODEL ECONOMICS</span><h3 id="adminModelsTitle">AI Usage Today</h3></div>
+            <small>Token and cost data starts from dashboard launch.</small>
+          </div>
+          <div id="adminModelUsage" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-module" aria-labelledby="adminLeaguesTitle">
+          <div class="admin-module-head">
+            <div><span>CONTENT DEMAND</span><h3 id="adminLeaguesTitle">Competition Activity</h3></div>
+            <small>Shared cache and private account imports remain separate.</small>
+          </div>
+          <div id="adminLeaguePerformance" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-module" aria-labelledby="adminUsersTitle">
+          <div class="admin-module-head">
+            <div><span>ACCESS CONTROL</span><h3 id="adminUsersTitle">Users and Entitlements</h3></div>
+            <small>Authentication metadata is read directly from Supabase Auth.</small>
+          </div>
+          <div id="adminUserAccess" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-module" aria-labelledby="adminOrdersTitle">
+          <div class="admin-module-head">
+            <div><span>REVENUE</span><h3 id="adminOrdersTitle">AllScale Orders</h3></div>
+            <small>Confirmed revenue is based only on completed orders.</small>
+          </div>
+          <div id="adminOrders" class="admin-table-wrap"></div>
+        </section>
       </section>
 
       <section id="ai-panel" class="panel reveal">
@@ -299,6 +349,6 @@
 
     <script src="/vendor/supabase.js"></script>
     <script type="module" src="/auth-client.js?v=20260721-001"></script>
-    <script defer src="/app.js?v=20260721-002"></script>
+        <script defer src="/app.js?v=20260721-003"></script>
   </body>
 </html>

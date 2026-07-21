@@ -22,6 +22,8 @@ const guestAccessTitleEl = $('#guestAccessTitle');
 const guestAccessDetailEl = $('#guestAccessDetail');
 const backendContentEl = $('#backendContent');
 const backendSummaryEl = $('#backendSummary');
+const adminDashboardEl = $('#adminDashboard');
+const adminCoreMetricsEl = $('#adminCoreMetrics');
 const billingStatusEl = $('#billingStatus');
 const billingStatusTitleEl = $('#billingStatusTitle');
 const billingStatusDetailEl = $('#billingStatusDetail');
@@ -66,6 +68,7 @@ bind('#loadSample', 'click', async () => {
 bind('#refresh', 'click', refresh);
 bind('#refreshAnalytics', 'click', refreshAnalyticsData);
 bind('#reloadBackend', 'click', loadBackendSchedules);
+bind('#reloadAdmin', 'click', loadAdminDashboard);
 bind('#backendSearch', 'input', renderBackendSchedules);
 bind('#backendCompetition', 'change', renderBackendSchedules);
 bind('#backendStatus', 'change', renderBackendSchedules);
@@ -164,10 +167,11 @@ async function initializeApp() {
   await (window.footballAuthReady || Promise.resolve());
   if (window.footballAppInitialized) return;
   window.footballAppInitialized = true;
-  if (location.pathname === '/backend') {
+  if (location.pathname === '/backend' || location.pathname === '/admin') {
     renderRoute([], [], []);
     await syncAccessStatus();
-    await loadBackendSchedules();
+    if (location.pathname === '/backend') await loadBackendSchedules();
+    else await loadAdminDashboard();
     return;
   }
   await Promise.all([refresh(), loadApiFootballMatches(), syncAccessStatus()]);
@@ -176,6 +180,10 @@ async function initializeApp() {
 
 async function refreshForAccountChange() {
   await syncAccessStatus();
+  if (location.pathname === '/admin') {
+    await loadAdminDashboard();
+    return;
+  }
   if (location.pathname === '/backend') {
     await loadBackendSchedules();
     return;
@@ -205,6 +213,112 @@ async function loadBackendSchedules() {
       </div>
     `;
   }
+}
+
+async function loadAdminDashboard() {
+  if (!adminDashboardEl) return;
+  const notice = $('#adminNotice');
+  notice.dataset.tone = 'loading';
+  notice.textContent = 'Loading live operational data...';
+  try {
+    const { dashboard } = await api('/api/admin/dashboard');
+    renderAdminDashboard(dashboard || {});
+    notice.textContent = '';
+    notice.dataset.tone = '';
+  } catch (error) {
+    notice.dataset.tone = 'error';
+    notice.textContent = error.status === 403
+      ? 'This page is restricted to administrator accounts.'
+      : error.status === 401 ? 'Sign in with the administrator account to continue.' : error.message;
+  }
+}
+
+function renderAdminDashboard(dashboard) {
+  const core = dashboard.core || {};
+  const apiLimit = Number(core.apiFootballDailyLimit) || 0;
+  const apiCalls = Number(core.apiFootballCallsToday) || 0;
+  const apiPercent = apiLimit ? Math.min(100, (apiCalls / apiLimit) * 100) : 0;
+  const updated = $('#adminUpdatedAt');
+  if (updated) updated.textContent = `Updated ${formatAdminDate(dashboard.generatedAt)}`;
+  adminCoreMetricsEl.innerHTML = [
+    adminMetric('API-Football Today', formatNumber(apiCalls), apiLimit ? `of ${formatNumber(apiLimit)} calls` : 'Limit unavailable', apiPercent),
+    adminMetric('AI Calls Today', formatNumber(core.modelCallsToday), 'All providers'),
+    adminMetric('Reported AI Cost', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} priced calls` : 'Provider cost not reported'),
+    adminMetric('Cached Matches', formatNumber(core.cachedMatches), `Refresh ${adminStatusLabel(core.lastRefreshStatus)}`),
+    adminMetric('Registered Users', formatNumber(dashboard.users?.total), `${formatNumber(dashboard.users?.activeToday)} active today`),
+    adminMetric('Paid Access', formatNumber(dashboard.users?.paid), `${formatNumber(dashboard.users?.active30d)} active in 30 days`),
+    adminMetric('Confirmed Revenue', money(dashboard.orders?.confirmedRevenueUsd), `${formatNumber(dashboard.orders?.confirmedCount)} completed orders`),
+    adminMetric('Pending Orders', formatNumber(dashboard.orders?.pendingCount), `${formatNumber(dashboard.orders?.failedCount)} failed`)
+  ].join('');
+
+  $('#adminModelUsage').innerHTML = adminTable(
+    ['Model', 'Provider', 'Requests', 'Input', 'Output', 'Total Tokens', 'Cost', 'Errors'],
+    (dashboard.models || []).map((row) => [
+      row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
+      formatNumber(row.outputTokens), formatNumber(row.totalTokens),
+      row.costReportedCalls ? money(row.costUsd) : 'Not reported', formatNumber(row.errors)
+    ]),
+    'No model calls have been recorded today.'
+  );
+  $('#adminLeaguePerformance').innerHTML = adminTable(
+    ['Competition', 'Cached Matches', 'Private Imports', 'AI Results'],
+    (dashboard.leagues || []).map((row) => [row.name, formatNumber(row.cachedMatches), formatNumber(row.imports), formatNumber(row.predictions)]),
+    'No competition activity is available.'
+  );
+  $('#adminUserAccess').innerHTML = adminTable(
+    ['Account', 'Provider', 'Plan', 'Prediction Runs', 'Calls Today', 'Last Sign-in'],
+    (dashboard.userRows || []).map((row) => [
+      row.email || shortId(row.id), row.provider, row.planId, formatNumber(row.predictionRuns),
+      formatNumber(row.callsToday), formatAdminDate(row.lastSeenAt)
+    ]),
+    'No users found.'
+  );
+  $('#adminOrders').innerHTML = adminTable(
+    ['Order', 'Account', 'Plan', 'Amount', 'Status', 'Created'],
+    (dashboard.recentOrders || []).map((row) => [
+      shortId(row.id), shortId(row.ownerId), row.planId, money(row.amountUsd), orderStatus(row.status), formatAdminDate(row.createdAt)
+    ]),
+    'No orders have been created.'
+  );
+}
+
+function adminMetric(label, value, detail, progress = null) {
+  return `<div class="admin-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small>${progress === null ? '' : `<i><b style="width:${progress.toFixed(2)}%"></b></i>`}</div>`;
+}
+
+function adminTable(headers, rows, empty) {
+  if (!rows.length) return `<div class="admin-empty">${escapeHtml(empty)}</div>`;
+  return `<table class="admin-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('en-US').format(Number(value) || 0);
+}
+
+function money(value) {
+  return `$${(Number(value) || 0).toFixed(2)}`;
+}
+
+function formatAdminDate(value) {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return 'Never';
+  return date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function shortId(value) {
+  const text = String(value || 'Unknown');
+  return text.length > 12 ? `${text.slice(0, 8)}...` : text;
+}
+
+function adminStatusLabel(status) {
+  return status === 'healthy' ? 'healthy' : status === 'warning' ? 'has warnings' : 'not recorded';
+}
+
+function orderStatus(status) {
+  if (Number(status) === 20) return 'Confirmed';
+  if ([0, 1].includes(Number(status))) return 'Pending';
+  if (Number(status) < 0) return 'Failed';
+  return `Status ${status}`;
 }
 
 function renderBackendCompetitionOptions() {
@@ -474,6 +588,8 @@ async function syncAccessStatus() {
   }
   renderGuestAccess();
   renderBillingStatus();
+  const adminLink = $('#adminNavLink');
+  if (adminLink) adminLink.hidden = !accessState.admin;
 }
 
 function renderGuestAccess() {
@@ -2297,22 +2413,31 @@ function renderRoute(markets, reports, contexts = []) {
   const historyPanel = $('#historyPanel');
   const analyticsPanel = $('#analyticsPanel');
   const backendPanel = $('#backendPanel');
+  const adminDashboard = $('#adminDashboard');
   const subscriptionPanel = $('#subscriptionPanel');
   const isHome = location.pathname === '/';
   const isAnalytics = location.pathname === '/analytics';
   const isBackend = location.pathname === '/backend';
+  const isAdmin = location.pathname === '/admin';
 
   document.body.classList.toggle('backend-route', isBackend);
+  document.body.classList.toggle('admin-route', isAdmin);
 
   if (matchPanel) matchPanel.hidden = true;
   if (dataPage) dataPage.hidden = location.pathname !== '/data';
   if (backendPanel) backendPanel.hidden = !isBackend;
+  if (adminDashboard) adminDashboard.hidden = !isAdmin;
   if (dataBackHome) dataBackHome.hidden = isHome;
-  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || isBackend || Boolean(match);
-  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || isBackend || Boolean(match);
-  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || isAnalytics || isBackend || Boolean(match);
+  if (matchCenter) matchCenter.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || isBackend || isAdmin || Boolean(match);
+  if (aiPanel) aiPanel.hidden = location.pathname === '/data' || location.pathname === '/history' || isAnalytics || isBackend || isAdmin || Boolean(match);
+  if (historyPanel) historyPanel.hidden = location.pathname === '/data' || isAnalytics || isBackend || isAdmin || Boolean(match);
   if (analyticsPanel) analyticsPanel.hidden = !isAnalytics;
-  if (subscriptionPanel) subscriptionPanel.hidden = isBackend || location.pathname === '/data' || isAnalytics || Boolean(match);
+  if (subscriptionPanel) subscriptionPanel.hidden = isBackend || isAdmin || location.pathname === '/data' || isAnalytics || Boolean(match);
+
+  if (isAdmin) {
+    setupRevealAnimations();
+    return;
+  }
 
   if (isBackend) {
     backendPanel?.scrollIntoView({ block: 'start' });

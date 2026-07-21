@@ -45,6 +45,19 @@ export async function authenticateRequest(request, env = {}, fetchImpl = fetch) 
   return { ok: true, user: await response.json() };
 }
 
+export function isAdminUser(user = {}, env = {}) {
+  const appRole = String(user.app_metadata?.role || user.app_metadata?.user_role || '').toLowerCase();
+  if (appRole === 'admin') return true;
+  const adminIds = listEnvValues(env.ADMIN_USER_IDS);
+  if (adminIds.has(String(user.id || '').toLowerCase())) return true;
+  const adminEmails = listEnvValues(env.ADMIN_EMAILS);
+  return adminEmails.has(String(user.email || '').toLowerCase());
+}
+
+function listEnvValues(value) {
+  return new Set(String(value || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean));
+}
+
 function readHeader(request, name) {
   const headers = request?.headers;
   if (typeof headers?.get === 'function') return headers.get(name);

@@ -130,6 +130,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
       modelName: label,
       modelId: model,
       provider: client.name,
+      usage: modelUsageFromResponse(data),
       prediction: validatePrediction(parsed, label)
     };
   } catch (error) {
@@ -187,6 +188,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       modelId: model,
       provider: client.name,
       generatedAt: new Date().toISOString(),
+      usage: modelUsageFromResponse(data),
       picks,
       scorePicks,
       bttsPick
@@ -203,6 +205,30 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       bttsPick: null
     };
   }
+}
+
+export function modelUsageFromResponse(data = {}) {
+  const usage = data.usage || data.usageMetadata || data.response?.usage || {};
+  const inputTokens = numberField(usage.prompt_tokens, usage.input_tokens, usage.promptTokenCount);
+  const outputTokens = numberField(usage.completion_tokens, usage.output_tokens, usage.candidatesTokenCount);
+  const totalTokens = numberField(usage.total_tokens, usage.totalTokenCount, inputTokens + outputTokens);
+  const rawCost = numberField(usage.cost, data.cost, data.usage_cost);
+  const costReported = [usage.cost, data.cost, data.usage_cost].some((value) => value !== undefined && value !== null && value !== '');
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    costUsd: rawCost,
+    costReported
+  };
+}
+
+function numberField(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  return 0;
 }
 
 function providerLabel(provider = 'openrouter') {

@@ -5,6 +5,8 @@ const TABLES = {
   matchContexts: 'match_contexts',
   matchSchedules: 'match_schedules',
   apiFootballCatalogCache: 'api_football_catalog_cache',
+  aiUsageEvents: 'ai_usage_events',
+  systemEvents: 'system_events',
   billingOrders: 'billing_orders',
   billingEntitlements: 'billing_entitlements'
 };
@@ -154,6 +156,47 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         updated_at: now
       }], 'cache_key');
       return catalog;
+    },
+
+    async recordAiUsageEvents(events = []) {
+      if (!events.length) return [];
+      await client.upsert(TABLES.aiUsageEvents, events.map((event) => ({
+        owner_id: event.ownerId,
+        request_kind: event.requestKind,
+        model_name: event.modelName,
+        model_id: event.modelId || null,
+        provider: event.provider || 'unknown',
+        input_tokens: Number(event.inputTokens) || 0,
+        output_tokens: Number(event.outputTokens) || 0,
+        total_tokens: Number(event.totalTokens) || 0,
+        cost_usd: Number(event.costUsd) || 0,
+        cost_reported: Boolean(event.costReported),
+        status: event.status || 'success',
+        context_id: event.contextId || null,
+        error_message: event.errorMessage || null,
+        created_at: event.createdAt || new Date().toISOString()
+      })));
+      return events;
+    },
+
+    async recordSystemEvent(eventType, payload = {}) {
+      const event = { event_type: eventType, payload, created_at: new Date().toISOString() };
+      await client.upsert(TABLES.systemEvents, [event]);
+      return event;
+    },
+
+    async readAdminDashboardData() {
+      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements] = await Promise.all([
+        client.listAuthUsers(),
+        client.selectRows(TABLES.aiUsageEvents, '*', { order: 'created_at.desc', limit: '5000' }),
+        client.selectRows(TABLES.systemEvents, '*', { order: 'created_at.desc', limit: '500' }),
+        client.selectRows(TABLES.rankings, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
+        client.selectRows(TABLES.matchContexts, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
+        client.selectRows(TABLES.matchSchedules, 'payload,updated_at', { order: 'updated_at.desc', limit: '500' }),
+        client.selectRows(TABLES.billingOrders, '*', { order: 'created_at.desc', limit: '1000' }),
+        client.selectRows(TABLES.billingEntitlements, '*', { limit: '1000' })
+      ]);
+      return { users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements };
     },
 
     async createBillingOrder(order) {
@@ -334,6 +377,22 @@ class SupabaseRestClient {
       method: 'DELETE',
       headers: { Prefer: 'return=minimal' }
     });
+  }
+
+  async listAuthUsers() {
+    const response = await this.fetchImpl(`${this.baseUrl}/auth/v1/admin/users?page=1&per_page=1000`, {
+      headers: {
+        apikey: this.serviceKey,
+        Authorization: `Bearer ${this.serviceKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Supabase Auth ${response.status}: ${body.slice(0, 300)}`);
+    }
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : (payload.users || []);
   }
 
   async request(path, options = {}) {

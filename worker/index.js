@@ -24,6 +24,8 @@ import { authConfig } from '../src/auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from '../src/guest-access.js';
 import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.js';
 import { billingAccess, billingPlan, publicBillingPlans } from '../src/billing.js';
+import { buildAdminDashboard } from '../src/admin-dashboard.js';
+import { isAdminUser } from '../src/auth.js';
 import {
   createAllScaleCheckout,
   getAllScaleCheckoutStatus,
@@ -35,6 +37,7 @@ const APP_SHELL_ROUTES = new Set([
   '/analytics',
   '/auth/callback',
   '/auth/reset',
+  '/admin',
   '/backend',
   '/data',
   '/history',
@@ -60,7 +63,9 @@ export default {
         if (!expected || request.headers.get('X-Cron-Secret') !== expected) {
           return json({ error: 'Unauthorized' }, 401);
         }
-        return json(await refreshApiFootballScheduleCache(env));
+        const result = await refreshApiFootballScheduleCache(env);
+        await createSupabaseStorage(env, fetch).recordSystemEvent('api_football_refresh', result);
+        return json(result);
       }
       if (request.method === 'OPTIONS' && url.pathname === '/api/import/chrome') return corsJson({}, 204);
       let access = null;
@@ -83,7 +88,8 @@ export default {
   },
 
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(refreshApiFootballScheduleCache(env).then((result) => {
+    ctx.waitUntil(refreshApiFootballScheduleCache(env).then(async (result) => {
+      await createSupabaseStorage(env, fetch).recordSystemEvent('api_football_refresh', result);
       console.log(JSON.stringify({ event: 'api_football_schedule_cache_refresh', ...result }));
     }).catch((error) => {
       console.error(JSON.stringify({ event: 'api_football_schedule_cache_refresh_failed', error: error.message }));
@@ -105,9 +111,21 @@ async function routeApi(request, env, access) {
       : { freePredictionUsed: access.guestPredictionUsed };
     return json({
       authenticated: access.role === 'user',
+      admin: access.role === 'user' && isAdminUser(access.user, env),
       guestPredictionUsed: access.role === 'guest' && access.guestPredictionUsed,
       billing: billingAccess(entitlement),
       plans: publicBillingPlans()
+    });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/admin/dashboard') {
+    if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);
+    if (!isAdminUser(access.user, env)) return json({ error: 'Administrator access required' }, 403);
+    const data = await storage.readAdminDashboardData();
+    return json({
+      dashboard: buildAdminDashboard({
+        ...data,
+        apiFootballDailyLimit: Number(env.API_FOOTBALL_DAILY_LIMIT) || 7500
+      })
     });
   }
   if (request.method === 'GET' && url.pathname === '/api/billing/status') {
@@ -415,6 +433,9 @@ async function routeApi(request, env, access) {
     if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
     try {
       const report = await predictMarket(market, env, workerFetch);
+      await recordAiUsage(storage, report.predictions, {
+        ownerId, requestKind: 'market', contextId: market.id
+      });
       await storage.saveReport(report, { ownerId });
       return json({ report, billing: predictionAccess.billing });
     } catch (error) {
@@ -438,6 +459,9 @@ async function routeApi(request, env, access) {
       const ranking = await rankMarkets(db.markets, requestedModel, rankingEnv(env, body), workerFetch, context);
       ranking.contextId = context ? contextKey(context) : '';
       ranking.contextName = context?.matchName || '';
+      await recordAiUsage(storage, ranking.results, {
+        ownerId, requestKind: 'ranking', contextId: ranking.contextId
+      });
       const savedRanking = await storage.saveRanking(ranking, {
         mergeLatest: requestedModel !== 'all',
         ownerId
@@ -544,6 +568,28 @@ function rankingEnv(env, body = {}) {
     return { ...env, MODEL_QWEN: 'qwen/qwen3.7-plus', MODEL_QWEN_LABEL: 'Qwen 3.7 Plus' };
   }
   return env;
+}
+
+async function recordAiUsage(storage, results = [], input = {}) {
+  const events = results.map((result) => ({
+    ownerId: input.ownerId,
+    requestKind: input.requestKind,
+    contextId: input.contextId,
+    modelName: result.modelName || 'Unknown',
+    modelId: result.modelId || '',
+    provider: result.provider || 'unknown',
+    inputTokens: result.usage?.inputTokens || 0,
+    outputTokens: result.usage?.outputTokens || 0,
+    totalTokens: result.usage?.totalTokens || 0,
+    costUsd: result.usage?.costUsd || 0,
+    costReported: Boolean(result.usage?.costReported),
+    status: result.error ? 'error' : 'success',
+    errorMessage: result.error || ''
+  }));
+  if (!events.length) return;
+  await storage.recordAiUsageEvents(events).catch((error) => {
+    console.error(JSON.stringify({ event: 'ai_usage_record_failed', error: error.message }));
+  });
 }
 
 function json(body, status = 200, headers = {}) {

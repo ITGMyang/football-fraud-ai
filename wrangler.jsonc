@@ -28,6 +28,7 @@
     "TELEGRAM_AUTH_ENABLED": "true",
     "API_FOOTBALL_BASE_URL": "https://api-football-proxy.64-186-226-161.sslip.io",
     "API_FOOTBALL_LEAGUES": "1,15,17,39,140,78,135,61,2,3,188,307,169,170,171",
+    "API_FOOTBALL_DAILY_LIMIT": "7500",
     "MODEL_GPT": "gpt-5.5",
     "MODEL_GPT_PROVIDER": "openai",
     "MODEL_GPT_LABEL": "GPT 5.5",

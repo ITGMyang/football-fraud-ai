@@ -165,3 +165,51 @@ test('Supabase billing storage scopes orders and entitlements to their owner', a
   assert.match(usageRpc.options.body, /"p_owner_id":"user-1"/);
   assert.equal(entitlement.planId, 'day');
 });
+
+test('Supabase records AI usage and scheduled refresh events separately', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    return new Response('[]', { headers: { 'content-type': 'application/json' } });
+  });
+
+  await storage.recordAiUsageEvents([{
+    ownerId: 'user-1', requestKind: 'ranking', modelName: 'GPT 5.5', modelId: 'gpt-5.5',
+    provider: 'openai', inputTokens: 120, outputTokens: 30, totalTokens: 150,
+    costUsd: 0.04, costReported: true, status: 'success', contextId: 'fixture-1'
+  }]);
+  await storage.recordSystemEvent('api_football_refresh', { apiCalls: 42, errors: [] });
+
+  const usageWrite = requests.find(({ url }) => url.includes('/ai_usage_events?'));
+  const eventWrite = requests.find(({ url }) => url.includes('/system_events?'));
+  assert.match(usageWrite.options.body, /"owner_id":"user-1"/);
+  assert.match(usageWrite.options.body, /"input_tokens":120/);
+  assert.match(eventWrite.options.body, /"event_type":"api_football_refresh"/);
+  assert.match(eventWrite.options.body, /"apiCalls":42/);
+});
+
+test('Supabase admin dashboard read includes auth users and operational tables', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (String(url).includes('/auth/v1/admin/users')) {
+      return new Response(JSON.stringify({ users: [{ id: 'user-1', email: 'admin@example.com' }] }), {
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    return new Response('[]', { headers: { 'content-type': 'application/json' } });
+  });
+
+  const data = await storage.readAdminDashboardData();
+
+  assert.equal(data.users[0].email, 'admin@example.com');
+  for (const table of ['ai_usage_events', 'system_events', 'rankings', 'match_contexts', 'match_schedules', 'billing_orders', 'billing_entitlements']) {
+    assert.ok(requests.some(({ url }) => url.includes(`/${table}?`)), `expected ${table} read`);
+  }
+});
