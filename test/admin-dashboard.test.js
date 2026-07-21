@@ -74,9 +74,13 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
       { owner_id: 'u2', payload: { id: 'match-2', competition: 'La Liga' } }
     ],
     schedules: [{ payload: { competitionId: '39', matches: [{ matchId: '1' }, { matchId: '2' }] } }],
+    sharedPredictions: [
+      { fixture_id: 'match-1', model_key: 'gpt', model_id: 'gpt-5.5', payload: { modelName: 'GPT 5.5' }, updated_at: '2026-07-21T10:01:00Z' },
+      { fixture_id: 'match-1', model_key: 'claude', model_id: 'claude-opus-4-8', payload: { modelName: 'Claude 4.8' }, updated_at: '2026-07-21T10:02:00Z' }
+    ],
     aiUsage: [
-      { owner_id: 'u1', model_name: 'GPT 5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0.5, cost_reported: true, status: 'success', created_at: '2026-07-21T10:00:00Z' },
-      { owner_id: 'u1', model_name: 'Gemini', provider: 'APIMart', input_tokens: 800, output_tokens: 200, total_tokens: 1000, cost_usd: 0, cost_reported: false, status: 'error', created_at: '2026-07-21T10:05:00Z' }
+      { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'GPT 5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0.5, cost_reported: true, status: 'success', created_at: '2026-07-21T10:00:00Z' },
+      { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'Gemini', provider: 'APIMart', input_tokens: 800, output_tokens: 200, total_tokens: 1000, cost_usd: 0, cost_reported: false, status: 'error', created_at: '2026-07-21T10:05:00Z' }
     ],
     systemEvents: [{ event_type: 'api_football_refresh', payload: { apiCalls: 18, errors: [] }, created_at: '2026-07-21T09:40:00Z' }],
     orders: [
@@ -98,6 +102,33 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
   assert.equal(dashboard.orders.confirmedRevenueUsd, 2.99);
   assert.equal(dashboard.orders.pendingCount, 1);
   assert.equal(dashboard.leagues.find((row) => row.name === 'Premier League').imports, 1);
+  assert.equal(dashboard.sharedPool.totalMatches, 1);
+  assert.equal(dashboard.sharedPool.totalResults, 2);
+  assert.deepEqual(dashboard.sharedPool.matches[0].models, {
+    gpt: 'cached', claude: 'cached', gemini: 'failed', deepseek: 'not_requested', qwen: 'not_requested'
+  });
+  assert.equal(dashboard.sharedPool.matches[0].matchName, 'match-1');
+});
+
+test('shared prediction pool uses schedule match details when a private context is unavailable', () => {
+  const dashboard = buildAdminDashboard({
+    sharedPredictions: [{
+      fixture_id: '9001', model_key: 'qwen', payload: { modelName: 'Qwen 3.7 Max' }, updated_at: '2026-07-21T10:00:00Z'
+    }],
+    schedules: [{ payload: { matches: [{
+      matchId: '9001', homeTeam: 'Spain', awayTeam: 'Argentina', kickoff: '2026-07-22T19:00:00Z', competition: 'World Cup'
+    }] } }]
+  }, Date.parse('2026-07-21T12:00:00Z'));
+
+  assert.deepEqual(dashboard.sharedPool.matches[0], {
+    fixtureId: '9001',
+    matchName: 'Spain v Argentina',
+    competition: 'World Cup',
+    kickoff: '2026-07-22T19:00:00Z',
+    cachedCount: 1,
+    latestUpdatedAt: '2026-07-21T10:00:00Z',
+    models: { gpt: 'not_requested', claude: 'not_requested', gemini: 'not_requested', deepseek: 'not_requested', qwen: 'cached' }
+  });
 });
 
 test('admin route and dashboard API are wired into the app shell', async () => {
@@ -112,10 +143,13 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(markup, /role="tablist"/);
   assert.match(markup, /data-admin-tab="overview"/);
   assert.match(markup, /data-admin-tab="models"/);
+  assert.match(markup, /data-admin-tab="shared-pool"/);
+  assert.match(markup, /id="adminSharedPool"/);
   assert.match(markup, /data-admin-panel="orders"/);
   assert.match(app, /\/api\/admin\/dashboard/);
   assert.match(app, /activateAdminTab/);
   assert.match(app, /APIMart 按 Token 单价计算/);
+  assert.match(app, /renderAdminSharedPool/);
   assert.match(app, /未配置单价/);
   assert.match(worker, /'\/admin'/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/dashboard'/);

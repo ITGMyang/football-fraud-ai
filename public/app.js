@@ -42,6 +42,7 @@ let activeAiContextRange = readStoredValue(AI_CONTEXT_RANGE_STORAGE_KEY) || 'wee
 let activeAiContextSort = readStoredValue(AI_CONTEXT_SORT_STORAGE_KEY) || 'imported';
 let accessState = { authenticated: false, guestPredictionUsed: false };
 let backendSchedules = [];
+let adminSharedPoolMatches = [];
 const analyticsState = {
   raw: null,
   date: '',
@@ -68,6 +69,7 @@ bind('#refresh', 'click', refresh);
 bind('#refreshAnalytics', 'click', refreshAnalyticsData);
 bind('#reloadBackend', 'click', loadBackendSchedules);
 bind('#reloadAdmin', 'click', loadAdminDashboard);
+bind('#adminSharedPoolSearch', 'input', renderAdminSharedPool);
 document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
   tab.addEventListener('click', () => activateAdminTab(tab.dataset.adminTab));
 });
@@ -261,6 +263,10 @@ function renderAdminDashboard(dashboard) {
     ]),
     '今天暂时没有模型调用记录。'
   );
+  adminSharedPoolMatches = dashboard.sharedPool?.matches || [];
+  const poolSummary = $('#adminSharedPoolSummary');
+  if (poolSummary) poolSummary.textContent = `${formatNumber(dashboard.sharedPool?.totalMatches)} 场比赛，共 ${formatNumber(dashboard.sharedPool?.totalResults)} 个可复用模型结果。`;
+  renderAdminSharedPool();
   $('#adminLeaguePerformance').innerHTML = adminTable(
     ['赛事', '缓存比赛', '用户私有导入', 'AI 结果'],
     (dashboard.leagues || []).map((row) => [row.name, formatNumber(row.cachedMatches), formatNumber(row.imports), formatNumber(row.predictions)]),
@@ -284,7 +290,7 @@ function renderAdminDashboard(dashboard) {
 }
 
 function activateAdminTab(tabName = 'overview') {
-  const selected = ['overview', 'models', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
+  const selected = ['overview', 'models', 'shared-pool', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
   document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
     const active = tab.dataset.adminTab === selected;
     tab.classList.toggle('active', active);
@@ -295,6 +301,25 @@ function activateAdminTab(tabName = 'overview') {
     panel.hidden = !active;
     panel.classList.toggle('active', active);
   });
+}
+
+function renderAdminSharedPool() {
+  const container = $('#adminSharedPool');
+  if (!container) return;
+  const query = String($('#adminSharedPoolSearch')?.value || '').trim().toLowerCase();
+  const rows = adminSharedPoolMatches.filter((match) => [match.matchName, match.fixtureId, match.competition]
+    .some((value) => String(value || '').toLowerCase().includes(query)));
+  if (!rows.length) {
+    container.innerHTML = `<div class="admin-empty">${escapeHtml(query ? '没有找到匹配的比赛。' : '共享预测池暂时为空。')}</div>`;
+    return;
+  }
+  const models = [['gpt', 'GPT'], ['claude', 'Claude'], ['gemini', 'Gemini'], ['deepseek', 'DeepSeek'], ['qwen', 'Qwen']];
+  container.innerHTML = `<table class="admin-table admin-pool-table"><thead><tr><th>比赛</th><th>Fixture ID</th><th>开赛时间</th>${models.map(([, label]) => `<th>${label}</th>`).join('')}<th>最近入池</th></tr></thead><tbody>${rows.map((match) => `<tr><td><strong>${escapeHtml(match.matchName)}</strong><small>${escapeHtml(match.competition || '赛事未知')}</small></td><td>${escapeHtml(match.fixtureId)}</td><td>${escapeHtml(formatAdminDate(match.kickoff))}</td>${models.map(([key]) => `<td>${adminPoolStatus(match.models?.[key])}</td>`).join('')}<td>${escapeHtml(formatAdminDate(match.latestUpdatedAt))}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function adminPoolStatus(status) {
+  const value = status === 'cached' ? ['cached', '已入池'] : status === 'failed' ? ['failed', '失败未入池'] : ['idle', '尚未请求'];
+  return `<span class="admin-pool-status ${value[0]}">${value[1]}</span>`;
 }
 
 function adminMetric(label, value, detail, progress = null) {

@@ -1,4 +1,5 @@
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
+const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'deepseek', 'qwen'];
 
 export function buildAdminDashboard(input = {}, now = Date.now()) {
   const today = dateKey(now);
@@ -10,6 +11,7 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
   const orders = input.orders || [];
   const entitlements = input.entitlements || [];
   const schedules = input.schedules || [];
+  const sharedPredictions = input.sharedPredictions || [];
   const todayUsage = aiUsage.filter((row) => dateKey(row.created_at) === today);
   const todayRefreshes = systemEvents.filter((row) => row.event_type === 'api_football_refresh' && dateKey(row.created_at) === today);
   const latestRefresh = [...systemEvents]
@@ -31,6 +33,7 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
       cachedMatches: uniqueScheduleMatches(schedules)
     },
     models: summarizeModels(todayUsage),
+    sharedPool: summarizeSharedPool(sharedPredictions, aiUsage, contexts, schedules),
     leagues: summarizeLeagues(contexts, rankings, schedules),
     users: {
       total: users.length,
@@ -59,6 +62,91 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
         confirmedAt: row.confirmed_at || ''
       }))
   };
+}
+
+function summarizeSharedPool(sharedRows, usageRows, contextRows, scheduleRows) {
+  const matchDetails = new Map();
+  for (const row of scheduleRows) {
+    for (const match of (row.payload || row).matches || []) addMatchDetails(matchDetails, match);
+  }
+  for (const row of contextRows) addMatchDetails(matchDetails, row.payload || row);
+
+  const fixtureIds = new Set(sharedRows.map((row) => String(row.fixture_id || '')).filter(Boolean));
+  for (const row of usageRows) {
+    if (row.request_kind === 'ranking' && row.context_id) fixtureIds.add(String(row.context_id));
+  }
+
+  const cachedByFixture = groupByFixtureAndModel(sharedRows, (row) => row.fixture_id, (row) => row.model_key);
+  const latestUsage = latestUsageByFixtureAndModel(usageRows);
+  const matches = [...fixtureIds].map((fixtureId) => {
+    const details = matchDetails.get(fixtureId) || {};
+    const cached = cachedByFixture.get(fixtureId) || new Map();
+    const models = Object.fromEntries(PREDICTION_MODELS.map((model) => {
+      const attempt = latestUsage.get(`${fixtureId}|${model}`);
+      return [model, cached.has(model) ? 'cached' : attempt?.status === 'error' ? 'failed' : 'not_requested'];
+    }));
+    const cachedRowsForMatch = [...cached.values()];
+    return {
+      fixtureId,
+      matchName: details.matchName || fixtureId,
+      competition: details.competition || '',
+      kickoff: details.kickoff || '',
+      cachedCount: cachedRowsForMatch.length,
+      latestUpdatedAt: cachedRowsForMatch.sort((a, b) => timestamp(b.updated_at) - timestamp(a.updated_at))[0]?.updated_at || '',
+      models
+    };
+  }).sort((a, b) => timestamp(b.latestUpdatedAt) - timestamp(a.latestUpdatedAt) || timestamp(b.kickoff) - timestamp(a.kickoff));
+
+  return { totalMatches: matches.filter((match) => match.cachedCount > 0).length, totalResults: sharedRows.length, matches };
+}
+
+function addMatchDetails(map, match = {}) {
+  const fixtureId = String(match.matchId || match.fixtureId || match.id || '').replace(/^api-football:/, '');
+  if (!fixtureId) return;
+  const teams = match.teams || [];
+  const home = match.home || match.homeTeam || teams[0];
+  const away = match.away || match.awayTeam || teams[1];
+  map.set(fixtureId, {
+    matchName: match.matchName || (home && away ? `${teamName(home)} v ${teamName(away)}` : ''),
+    competition: match.competition || match.fixture?.competition || '',
+    kickoff: match.kickoff || match.fixture?.date || ''
+  });
+}
+
+function teamName(team) {
+  return typeof team === 'string' ? team : team?.name || '';
+}
+
+function groupByFixtureAndModel(rows, fixtureFn, modelFn) {
+  const groups = new Map();
+  for (const row of rows) {
+    const fixtureId = String(fixtureFn(row) || '');
+    const model = modelKey(modelFn(row) || row.model_id || row.payload?.modelName);
+    if (!fixtureId || !model) continue;
+    if (!groups.has(fixtureId)) groups.set(fixtureId, new Map());
+    groups.get(fixtureId).set(model, row);
+  }
+  return groups;
+}
+
+function latestUsageByFixtureAndModel(rows) {
+  const latest = new Map();
+  for (const row of rows) {
+    if (row.request_kind !== 'ranking' || !row.context_id) continue;
+    const key = `${row.context_id}|${modelKey(row.model_name || row.model_id)}`;
+    if (!latest.has(key) || timestamp(row.created_at) > timestamp(latest.get(key).created_at)) latest.set(key, row);
+  }
+  return latest;
+}
+
+function modelKey(value = '') {
+  const text = String(value).toLowerCase();
+  if (text.includes('gpt') || text.includes('openai')) return 'gpt';
+  if (text.includes('claude')) return 'claude';
+  if (text.includes('gemini')) return 'gemini';
+  if (text.includes('deepseek')) return 'deepseek';
+  if (text.includes('qwen') || text.includes('通义')) return 'qwen';
+  return text;
 }
 
 function summarizeModels(rows) {

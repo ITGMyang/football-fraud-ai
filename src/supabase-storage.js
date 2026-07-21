@@ -210,7 +210,7 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
     },
 
     async readAdminDashboardData() {
-      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements] = await Promise.all([
+      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions] = await Promise.all([
         client.listAuthUsers(),
         client.selectRows(TABLES.aiUsageEvents, '*', { order: 'created_at.desc', limit: '5000' }),
         client.selectRows(TABLES.systemEvents, '*', { order: 'created_at.desc', limit: '500' }),
@@ -218,9 +218,10 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         client.selectRows(TABLES.matchContexts, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
         client.selectRows(TABLES.matchSchedules, 'payload,updated_at', { order: 'updated_at.desc', limit: '500' }),
         client.selectRows(TABLES.billingOrders, '*', { order: 'created_at.desc', limit: '1000' }),
-        client.selectRows(TABLES.billingEntitlements, '*', { limit: '1000' })
+        client.selectRows(TABLES.billingEntitlements, '*', { limit: '1000' }),
+        client.selectRows(TABLES.sharedPredictionResults, 'fixture_id,model_key,model_id,payload,created_at,updated_at', { order: 'updated_at.desc', limit: '5000' })
       ]);
-      return { users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements };
+      return { users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions };
     },
 
     async createBillingOrder(order) {

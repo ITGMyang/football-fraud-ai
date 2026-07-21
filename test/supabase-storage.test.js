@@ -239,7 +239,7 @@ test('Supabase admin dashboard read includes auth users and operational tables',
   const data = await storage.readAdminDashboardData();
 
   assert.equal(data.users[0].email, 'admin@example.com');
-  for (const table of ['ai_usage_events', 'system_events', 'rankings', 'match_contexts', 'match_schedules', 'billing_orders', 'billing_entitlements']) {
+  for (const table of ['ai_usage_events', 'system_events', 'rankings', 'match_contexts', 'match_schedules', 'billing_orders', 'billing_entitlements', 'shared_prediction_results']) {
     assert.ok(requests.some(({ url }) => url.includes(`/${table}?`)), `expected ${table} read`);
   }
 });

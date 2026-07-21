@@ -1158,6 +1158,15 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-table td:first-child { color: #173f32; font-weight: 800; }
 .admin-table tbody tr:hover { background: #f3f7f3; }
 .admin-empty { padding: 28px 16px; color: var(--muted); background: #fff; }
+.admin-pool-toolbar { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
+.admin-pool-toolbar label { color: var(--muted); font-size: 0.78rem; font-weight: 900; }
+.admin-pool-toolbar input { width: min(420px, 100%); }
+.admin-pool-table td:first-child strong,
+.admin-pool-table td:first-child small { display: block; }
+.admin-pool-table td:first-child small { margin-top: 4px; color: var(--muted); font-weight: 500; }
+.admin-pool-status { display: inline-block; min-width: 72px; padding: 5px 8px; border: 1px solid var(--line); color: var(--muted); background: #f5f5f1; font-size: 0.72rem; font-weight: 800; text-align: center; }
+.admin-pool-status.cached { color: #fff; border-color: #278565; background: #278565; }
+.admin-pool-status.failed { color: #9f3528; border-color: #e4aaa2; background: #fff0ed; }
 
 @media (max-width: 1100px) {
   .admin-tabs { margin: 0 22px; }

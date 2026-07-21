@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FutBots</title>
-    <link rel="stylesheet" href="/styles.css?v=20260721-005">
+    <link rel="stylesheet" href="/styles.css?v=20260721-006">
   </head>
   <body>
     <nav class="floating-nav" aria-label="Main navigation">
@@ -142,6 +142,7 @@
         <nav class="admin-tabs" role="tablist" aria-label="管理后台数据分类">
           <button class="active" type="button" role="tab" aria-selected="true" data-admin-tab="overview">数据总览</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="models">模型用量</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="shared-pool">共享预测池</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="leagues">赛事数据</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="users">用户权限</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="orders">订单财务</button>
@@ -149,6 +150,18 @@
 
         <section class="admin-tab-panel active" role="tabpanel" data-admin-panel="overview">
           <div id="adminCoreMetrics" class="admin-core-grid" aria-label="核心运营指标"></div>
+        </section>
+
+        <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="shared-pool" aria-labelledby="adminSharedPoolTitle" hidden>
+          <div class="admin-module-head">
+            <div><span>共享结果</span><h3 id="adminSharedPoolTitle">比赛模型入池状态</h3></div>
+            <small id="adminSharedPoolSummary">仅成功且结构完整的模型结果会进入共享池。</small>
+          </div>
+          <div class="admin-pool-toolbar">
+            <label for="adminSharedPoolSearch">查找比赛</label>
+            <input id="adminSharedPoolSearch" type="search" placeholder="输入球队、赛事或 Fixture ID">
+          </div>
+          <div id="adminSharedPool" class="admin-table-wrap"></div>
         </section>
 
         <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="models" aria-labelledby="adminModelsTitle" hidden>
@@ -352,6 +365,6 @@
 
     <script src="/vendor/supabase.js"></script>
     <script type="module" src="/auth-client.js?v=20260721-001"></script>
-            <script defer src="/app.js?v=20260721-007"></script>
+            <script defer src="/app.js?v=20260721-008"></script>
   </body>
 </html>
