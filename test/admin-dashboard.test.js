@@ -35,6 +35,28 @@ test('model usage normalizes provider token and cost fields', () => {
   });
 });
 
+test('APIMart usage converts Claude and Gemini tokens with the published discounted rates', () => {
+  assert.deepEqual(modelUsageFromResponse({ usage: {
+    prompt_tokens: 9146, completion_tokens: 1102, total_tokens: 10248
+  } }, { provider: 'apimart', model: 'claude-opus-4-8' }), {
+    inputTokens: 9146,
+    outputTokens: 1102,
+    totalTokens: 10248,
+    costUsd: 0.058624,
+    costReported: true
+  });
+
+  assert.deepEqual(modelUsageFromResponse({ usage: {
+    prompt_tokens: 6328, completion_tokens: 3707, total_tokens: 10035
+  } }, { provider: 'apimart', model: 'gemini-3.1-pro-preview' }), {
+    inputTokens: 6328,
+    outputTokens: 3707,
+    totalTokens: 10035,
+    costUsd: 0.045712,
+    costReported: true
+  });
+});
+
 test('admin dashboard aggregates real system, model, league, user, and order data', () => {
   const now = Date.parse('2026-07-21T12:00:00.000Z');
   const dashboard = buildAdminDashboard({
@@ -93,6 +115,8 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(markup, /data-admin-panel="orders"/);
   assert.match(app, /\/api\/admin\/dashboard/);
   assert.match(app, /activateAdminTab/);
+  assert.match(app, /APIMart 按 Token 单价计算/);
+  assert.match(app, /未配置单价/);
   assert.match(worker, /'\/admin'/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/dashboard'/);
   assert.match(worker, /isAdminUser/);

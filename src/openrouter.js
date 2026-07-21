@@ -2,6 +2,10 @@ import { aggregateReport, validatePrediction } from './domain.js';
 
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
+const APIMART_USD_PER_MILLION_TOKENS = Object.freeze({
+  'claude-opus-4-8': { input: 4, output: 20 },
+  'gemini-3.1-pro-preview': { input: 1.6, output: 9.6 }
+});
 
 export function configuredModels(env = process.env) {
   return [
@@ -130,7 +134,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
       modelName: label,
       modelId: model,
       provider: client.name,
-      usage: modelUsageFromResponse(data),
+      usage: modelUsageFromResponse(data, { provider, model }),
       prediction: validatePrediction(parsed, label)
     };
   } catch (error) {
@@ -188,7 +192,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       modelId: model,
       provider: client.name,
       generatedAt: new Date().toISOString(),
-      usage: modelUsageFromResponse(data),
+      usage: modelUsageFromResponse(data, { provider, model }),
       picks,
       scorePicks,
       bttsPick
@@ -207,20 +211,32 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
   }
 }
 
-export function modelUsageFromResponse(data = {}) {
+export function modelUsageFromResponse(data = {}, options = {}) {
   const usage = data.usage || data.usageMetadata || data.response?.usage || {};
   const inputTokens = numberField(usage.prompt_tokens, usage.input_tokens, usage.promptTokenCount);
   const outputTokens = numberField(usage.completion_tokens, usage.output_tokens, usage.candidatesTokenCount);
   const totalTokens = numberField(usage.total_tokens, usage.totalTokenCount, inputTokens + outputTokens);
   const rawCost = numberField(usage.cost, data.cost, data.usage_cost);
-  const costReported = [usage.cost, data.cost, data.usage_cost].some((value) => value !== undefined && value !== null && value !== '');
+  const providerCostAvailable = [usage.cost, data.cost, data.usage_cost]
+    .some((value) => value !== undefined && value !== null && value !== '');
+  const calculatedCost = providerCostAvailable
+    ? null
+    : apimartCostUsd(options.provider, options.model, inputTokens, outputTokens);
   return {
     inputTokens,
     outputTokens,
     totalTokens,
-    costUsd: rawCost,
-    costReported
+    costUsd: calculatedCost ?? rawCost,
+    costReported: providerCostAvailable || calculatedCost !== null
   };
+}
+
+function apimartCostUsd(provider, model, inputTokens, outputTokens) {
+  if (String(provider || '').toLowerCase() !== 'apimart') return null;
+  const rate = APIMART_USD_PER_MILLION_TOKENS[String(model || '').toLowerCase()];
+  if (!rate) return null;
+  const cost = ((inputTokens * rate.input) + (outputTokens * rate.output)) / 1_000_000;
+  return Math.round(cost * 100_000_000) / 100_000_000;
 }
 
 function numberField(...values) {

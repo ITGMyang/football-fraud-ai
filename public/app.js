@@ -244,7 +244,7 @@ function renderAdminDashboard(dashboard) {
   adminCoreMetricsEl.innerHTML = [
     adminMetric('今日 API-Football 调用', formatNumber(apiCalls), apiLimit ? `每日额度 ${formatNumber(apiLimit)} 次` : '额度未知', apiPercent),
     adminMetric('今日 AI 调用', formatNumber(core.modelCallsToday), '全部模型供应商'),
-    adminMetric('已上报 AI 成本', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} 次调用包含成本` : '供应商未上报成本'),
+    adminMetric('今日 AI 成本', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} 次调用包含成本；APIMart 按 Token 单价计算` : '尚未配置可用单价'),
     adminMetric('缓存比赛', formatNumber(core.cachedMatches), `刷新状态：${adminStatusLabel(core.lastRefreshStatus)}`),
     adminMetric('注册用户', formatNumber(dashboard.users?.total), `今日活跃 ${formatNumber(dashboard.users?.activeToday)} 人`),
     adminMetric('付费用户', formatNumber(dashboard.users?.paid), `近 30 天活跃 ${formatNumber(dashboard.users?.active30d)} 人`),
@@ -257,7 +257,7 @@ function renderAdminDashboard(dashboard) {
     (dashboard.models || []).map((row) => [
       row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
       formatNumber(row.outputTokens), formatNumber(row.totalTokens),
-      row.costReportedCalls ? money(row.costUsd) : '未上报', formatNumber(row.errors)
+      row.costReportedCalls ? money(row.costUsd) : '未配置单价', formatNumber(row.errors)
     ]),
     '今天暂时没有模型调用记录。'
   );
