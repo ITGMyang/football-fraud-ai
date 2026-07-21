@@ -36,6 +36,9 @@ test('billing plans keep prices and durations on the server', () => {
 test('billing access distinguishes paid, free and exhausted accounts', () => {
   const now = Date.parse('2026-07-20T12:00:00.000Z');
   assert.equal(billingAccess({ validUntil: '2026-07-21T12:00:00.000Z' }, now).tier, 'paid');
+  assert.deepEqual(billingAccess({ planId: 'developer', validUntil: '2099-12-31T23:59:59.000Z' }, now), {
+    tier: 'paid', active: true, planId: 'developer', validUntil: '2099-12-31T23:59:59.000Z', freePredictionUsed: false
+  });
   assert.equal(billingAccess({ freePredictionUsed: false }, now).tier, 'free');
   assert.equal(billingAccess({ freePredictionUsed: true }, now).tier, 'locked');
 });

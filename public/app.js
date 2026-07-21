@@ -1769,7 +1769,16 @@ function collectLatestGeneratedResults(rankings) {
 }
 
 function isEnglishPredictionResult(result) {
-  return !/[\u3400-\u9fff]/u.test(JSON.stringify(result || {}));
+  return !/[\u3400-\u9fff]/u.test(predictionNarrativeText(result));
+}
+
+function predictionNarrativeText(result = {}) {
+  const text = [];
+  for (const pick of result.picks || []) text.push(pick.reason, ...(pick.risks || []));
+  for (const pick of result.scorePicks || []) text.push(pick.reason, ...(pick.risks || []));
+  if (result.bttsPick) text.push(result.bttsPick.reason, ...(result.bttsPick.risks || []));
+  if (result.error) text.push(result.error);
+  return text.filter(Boolean).join(' ');
 }
 
 function isNewerModelResult(candidate, existing) {
