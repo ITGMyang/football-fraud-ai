@@ -17,7 +17,8 @@ test('static website and authentication copy are English-only', async () => {
 test('primary website actions and billing plans use English labels', async () => {
   const markup = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
-  assert.match(markup, /Football Fraud/);
+  assert.match(markup, /FutBots/);
+  assert.doesNotMatch(markup, /Football Fraud/);
   assert.match(markup, /Match Intelligence/);
   assert.match(markup, /Run All AI Models/);
   assert.match(markup, /24-Hour Pass/);
