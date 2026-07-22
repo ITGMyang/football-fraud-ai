@@ -553,6 +553,7 @@ test('Cloudflare routes and cron use API-Football exclusively', async () => {
   assert.match(worker, /\/api\/import\/api-football/);
   assert.match(worker, /if \(!cached\) await refreshScheduleAndRecord\(env, storage, workerFetch\)/);
   assert.match(worker, /recordSystemEvent\('api_football_refresh'/);
+  assert.match(worker, /async scheduled(?:(?!async function routeApi)[\s\S])*const workerFetch = \(input, init\) => fetch\(input, init\);(?:(?!async function routeApi)[\s\S])*createSupabaseStorage\(env, workerFetch\)/);
   assert.match(worker, /fetchApiFootballMatches\(\{[^}]*leagueId: '1'[^}]*date,/s);
   assert.match(worker, /fetchApiFootballOddsFixtureIds/);
   assert.match(worker, /fixtureId: match\.matchId/);

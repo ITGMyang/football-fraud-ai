@@ -36,7 +36,7 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
       modelCostTodayUsd: roundMoney(sum(todayUsage, (row) => row.cost_usd)),
       modelCostReportedCalls: todayUsage.filter((row) => row.cost_reported).length,
       lastRefreshAt: latestRefresh?.created_at || '',
-      lastRefreshStatus: latestRefresh?.payload?.errors?.length ? 'warning' : latestRefresh ? 'healthy' : 'unknown',
+      lastRefreshStatus: latestRefresh?.payload?.status === 'started' ? 'running' : latestRefresh?.payload?.errors?.length ? 'warning' : latestRefresh ? 'healthy' : 'unknown',
       cachedMatches: uniqueScheduleMatches(schedules)
     },
     models: summarizeModels(todayUsage),

@@ -377,7 +377,7 @@ function shortId(value) {
 }
 
 function adminStatusLabel(status) {
-  return status === 'healthy' ? '正常' : status === 'warning' ? '存在警告' : '暂无记录';
+  return status === 'healthy' ? '正常' : status === 'running' ? '刷新中' : status === 'warning' ? '存在警告' : '暂无记录';
 }
 
 function orderStatus(status) {

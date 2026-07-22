@@ -65,8 +65,9 @@ export default {
         if (!expected || request.headers.get('X-Cron-Secret') !== expected) {
           return json({ error: 'Unauthorized' }, 401);
         }
-        const result = await refreshApiFootballScheduleCache(env);
-        await createSupabaseStorage(env, fetch).recordSystemEvent('api_football_refresh', result);
+        const workerFetch = (input, init) => fetch(input, init);
+        const result = await refreshApiFootballScheduleCache(env, workerFetch);
+        await createSupabaseStorage(env, workerFetch).recordSystemEvent('api_football_refresh', result);
         return json(result);
       }
       if (request.method === 'OPTIONS' && url.pathname === '/api/import/chrome') return corsJson({}, 204);
@@ -91,8 +92,12 @@ export default {
 
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil((async () => {
-      const storage = createSupabaseStorage(env, fetch);
-      const refreshTask = refreshApiFootballScheduleCache(env).then(async (result) => {
+      const workerFetch = (input, init) => fetch(input, init);
+      const storage = createSupabaseStorage(env, workerFetch);
+      await storage.recordSystemEvent('api_football_refresh', {
+        source: 'scheduled', status: 'started', apiCalls: 0, errors: [], startedAt: new Date().toISOString()
+      });
+      const refreshTask = refreshApiFootballScheduleCache(env, workerFetch).then(async (result) => {
         await storage.recordSystemEvent('api_football_refresh', result);
         console.log(JSON.stringify({ event: 'api_football_schedule_cache_refresh', ...result }));
       }).catch(async (error) => {
@@ -101,7 +106,7 @@ export default {
         }).catch(() => null);
         console.error(JSON.stringify({ event: 'api_football_schedule_cache_refresh_failed', error: error.message }));
       });
-      const billingTask = reconcileRecentBillingOrders(storage, env, fetch).then((result) => {
+      const billingTask = reconcileRecentBillingOrders(storage, env, workerFetch).then((result) => {
         console.log(JSON.stringify({ event: 'billing_reconciliation', ...result }));
       }).catch((error) => {
         console.error(JSON.stringify({ event: 'billing_reconciliation_failed', error: error.message }));
