@@ -27,6 +27,7 @@ import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.
 import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
 import { buildAdminDashboard } from '../src/admin-dashboard.js';
 import { isAdminUser } from '../src/auth.js';
+import { filterVisibleMatches, predictionDailyLimit, validatePredictionFixture } from '../src/prediction-policy.js';
 import {
   createAllScaleCheckout,
   getAllScaleCheckoutStatus,
@@ -94,7 +95,10 @@ export default {
       const refreshTask = refreshApiFootballScheduleCache(env).then(async (result) => {
         await storage.recordSystemEvent('api_football_refresh', result);
         console.log(JSON.stringify({ event: 'api_football_schedule_cache_refresh', ...result }));
-      }).catch((error) => {
+      }).catch(async (error) => {
+        await storage.recordSystemEvent('api_football_refresh', {
+          source: 'scheduled', apiCalls: 0, errors: [{ error: error.message }], failedAt: new Date().toISOString()
+        }).catch(() => null);
         console.error(JSON.stringify({ event: 'api_football_schedule_cache_refresh_failed', error: error.message }));
       });
       const billingTask = reconcileRecentBillingOrders(storage, env, fetch).then((result) => {
@@ -294,13 +298,13 @@ async function routeApi(request, env, access) {
     if (competitionId === 'all') {
       let schedules = filterApiFootballSchedules(await storage.listMatchSchedules());
       if (!schedules.length) {
-        await refreshApiFootballScheduleCache(env, workerFetch);
+        await refreshScheduleAndRecord(env, storage, workerFetch);
         schedules = filterApiFootballSchedules(await storage.listMatchSchedules());
       }
       cached = aggregateApiFootballSchedules(schedules, date);
     } else {
       cached = await storage.readMatchSchedule(competitionId);
-      if (!cached) await refreshApiFootballScheduleCache(env, workerFetch);
+      if (!cached) await refreshScheduleAndRecord(env, storage, workerFetch);
       if (!cached) cached = await storage.readMatchSchedule(competitionId);
     }
     const needsWorldCupDate = competitionId === '1'
@@ -353,6 +357,10 @@ async function routeApi(request, env, access) {
           }
         };
         await storage.upsertMatchSchedules([cached]);
+        await storage.recordSystemEvent('api_football_refresh', {
+          source: 'on-demand-world-cup', date, apiCalls: 1 + fixtureCount,
+          fixtures: fixtureCount, fixturesWithOdds: verifiedMatches.length, errors: []
+        });
       } catch (error) {
         if (!cached || !/too many requests/i.test(String(error?.message || ''))) throw error;
         cached = {
@@ -378,11 +386,11 @@ async function routeApi(request, env, access) {
           }
         };
         await storage.upsertMatchSchedules([cached]);
-        return json({ ...filterApiFootballMatches(cached, date), cacheStatus: 'odds-check-delayed' });
+        return json({ ...await visibleMatchResponse(cached, date, access, storage), cacheStatus: 'odds-check-delayed' });
       }
     }
     if (!cached) return json({ error: 'Match data is being prepared for the first time. Try again shortly.', code: 'SCHEDULE_CACHE_MISS' }, 503);
-    return json({ ...filterApiFootballMatches(cached, date), cacheStatus: 'ready' });
+    return json({ ...await visibleMatchResponse(cached, date, access, storage), cacheStatus: 'ready' });
   }
 
   if (request.method === 'POST' && url.pathname === '/api/markets/clear') {
@@ -471,12 +479,47 @@ async function routeApi(request, env, access) {
     const body = await request.json();
     const db = await storage.readDb({ ownerId });
     const contextSelector = body.contextId || body.sourceUrl || body.matchId;
-    const context = contextSelector
+    let context = contextSelector
       ? findExistingContext(db.matchContexts || [], contextSelector)
       : (db.matchContexts || [])[0] || null;
     if (!db.markets.length && !context) return json({ error: 'No API-Football match data has been imported' }, 400);
+    if (context && shouldRefreshLineupBeforePrediction(context)) {
+      try {
+        context = await storage.upsertMatchContext(
+          await fetchApiFootballContext(context.matchId || context.sourceUrl, apiFootballContextOptions(env, storage), workerFetch),
+          { ownerId }
+        );
+      } catch (error) {
+        console.warn(JSON.stringify({ event: 'prediction_lineup_refresh_failed', fixtureId: context.matchId || '', error: error.message }));
+      }
+    }
     const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
     if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
+    const fixtureValidation = validatePredictionFixture(context, predictionAccess.billing);
+    if (!fixtureValidation.ok) {
+      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
+      return json({ error: fixtureValidation.error, code: fixtureValidation.code }, 403);
+    }
+    let queuedRequest = null;
+    if (access.role === 'user' && predictionAccess.billing.active) {
+      queuedRequest = await storage.reservePredictionRequest({
+        ownerId,
+        fixtureId: String(context?.matchId || contextKey(context)),
+        planId: predictionAccess.billing.planId,
+        dailyLimit: predictionDailyLimit(predictionAccess.billing.planId),
+        cooldownSeconds: 90
+      });
+      if (!queuedRequest?.ok) {
+        const status = queuedRequest?.code === 'DAILY_PREDICTION_LIMIT' ? 402 : 429;
+        return json({
+          error: predictionQueueError(queuedRequest),
+          code: queuedRequest?.code || 'PREDICTION_QUEUE_BUSY',
+          retryAfterSeconds: queuedRequest?.retryAfterSeconds || 0,
+          usedToday: queuedRequest?.usedToday,
+          dailyLimit: queuedRequest?.dailyLimit
+        }, status);
+      }
+    }
     const requestedModel = predictionAccess.free ? 'Qwen' : (body.model || 'all');
     try {
       const fixtureId = String(context?.matchId || '');
@@ -506,6 +549,9 @@ async function routeApi(request, env, access) {
         mergeLatest: requestedModel !== 'all',
         ownerId
       });
+      if (queuedRequest?.requestId) {
+        await storage.completePredictionRequest(queuedRequest.requestId, { status: 'success', cached: shared.cacheHit }).catch(() => null);
+      }
       const headers = access.consumeGuestPrediction
         ? { 'Set-Cookie': await guestPredictionCookie(env, request) }
         : {};
@@ -513,15 +559,45 @@ async function routeApi(request, env, access) {
         ranking: savedRanking,
         billing: predictionAccess.billing,
         model: requestedModel,
-        cached: shared.cacheHit
+        cached: shared.cacheHit,
+        usage: queuedRequest ? { usedToday: queuedRequest.usedToday, dailyLimit: queuedRequest.dailyLimit } : null
       }, 200, headers);
     } catch (error) {
+      if (queuedRequest?.requestId) {
+        await storage.completePredictionRequest(queuedRequest.requestId, { status: 'error', errorMessage: error.message }).catch(() => null);
+      }
       if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
       throw error;
     }
   }
 
   return json({ error: 'Not found' }, 404);
+}
+
+async function refreshScheduleAndRecord(env, storage, fetchImpl) {
+  const result = await refreshApiFootballScheduleCache(env, fetchImpl);
+  await storage.recordSystemEvent('api_football_refresh', result);
+  return result;
+}
+
+async function visibleMatchResponse(schedule, date, access, storage, now = Date.now()) {
+  const response = filterApiFootballMatches(schedule, date);
+  const entitlement = access?.role === 'user'
+    ? billingAccess(await storage.readBillingEntitlement(access.user.id), now)
+    : {};
+  return { ...response, matches: filterVisibleMatches(response.matches || [], now, entitlement) };
+}
+
+function shouldRefreshLineupBeforePrediction(context, now = Date.now()) {
+  if (hasLineupPlayers(context)) return false;
+  const kickoff = Date.parse(context?.kickoff || context?.fixture?.date || '');
+  return Number.isFinite(kickoff) && kickoff >= now && kickoff - now <= 60 * 60 * 1000;
+}
+
+function predictionQueueError(result = {}) {
+  if (result.code === 'DAILY_PREDICTION_LIMIT') return `Today's prediction limit has been reached (${result.dailyLimit}).`;
+  if (result.code === 'PREDICTION_COOLDOWN') return `Please wait ${result.retryAfterSeconds || 90} seconds before predicting another match.`;
+  return 'Another prediction is still running. Try again shortly.';
 }
 
 async function handleAllScaleWebhook(request, env) {

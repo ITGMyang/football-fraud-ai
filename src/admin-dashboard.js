@@ -12,7 +12,9 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
   const entitlements = input.entitlements || [];
   const schedules = input.schedules || [];
   const sharedPredictions = input.sharedPredictions || [];
+  const predictionRequests = input.predictionRequests || [];
   const todayUsage = aiUsage.filter((row) => dateKey(row.created_at) === today);
+  const todayPredictionRequests = predictionRequests.filter((row) => dateKey(row.created_at) === today);
   const todayRefreshes = systemEvents.filter((row) => row.event_type === 'api_football_refresh' && dateKey(row.created_at) === today);
   const latestRefresh = [...systemEvents]
     .filter((row) => row.event_type === 'api_football_refresh')
@@ -26,6 +28,11 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
       apiFootballCallsToday: sum(todayRefreshes, (row) => row.payload?.apiCalls),
       apiFootballDailyLimit: positiveNumber(input.apiFootballDailyLimit),
       modelCallsToday: todayUsage.length,
+      modelUsersToday: new Set(todayUsage.map((row) => String(row.owner_id || '')).filter(Boolean)).size,
+      predictionRequestsToday: todayPredictionRequests.length,
+      predictionRequestErrorsToday: todayPredictionRequests.filter((row) => row.status === 'error').length,
+      predictionRequestsCachedToday: todayPredictionRequests.filter((row) => row.cached).length,
+      predictionQueueActive: predictionRequests.filter((row) => ['queued', 'running'].includes(row.status)).length,
       modelCostTodayUsd: roundMoney(sum(todayUsage, (row) => row.cost_usd)),
       modelCostReportedCalls: todayUsage.filter((row) => row.cost_reported).length,
       lastRefreshAt: latestRefresh?.created_at || '',
@@ -55,11 +62,15 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
       .map((row) => ({
         id: row.id,
         ownerId: row.owner_id,
+        email: users.find((user) => String(user.id) === String(row.owner_id))?.email || '',
         planId: row.plan_id,
         amountUsd: roundMoney(Number(row.amount_cents || 0) / 100),
         status: Number(row.status),
+        failureReason: Number(row.status) < 0 ? (row.request_id || 'Payment provider rejected the order') : '',
+        requestId: row.request_id || '',
         createdAt: row.created_at,
-        confirmedAt: row.confirmed_at || ''
+        confirmedAt: row.confirmed_at || '',
+        expiresAt: row.expires_at || ''
       }))
   };
 }
@@ -83,7 +94,9 @@ function summarizeSharedPool(sharedRows, usageRows, contextRows, scheduleRows) {
     const cached = cachedByFixture.get(fixtureId) || new Map();
     const models = Object.fromEntries(PREDICTION_MODELS.map((model) => {
       const attempt = latestUsage.get(`${fixtureId}|${model}`);
-      return [model, cached.has(model) ? 'cached' : attempt?.status === 'error' ? 'failed' : 'not_requested'];
+      const cachedRow = cached.get(model);
+      const phase = cachedRow?.payload?.predictionPhase;
+      return [model, cachedRow ? (phase === 'live' ? 'live' : phase === 'early' ? 'early' : 'cached') : attempt?.status === 'error' ? 'failed' : 'not_requested'];
     }));
     const cachedRowsForMatch = [...cached.values()];
     return {

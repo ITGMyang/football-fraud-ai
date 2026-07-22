@@ -265,7 +265,8 @@ function renderAdminDashboard(dashboard) {
   if (updated) updated.textContent = `更新于 ${formatAdminDate(dashboard.generatedAt)}`;
   adminCoreMetricsEl.innerHTML = [
     adminMetric('今日 API-Football 调用', formatNumber(apiCalls), apiLimit ? `每日额度 ${formatNumber(apiLimit)} 次` : '额度未知', apiPercent),
-    adminMetric('今日 AI 调用', formatNumber(core.modelCallsToday), '全部模型供应商'),
+    adminMetric('今日 AI 调用', formatNumber(core.modelCallsToday), `${formatNumber(core.modelUsersToday)} 位用户使用模型`),
+    adminMetric('今日预测请求', formatNumber(core.predictionRequestsToday), `${formatNumber(core.predictionRequestsCachedToday)} 次命中共享池 · ${formatNumber(core.predictionRequestErrorsToday)} 次失败`),
     adminMetric('今日 AI 成本', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} 次调用包含成本；APIMart 按 Token 单价计算` : '尚未配置可用单价'),
     adminMetric('缓存比赛', formatNumber(core.cachedMatches), `刷新状态：${adminStatusLabel(core.lastRefreshStatus)}`),
     adminMetric('注册用户', formatNumber(dashboard.users?.total), `今日活跃 ${formatNumber(dashboard.users?.activeToday)} 人`),
@@ -301,9 +302,11 @@ function renderAdminDashboard(dashboard) {
     '暂时没有用户数据。'
   );
   $('#adminOrders').innerHTML = adminTable(
-    ['订单', '账号', '方案', '金额', '状态', '创建时间'],
+    ['订单', '账号', '方案', '金额', '状态', '详细信息', '创建时间'],
     (dashboard.recentOrders || []).map((row) => [
-      shortId(row.id), shortId(row.ownerId), row.planId, money(row.amountUsd), orderStatus(row.status), formatAdminDate(row.createdAt)
+      shortId(row.id), row.email || shortId(row.ownerId), adminPlanName(row.planId), money(row.amountUsd), orderStatus(row.status),
+      row.failureReason || (row.confirmedAt ? `确认 ${formatAdminDate(row.confirmedAt)} · 到期 ${formatAdminDate(row.expiresAt)}` : row.requestId || '等待支付平台确认'),
+      formatAdminDate(row.createdAt)
     ]),
     '暂时没有订单。'
   );
@@ -338,7 +341,10 @@ function renderAdminSharedPool() {
 }
 
 function adminPoolStatus(status) {
-  const value = status === 'cached' ? ['cached', '已入池'] : status === 'failed' ? ['failed', '失败未入池'] : ['idle', '尚未请求'];
+  const value = status === 'live' ? ['live', '临场结论']
+    : status === 'early' ? ['early', '早盘预测']
+      : status === 'cached' ? ['cached', '已入池']
+        : status === 'failed' ? ['failed', '失败未入池'] : ['idle', '尚未请求'];
   return `<span class="admin-pool-status ${value[0]}">${value[1]}</span>`;
 }
 
@@ -379,6 +385,10 @@ function orderStatus(status) {
   if ([0, 1].includes(Number(status))) return '处理中';
   if (Number(status) < 0) return '失败';
   return `状态 ${status}`;
+}
+
+function adminPlanName(planId) {
+  return planId === 'day' ? '日卡' : planId === 'week' ? '周卡' : planId === 'month' ? '月卡' : planId === 'developer' ? '开发者' : planId || '未知';
 }
 
 function renderBackendCompetitionOptions() {
@@ -1872,6 +1882,7 @@ function renderModelRanking(result, marketMap) {
         <div>
           <h3 class="model-title">${modelBrand(result?.modelName)} ${escapeHtml(result?.modelName || 'AI')}</h3>
           ${result?.provider ? `<span class="provider-badge">${escapeHtml(result.provider)}</span>` : ''}
+          ${result?.predictionPhase ? `<span class="prediction-phase ${escapeHtml(result.predictionPhase)}">${result.predictionPhase === 'live' ? 'Live Conclusion' : 'Early Prediction'}</span>` : ''}
           <p>Sorted by model-estimated probability, not by implied betting odds.</p>
         </div>
         <span>Top ${picks.length}</span>

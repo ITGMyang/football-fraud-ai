@@ -499,6 +499,7 @@ main {
 .ai-context-meta-line small,
 .pill,
 .provider-badge,
+.prediction-phase,
 .badge,
 .count {
   display: inline-flex;
@@ -682,6 +683,8 @@ main {
 .model-ranking-head > span { color: var(--accent); font-weight: 900; }
 .model-title { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
 .provider-badge { border-color: #b5d5c5; color: #22684d; background: var(--signal-soft); }
+.prediction-phase { margin-left: 6px; border-color: #c8c5ba; color: var(--muted); background: #f5f4ef; }
+.prediction-phase.live { border-color: #278565; color: #fff; background: #278565; }
 
 .score-predictions {
   display: grid;
@@ -1166,6 +1169,8 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-pool-table td:first-child small { margin-top: 4px; color: var(--muted); font-weight: 500; }
 .admin-pool-status { display: inline-block; min-width: 72px; padding: 5px 8px; border: 1px solid var(--line); color: var(--muted); background: #f5f5f1; font-size: 0.72rem; font-weight: 800; text-align: center; }
 .admin-pool-status.cached { color: #fff; border-color: #278565; background: #278565; }
+.admin-pool-status.early { color: #76551a; border-color: #dec88f; background: #fff7dd; }
+.admin-pool-status.live { color: #fff; border-color: #278565; background: #278565; }
 .admin-pool-status.failed { color: #9f3528; border-color: #e4aaa2; background: #fff0ed; }
 
 @media (max-width: 1100px) {

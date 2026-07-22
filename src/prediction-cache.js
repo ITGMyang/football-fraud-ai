@@ -9,12 +9,14 @@ export async function resolveSharedRanking({
   fetchImpl = fetch,
   storage,
   rankFn = rankMarkets,
-  matchContext = null
+  matchContext = null,
+  now = Date.now()
 }) {
   const targets = selectedModels(requestedModel, env);
   const cachedRows = await storage.readSharedPredictionResults(fixtureId);
   const cachedByModel = new Map(cachedRows.map((row) => [row.modelKey, row.result]));
-  const missing = targets.filter((target) => !cachedByModel.has(target.key));
+  const phase = predictionPhase(matchContext, now);
+  const missing = targets.filter((target) => shouldRefreshCachedResult(cachedByModel.get(target.key), phase));
   const freshResults = [];
   let latestRanking = null;
 
@@ -29,7 +31,9 @@ export async function resolveSharedRanking({
     }
   }
 
-  const successfulResults = freshResults.filter((result) => !result.error);
+  const successfulResults = freshResults
+    .filter((result) => !result.error)
+    .map((result) => ({ ...result, predictionPhase: phase }));
   if (successfulResults.length) {
     await storage.saveSharedPredictionResults(fixtureId, successfulResults);
     for (const result of successfulResults) cachedByModel.set(predictionModelKey(result.modelName || result.modelId), result);
@@ -51,6 +55,17 @@ export async function resolveSharedRanking({
       disclaimer: latestRanking?.disclaimer || 'AI predictions are probabilistic and are not financial advice.'
     }
   };
+}
+
+export function predictionPhase(context = {}, now = Date.now()) {
+  const kickoff = Date.parse(context?.kickoff || context?.fixture?.date || '');
+  const hasLineup = Array.isArray(context?.lineup?.players) && context.lineup.players.length > 0;
+  return hasLineup && Number.isFinite(kickoff) && kickoff - now <= 60 * 60 * 1000 ? 'live' : 'early';
+}
+
+function shouldRefreshCachedResult(result, requestedPhase) {
+  if (!result) return true;
+  return requestedPhase === 'live' && result.predictionPhase !== 'live';
 }
 
 export function predictionModelKey(value = '') {

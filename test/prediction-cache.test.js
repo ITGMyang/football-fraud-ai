@@ -63,6 +63,46 @@ test('an all-model request only calls models missing from the shared cache', asy
   assert.equal(result.freshResults.length, 1);
 });
 
+test('an early prediction is reused until a confirmed lineup upgrades it to a live conclusion', async () => {
+  const cache = new Map();
+  let modelCalls = 0;
+  const storage = cacheStorage(cache);
+  const rankFn = async () => {
+    modelCalls += 1;
+    return rankingFor('Qwen', [{ modelName: 'Qwen 3.7 Max', modelId: 'qwen/qwen3.7-max', picks: [{ marketId: `m${modelCalls}` }] }]);
+  };
+  const base = {
+    fixtureId: 'live-upgrade',
+    requestedModel: 'Qwen',
+    env: { MODEL_QWEN: 'qwen/qwen3.7-max', MODEL_QWEN_LABEL: 'Qwen 3.7 Max' },
+    storage,
+    rankFn,
+    now: Date.parse('2026-07-22T10:00:00Z')
+  };
+
+  const early = await resolveSharedRanking({
+    ...base,
+    matchContext: { kickoff: '2026-07-22T12:00:00Z', lineup: { players: [] } }
+  });
+  const reused = await resolveSharedRanking({
+    ...base,
+    now: Date.parse('2026-07-22T11:10:00Z'),
+    matchContext: { kickoff: '2026-07-22T12:00:00Z', lineup: { players: [] } }
+  });
+  const live = await resolveSharedRanking({
+    ...base,
+    now: Date.parse('2026-07-22T11:15:00Z'),
+    matchContext: { kickoff: '2026-07-22T12:00:00Z', lineup: { players: [{ id: 1 }] } }
+  });
+
+  assert.equal(modelCalls, 2);
+  assert.equal(early.ranking.results[0].predictionPhase, 'early');
+  assert.equal(reused.cacheHit, true);
+  assert.equal(live.cacheHit, false);
+  assert.equal(live.ranking.results[0].predictionPhase, 'live');
+  assert.equal(live.ranking.results[0].picks[0].marketId, 'm2');
+});
+
 function cacheStorage(cache) {
   return {
     async readSharedPredictionResults() {

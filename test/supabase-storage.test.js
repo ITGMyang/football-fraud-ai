@@ -196,6 +196,36 @@ test('Supabase billing storage scopes orders and entitlements to their owner', a
   assert.equal(entitlement.planId, 'day');
 });
 
+test('Supabase prediction queue reserves and completes one account request', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (String(url).includes('/rpc/reserve_prediction_request')) {
+      return new Response(JSON.stringify({ ok: true, requestId: 'request-1', usedToday: 3, dailyLimit: 20 }), {
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    return new Response('[]', { headers: { 'content-type': 'application/json' } });
+  });
+
+  const reserved = await storage.reservePredictionRequest({
+    ownerId: 'user-1', fixtureId: 'fixture-1', planId: 'week', dailyLimit: 20, cooldownSeconds: 90
+  });
+  await storage.completePredictionRequest('request-1', { status: 'success', cached: true });
+
+  assert.equal(reserved.requestId, 'request-1');
+  const reserve = requests.find(({ url }) => url.includes('/rpc/reserve_prediction_request'));
+  assert.match(reserve.options.body, /"p_daily_limit":20/);
+  assert.match(reserve.options.body, /"p_cooldown_seconds":90/);
+  const complete = requests.find(({ url, options }) => url.includes('/prediction_requests?') && options.method === 'PATCH');
+  assert.match(complete.url, /id=eq\.request-1/);
+  assert.match(complete.options.body, /"status":"success"/);
+  assert.match(complete.options.body, /"cached":true/);
+});
+
 test('Supabase lists recent non-terminal billing orders for server reconciliation', async () => {
   const requests = [];
   const storage = createSupabaseStorage({
@@ -257,7 +287,7 @@ test('Supabase admin dashboard read includes auth users and operational tables',
   const data = await storage.readAdminDashboardData();
 
   assert.equal(data.users[0].email, 'admin@example.com');
-  for (const table of ['ai_usage_events', 'system_events', 'rankings', 'match_contexts', 'match_schedules', 'billing_orders', 'billing_entitlements', 'shared_prediction_results']) {
+  for (const table of ['ai_usage_events', 'system_events', 'rankings', 'match_contexts', 'match_schedules', 'billing_orders', 'billing_entitlements', 'shared_prediction_results', 'prediction_requests']) {
     assert.ok(requests.some(({ url }) => url.includes(`/${table}?`)), `expected ${table} read`);
   }
 });

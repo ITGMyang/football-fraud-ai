@@ -75,8 +75,8 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
     ],
     schedules: [{ payload: { competitionId: '39', matches: [{ matchId: '1' }, { matchId: '2' }] } }],
     sharedPredictions: [
-      { fixture_id: 'match-1', model_key: 'gpt', model_id: 'gpt-5.5', payload: { modelName: 'GPT 5.5' }, updated_at: '2026-07-21T10:01:00Z' },
-      { fixture_id: 'match-1', model_key: 'claude', model_id: 'claude-opus-4-8', payload: { modelName: 'Claude 4.8' }, updated_at: '2026-07-21T10:02:00Z' }
+      { fixture_id: 'match-1', model_key: 'gpt', model_id: 'gpt-5.5', payload: { modelName: 'GPT 5.5', predictionPhase: 'early' }, updated_at: '2026-07-21T10:01:00Z' },
+      { fixture_id: 'match-1', model_key: 'claude', model_id: 'claude-opus-4-8', payload: { modelName: 'Claude 4.8', predictionPhase: 'live' }, updated_at: '2026-07-21T10:02:00Z' }
     ],
     aiUsage: [
       { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'GPT 5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0.5, cost_reported: true, status: 'success', created_at: '2026-07-21T10:00:00Z' },
@@ -85,14 +85,21 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
     systemEvents: [{ event_type: 'api_football_refresh', payload: { apiCalls: 18, errors: [] }, created_at: '2026-07-21T09:40:00Z' }],
     orders: [
       { id: 'o1', owner_id: 'u1', plan_id: 'day', amount_cents: 299, status: 20, created_at: '2026-07-21T08:00:00Z' },
-      { id: 'o2', owner_id: 'u2', plan_id: 'week', amount_cents: 1199, status: 1, created_at: '2026-07-21T09:00:00Z' }
+      { id: 'o2', owner_id: 'u2', plan_id: 'week', amount_cents: 1199, status: -1, request_id: 'provider-failed', created_at: '2026-07-21T09:00:00Z' }
     ],
-    entitlements: [{ owner_id: 'u1', plan_id: 'day', valid_until: '2026-07-22T08:00:00Z', free_prediction_used: true }]
+    entitlements: [{ owner_id: 'u1', plan_id: 'day', valid_until: '2026-07-22T08:00:00Z', free_prediction_used: true }],
+    predictionRequests: [
+      { owner_id: 'u1', fixture_id: 'match-1', status: 'success', cached: false, created_at: '2026-07-21T10:00:00Z' },
+      { owner_id: 'u1', fixture_id: 'match-1', status: 'error', cached: false, created_at: '2026-07-21T10:10:00Z' }
+    ]
   }, now);
 
   assert.equal(dashboard.core.apiFootballCallsToday, 18);
   assert.equal(dashboard.core.apiFootballDailyLimit, 7500);
   assert.equal(dashboard.core.modelCallsToday, 2);
+  assert.equal(dashboard.core.modelUsersToday, 1);
+  assert.equal(dashboard.core.predictionRequestsToday, 2);
+  assert.equal(dashboard.core.predictionRequestErrorsToday, 1);
   assert.equal(dashboard.core.modelCostTodayUsd, 0.5);
   assert.equal(dashboard.models[0].modelName, 'GPT 5.5');
   assert.equal(dashboard.models[0].totalTokens, 1250);
@@ -100,12 +107,15 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
   assert.equal(dashboard.users.activeToday, 1);
   assert.equal(dashboard.users.paid, 1);
   assert.equal(dashboard.orders.confirmedRevenueUsd, 2.99);
-  assert.equal(dashboard.orders.pendingCount, 1);
+  assert.equal(dashboard.orders.pendingCount, 0);
+  assert.equal(dashboard.orders.failedCount, 1);
+  assert.equal(dashboard.recentOrders[0].email, '');
+  assert.equal(dashboard.recentOrders[0].failureReason, 'provider-failed');
   assert.equal(dashboard.leagues.find((row) => row.name === 'Premier League').imports, 1);
   assert.equal(dashboard.sharedPool.totalMatches, 1);
   assert.equal(dashboard.sharedPool.totalResults, 2);
   assert.deepEqual(dashboard.sharedPool.matches[0].models, {
-    gpt: 'cached', claude: 'cached', gemini: 'failed', deepseek: 'not_requested', qwen: 'not_requested'
+    gpt: 'early', claude: 'live', gemini: 'failed', deepseek: 'not_requested', qwen: 'not_requested'
   });
   assert.equal(dashboard.sharedPool.matches[0].matchName, 'match-1');
 });
