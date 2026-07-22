@@ -273,7 +273,7 @@ function renderAdminDashboard(dashboard) {
     adminMetric('今日 API-Football 调用', formatNumber(apiCalls), apiLimit ? `每日额度 ${formatNumber(apiLimit)} 次` : '额度未知', apiPercent),
     adminMetric('今日 AI 调用', formatNumber(core.modelCallsToday), `${formatNumber(core.modelUsersToday)} 位用户使用模型`),
     adminMetric('今日预测请求', formatNumber(core.predictionRequestsToday), `${formatNumber(core.predictionRequestsCachedToday)} 次命中共享池 · ${formatNumber(core.predictionRequestErrorsToday)} 次失败`),
-    adminMetric('今日 AI 成本', money(core.modelCostTodayUsd), core.modelCostReportedCalls ? `${core.modelCostReportedCalls} 次调用包含成本；APIMart 按 Token 单价计算` : '尚未配置可用单价'),
+    adminMetric('今日 AI 成本', money(core.modelCostTodayUsd), core.modelCostAvailableCalls ? `${core.modelCostAvailableCalls} 次调用已计价${core.modelCostEstimatedCalls ? ` · ${core.modelCostEstimatedCalls} 次为历史估算` : ''}` : '尚未配置可用单价'),
     adminMetric('缓存比赛', formatNumber(core.cachedMatches), `刷新状态：${adminStatusLabel(core.lastRefreshStatus)}`),
     adminMetric('注册用户', formatNumber(dashboard.users?.total), `今日活跃 ${formatNumber(dashboard.users?.activeToday)} 人`),
     adminMetric('付费用户', formatNumber(dashboard.users?.paid), `近 30 天活跃 ${formatNumber(dashboard.users?.active30d)} 人`),
@@ -293,7 +293,7 @@ function renderAdminDashboard(dashboard) {
     (selectedUsage.models || dashboard.models || []).map((row) => [
       row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
       formatNumber(row.outputTokens), formatNumber(row.totalTokens),
-      row.costReportedCalls ? money(row.costUsd) : '未配置单价', formatNumber(row.errors)
+      adminModelCost(row), formatNumber(row.errors)
     ]),
     '该日期暂时没有模型调用记录。'
   );
@@ -303,7 +303,7 @@ function renderAdminDashboard(dashboard) {
     (totalUsage.models || []).map((row) => [
       row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
       formatNumber(row.outputTokens), formatNumber(row.totalTokens),
-      row.costReportedCalls ? money(row.costUsd) : '未配置单价', formatNumber(row.errors)
+      adminModelCost(row), formatNumber(row.errors)
     ]),
     '暂时没有模型调用记录。'
   );
@@ -343,6 +343,11 @@ function adminUsageSummary(usage = {}) {
     `成本 <strong>${money(usage.costUsd)}</strong>`,
     `错误 <strong>${formatNumber(usage.errors)}</strong> 次`
   ].map((item) => `<span>${item}</span>`).join('');
+}
+
+function adminModelCost(row = {}) {
+  if (!row.costAvailableCalls) return '未配置单价';
+  return `${money(row.costUsd)}${row.costEstimatedCalls ? '（估算）' : ''}`;
 }
 
 function activateAdminTab(tabName = 'overview') {

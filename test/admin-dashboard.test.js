@@ -57,6 +57,18 @@ test('APIMart usage converts Claude and Gemini tokens with the published discoun
   });
 });
 
+test('OpenAI GPT 5.5 usage calculates cost when the response only reports tokens', () => {
+  assert.deepEqual(modelUsageFromResponse({ usage: {
+    prompt_tokens: 5569, completion_tokens: 3648, total_tokens: 9217
+  } }, { provider: 'openai', model: 'gpt-5.5' }), {
+    inputTokens: 5569,
+    outputTokens: 3648,
+    totalTokens: 9217,
+    costUsd: 0.137285,
+    costReported: true
+  });
+});
+
 test('admin dashboard aggregates real system, model, league, user, and order data', () => {
   const now = Date.parse('2026-07-21T12:00:00.000Z');
   const dashboard = buildAdminDashboard({
@@ -79,7 +91,7 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
       { fixture_id: 'match-1', model_key: 'claude', model_id: 'claude-opus-4-8', payload: { modelName: 'Claude 4.8', predictionPhase: 'live' }, updated_at: '2026-07-21T10:02:00Z' }
     ],
     aiUsage: [
-      { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'GPT 5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0.5, cost_reported: true, status: 'success', created_at: '2026-07-21T10:00:00Z' },
+      { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'GPT 5.5', model_id: 'gpt-5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0, cost_reported: false, status: 'success', created_at: '2026-07-21T10:00:00Z' },
       { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'Gemini', provider: 'APIMart', input_tokens: 800, output_tokens: 200, total_tokens: 1000, cost_usd: 0, cost_reported: false, status: 'error', created_at: '2026-07-21T10:05:00Z' },
       { owner_id: 'u2', request_kind: 'ranking', context_id: 'match-2', model_name: 'Qwen Max', provider: 'OpenRouter', input_tokens: 600, output_tokens: 150, total_tokens: 750, cost_usd: 0.1, cost_reported: true, status: 'success', created_at: '2026-07-20T10:05:00Z' }
     ],
@@ -101,9 +113,12 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
   assert.equal(dashboard.core.modelUsersToday, 1);
   assert.equal(dashboard.core.predictionRequestsToday, 2);
   assert.equal(dashboard.core.predictionRequestErrorsToday, 1);
-  assert.equal(dashboard.core.modelCostTodayUsd, 0.5);
+  assert.equal(dashboard.core.modelCostTodayUsd, 0.0125);
+  assert.equal(dashboard.core.modelCostEstimatedCalls, 1);
   assert.equal(dashboard.models[0].modelName, 'GPT 5.5');
   assert.equal(dashboard.models[0].totalTokens, 1250);
+  assert.equal(dashboard.models[0].costUsd, 0.0125);
+  assert.equal(dashboard.models[0].costEstimatedCalls, 1);
   assert.equal(dashboard.modelUsage.selectedDate, '2026-07-20');
   assert.deepEqual(dashboard.modelUsage.availableDates, ['2026-07-21', '2026-07-20']);
   assert.equal(dashboard.modelUsage.selected.calls, 1);
@@ -166,7 +181,7 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(markup, /data-admin-panel="orders"/);
   assert.match(app, /\/api\/admin\/dashboard/);
   assert.match(app, /activateAdminTab/);
-  assert.match(app, /APIMart 按 Token 单价计算/);
+  assert.match(app, /历史估算/);
   assert.match(app, /renderAdminSharedPool/);
   assert.match(app, /startAdminAutoRefresh/);
   assert.match(app, /未配置单价/);

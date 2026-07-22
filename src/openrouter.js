@@ -1,11 +1,8 @@
 import { aggregateReport, validatePrediction } from './domain.js';
+import { calculateModelCostUsd } from './model-cost.js';
 
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
-const APIMART_USD_PER_MILLION_TOKENS = Object.freeze({
-  'claude-opus-4-8': { input: 4, output: 20 },
-  'gemini-3.1-pro-preview': { input: 1.6, output: 9.6 }
-});
 
 export function configuredModels(env = process.env) {
   return [
@@ -237,9 +234,13 @@ export function modelUsageFromResponse(data = {}, options = {}) {
   const rawCost = numberField(usage.cost, data.cost, data.usage_cost);
   const providerCostAvailable = [usage.cost, data.cost, data.usage_cost]
     .some((value) => value !== undefined && value !== null && value !== '');
-  const calculatedCost = providerCostAvailable
-    ? null
-    : apimartCostUsd(options.provider, options.model, inputTokens, outputTokens);
+  const calculatedCost = providerCostAvailable ? null : calculateModelCostUsd({
+    provider: options.provider,
+    model: options.model,
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: numberField(usage.prompt_tokens_details?.cached_tokens, usage.input_tokens_details?.cached_tokens)
+  });
   return {
     inputTokens,
     outputTokens,
@@ -247,14 +248,6 @@ export function modelUsageFromResponse(data = {}, options = {}) {
     costUsd: calculatedCost ?? rawCost,
     costReported: providerCostAvailable || calculatedCost !== null
   };
-}
-
-function apimartCostUsd(provider, model, inputTokens, outputTokens) {
-  if (String(provider || '').toLowerCase() !== 'apimart') return null;
-  const rate = APIMART_USD_PER_MILLION_TOKENS[String(model || '').toLowerCase()];
-  if (!rate) return null;
-  const cost = ((inputTokens * rate.input) + (outputTokens * rate.output)) / 1_000_000;
-  return Math.round(cost * 100_000_000) / 100_000_000;
 }
 
 function numberField(...values) {

@@ -1,3 +1,5 @@
+import { calculateModelCostUsd } from './model-cost.js';
+
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'deepseek', 'qwen'];
 
@@ -19,6 +21,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
     ? String(options.selectedDate)
     : today;
   const selectedUsage = aiUsage.filter((row) => dateKey(row.created_at) === requestedDate);
+  const todayUsageSummary = summarizeUsage(todayUsage);
   const todayPredictionRequests = predictionRequests.filter((row) => dateKey(row.created_at) === today);
   const todayRefreshes = systemEvents.filter((row) => row.event_type === 'api_football_refresh' && dateKey(row.created_at) === today);
   const latestRefresh = [...systemEvents]
@@ -38,8 +41,10 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
       predictionRequestErrorsToday: todayPredictionRequests.filter((row) => row.status === 'error').length,
       predictionRequestsCachedToday: todayPredictionRequests.filter((row) => row.cached).length,
       predictionQueueActive: predictionRequests.filter((row) => ['queued', 'running'].includes(row.status)).length,
-      modelCostTodayUsd: roundMoney(sum(todayUsage, (row) => row.cost_usd)),
-      modelCostReportedCalls: todayUsage.filter((row) => row.cost_reported).length,
+      modelCostTodayUsd: todayUsageSummary.costUsd,
+      modelCostReportedCalls: todayUsageSummary.costReportedCalls,
+      modelCostEstimatedCalls: todayUsageSummary.costEstimatedCalls,
+      modelCostAvailableCalls: todayUsageSummary.costAvailableCalls,
       lastRefreshAt: latestRefresh?.created_at || '',
       lastRefreshStatus: latestRefresh?.payload?.status === 'started' ? 'running' : latestRefresh?.payload?.errors?.length ? 'warning' : latestRefresh ? 'healthy' : 'unknown',
       cachedMatches: uniqueScheduleMatches(schedules)
@@ -87,12 +92,15 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
 }
 
 function summarizeUsage(rows) {
+  const costs = rows.map(usageRowCost);
   return {
     calls: rows.length,
     users: new Set(rows.map((row) => String(row.owner_id || '')).filter(Boolean)).size,
     tokens: sum(rows, (row) => row.total_tokens),
-    costUsd: roundMoney(sum(rows, (row) => row.cost_usd)),
+    costUsd: roundMoney(sum(costs, (cost) => cost.value)),
     costReportedCalls: rows.filter((row) => row.cost_reported).length,
+    costEstimatedCalls: costs.filter((cost) => cost.estimated).length,
+    costAvailableCalls: costs.filter((cost) => cost.available).length,
     errors: rows.filter((row) => row.status !== 'success').length,
     models: summarizeModels(rows)
   };
@@ -198,18 +206,36 @@ function summarizeModels(rows) {
       totalTokens: 0,
       costUsd: 0,
       costReportedCalls: 0,
+      costEstimatedCalls: 0,
+      costAvailableCalls: 0,
       errors: 0
     };
     item.requests += 1;
     item.inputTokens += positiveNumber(row.input_tokens);
     item.outputTokens += positiveNumber(row.output_tokens);
     item.totalTokens += positiveNumber(row.total_tokens);
-    item.costUsd = roundMoney(item.costUsd + positiveNumber(row.cost_usd));
+    const cost = usageRowCost(row);
+    item.costUsd = roundMoney(item.costUsd + cost.value);
     if (row.cost_reported) item.costReportedCalls += 1;
+    if (cost.estimated) item.costEstimatedCalls += 1;
+    if (cost.available) item.costAvailableCalls += 1;
     if (row.status !== 'success') item.errors += 1;
     groups.set(key, item);
   }
   return [...groups.values()].sort((a, b) => b.costUsd - a.costUsd || b.totalTokens - a.totalTokens || a.modelName.localeCompare(b.modelName));
+}
+
+function usageRowCost(row = {}) {
+  if (row.cost_reported) return { value: positiveNumber(row.cost_usd), available: true, estimated: false };
+  const estimated = calculateModelCostUsd({
+    provider: row.provider,
+    model: row.model_id || row.model_name,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens
+  });
+  return estimated === null
+    ? { value: 0, available: false, estimated: false }
+    : { value: estimated, available: true, estimated: true };
 }
 
 function summarizeLeagues(contextRows, rankingRows, scheduleRows) {
