@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FutBots</title>
-    <link rel="stylesheet" href="/styles.css?v=20260721-006">
+    <link rel="stylesheet" href="/styles.css?v=20260722-001">
   </head>
   <body>
     <nav class="floating-nav" aria-label="Main navigation">
@@ -13,7 +13,7 @@
         <a href="#matchSchedule">How It Works</a>
         <a href="/data">Imported Data</a>
         <a href="/backend">Data Console</a>
-        <a id="adminNavLink" href="/admin" hidden>运营后台</a>
+        <a id="adminNavLink" href="/admin" hidden>Admin</a>
         <a href="/analytics">Accuracy</a>
         <a href="#historyPanel">History</a>
         <a href="#subscriptionPanel">Pricing</a>
@@ -23,6 +23,15 @@
         <button id="signOutButton" class="nav-signout" type="button" hidden>Sign Out</button>
       </div>
     </nav>
+
+    <aside id="predictionTaskStatus" class="prediction-task-status" aria-live="polite" hidden>
+      <span class="prediction-task-indicator" aria-hidden="true"></span>
+      <div>
+        <strong id="predictionTaskTitle">AI prediction in progress</strong>
+        <span id="predictionTaskDetail">Prediction continues while you browse.</span>
+      </div>
+      <button id="predictionTaskAction" class="secondary" type="button" hidden>View Results</button>
+    </aside>
 
     <header class="hero">
       <div class="hero-shade"></div>
@@ -375,6 +384,6 @@
 
     <script src="/vendor/supabase.js"></script>
     <script type="module" src="/auth-client.js?v=20260721-001"></script>
-            <script defer src="/app.js?v=20260721-009"></script>
+    <script defer src="/app.js?v=20260722-001"></script>
   </body>
 </html>

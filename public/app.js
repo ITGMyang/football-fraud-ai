@@ -28,6 +28,10 @@ const billingStatusEl = $('#billingStatus');
 const billingStatusTitleEl = $('#billingStatusTitle');
 const billingStatusDetailEl = $('#billingStatusDetail');
 const billingMessageEl = $('#billingMessage');
+const predictionTaskStatusEl = $('#predictionTaskStatus');
+const predictionTaskTitleEl = $('#predictionTaskTitle');
+const predictionTaskDetailEl = $('#predictionTaskDetail');
+const predictionTaskActionEl = $('#predictionTaskAction');
 
 const ACTIVE_CONTEXT_STORAGE_KEY = 'footballFraud.activeContextId';
 const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
@@ -46,6 +50,7 @@ let adminSharedPoolMatches = [];
 let adminRefreshTimer = null;
 let adminDashboardLoading = false;
 let adminModelUsageDate = '';
+let activePredictionTask = null;
 const analyticsState = {
   raw: null,
   date: '',
@@ -90,6 +95,12 @@ bind('#guestLogin', 'click', () => window.footballAuth?.open());
 bind('#aiContextDate', 'change', handleAiContextDateChange);
 bind('#aiContextRange', 'change', handleAiContextRangeChange);
 bind('#aiContextSort', 'change', handleAiContextSortChange);
+bind('#predictionTaskAction', 'click', () => {
+  if (!activePredictionTask?.contextId) return;
+  setActiveContextId(activePredictionTask.contextId);
+  navigateWithinApp('/');
+});
+bindAppNavigation();
 
 document.querySelectorAll('[data-billing-plan]').forEach((button) => {
   button.addEventListener('click', () => startBillingCheckout(button.dataset.billingPlan, button));
@@ -162,9 +173,7 @@ bind('#manualForm', 'submit', async (event) => {
   await refresh();
 });
 
-window.addEventListener('popstate', () => {
-  if (window.footballAuth?.isAuthenticated()) refresh();
-});
+window.addEventListener('popstate', loadCurrentAppRoute);
 window.addEventListener('football-auth-change', (event) => {
   accessState.authenticated = Boolean(event.detail?.session);
   if (!window.footballAppInitialized) initializeApp();
@@ -189,6 +198,63 @@ async function initializeApp() {
   }
   await Promise.all([refresh(), loadApiFootballMatches(), syncAccessStatus()]);
   await resumeBillingCheckout();
+}
+
+function bindAppNavigation() {
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest?.('a[href]');
+    if (!link || link.target || link.hasAttribute('download')) return;
+    const target = new URL(link.href, location.href);
+    if (target.origin !== location.origin || target.pathname === location.pathname) return;
+    if (!isAppRoute(target.pathname)) return;
+    event.preventDefault();
+    history.pushState({}, '', `${target.pathname}${target.search}${target.hash}`);
+    loadCurrentAppRoute();
+  });
+}
+
+function isAppRoute(pathname) {
+  return ['/', '/data', '/backend', '/admin', '/analytics', '/history'].includes(pathname)
+    || /^\/match\/[^/]+$/.test(pathname);
+}
+
+async function navigateWithinApp(path) {
+  const target = new URL(path, location.origin);
+  history.pushState({}, '', `${target.pathname}${target.search}${target.hash}`);
+  await loadCurrentAppRoute();
+}
+
+async function loadCurrentAppRoute() {
+  if (location.pathname === '/backend') {
+    renderRoute(window.currentMarkets || [], [], window.currentContexts || []);
+    await loadBackendSchedules();
+    return;
+  }
+  if (location.pathname === '/admin') {
+    renderRoute(window.currentMarkets || [], [], window.currentContexts || []);
+    await loadAdminDashboard();
+    startAdminAutoRefresh();
+    return;
+  }
+  await refresh();
+  if (location.pathname === '/') await loadApiFootballMatches();
+}
+
+function renderPredictionTaskStatus() {
+  if (!predictionTaskStatusEl) return;
+  predictionTaskStatusEl.hidden = !activePredictionTask;
+  if (!activePredictionTask) return;
+  const complete = activePredictionTask.status === 'complete';
+  const failed = activePredictionTask.status === 'error';
+  predictionTaskStatusEl.dataset.status = activePredictionTask.status;
+  predictionTaskTitleEl.textContent = complete
+    ? `${activePredictionTask.model} prediction complete`
+    : failed ? `${activePredictionTask.model} prediction failed` : `${activePredictionTask.model} prediction in progress`;
+  predictionTaskDetailEl.textContent = complete
+    ? 'The result has been saved. You can return whenever you are ready.'
+    : failed ? activePredictionTask.error : 'Prediction continues while you browse.';
+  predictionTaskActionEl.hidden = !complete;
 }
 
 async function refreshForAccountChange() {
@@ -2471,6 +2537,12 @@ async function runRanking(model, button) {
   const originalHtml = button.innerHTML;
   let completed = false;
   try {
+    activePredictionTask = {
+      model: model === 'all' ? 'All AI models' : model,
+      contextId: activeContextId,
+      status: 'running'
+    };
+    renderPredictionTaskStatus();
     button.disabled = true;
     button.textContent = 'Predicting...';
     await api('/api/rankings', {
@@ -2483,7 +2555,14 @@ async function runRanking(model, button) {
     await syncAccessStatus();
     await refresh();
     completed = true;
+    activePredictionTask.status = 'complete';
+    renderPredictionTaskStatus();
   } catch (error) {
+    if (activePredictionTask) {
+      activePredictionTask.status = 'error';
+      activePredictionTask.error = error.message;
+      renderPredictionTaskStatus();
+    }
     if (error.code === 'GUEST_LIMIT_REACHED') {
       accessState.guestPredictionUsed = true;
       renderGuestAccess();
@@ -2499,6 +2578,7 @@ async function runRanking(model, button) {
     }
   } finally {
     if (!completed) button.innerHTML = originalHtml;
+    button.disabled = false;
     renderGuestAccess();
   }
 }

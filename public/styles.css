@@ -189,6 +189,51 @@ textarea:focus { border-color: var(--accent); }
   min-width: 0;
 }
 
+.prediction-task-status {
+  position: fixed;
+  top: 88px;
+  right: max(16px, calc((100vw - var(--content)) / 2));
+  z-index: 49;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  width: min(440px, calc(100% - 32px));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 26px var(--shadow);
+}
+
+.prediction-task-status strong,
+.prediction-task-status span { display: block; }
+.prediction-task-status > div { min-width: 0; }
+.prediction-task-status > div span { color: var(--muted); font-size: 12px; }
+.prediction-task-status button { min-height: 36px; padding: 7px 10px; font-size: 12px; }
+.prediction-task-indicator {
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--surface-muted);
+  border-top-color: var(--signal);
+  border-radius: 50%;
+  animation: prediction-task-spin 800ms linear infinite;
+}
+.prediction-task-status[data-status="complete"] { border-color: var(--signal); }
+.prediction-task-status[data-status="complete"] .prediction-task-indicator {
+  border: 0;
+  background: var(--signal);
+  animation: none;
+}
+.prediction-task-status[data-status="error"] { border-color: var(--danger); }
+.prediction-task-status[data-status="error"] .prediction-task-indicator {
+  border: 0;
+  background: var(--danger);
+  animation: none;
+}
+
+@keyframes prediction-task-spin { to { transform: rotate(360deg); } }
+
 button.nav-auth {
   max-width: 220px;
   overflow: hidden;
@@ -1209,6 +1254,13 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
   }
 
   .nav-links a { white-space: nowrap; }
+  .prediction-task-status {
+    top: 126px;
+    right: 8px;
+    grid-template-columns: auto minmax(0, 1fr);
+    width: calc(100% - 16px);
+  }
+  .prediction-task-status button { grid-column: 2; justify-self: start; }
   .nav-signout { display: none; }
   button.nav-auth { max-width: 145px; }
   .hero { min-height: 74svh; }
@@ -1287,4 +1339,5 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
   *::before,
   *::after { transition: none !important; }
   .reveal { opacity: 1; transform: none; }
+  .prediction-task-indicator { animation: none; }
 }
