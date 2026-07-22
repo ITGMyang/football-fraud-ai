@@ -238,10 +238,10 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         client.selectRows(TABLES.rankings, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
         client.selectRows(TABLES.matchContexts, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
         client.selectRows(TABLES.matchSchedules, 'payload,updated_at', { order: 'updated_at.desc', limit: '500' }),
-        client.selectRows(TABLES.billingOrders, '*', { order: 'created_at.desc', limit: '1000' }),
+        client.selectAllRows(TABLES.billingOrders, '*', { order: 'created_at.desc' }),
         client.selectRows(TABLES.billingEntitlements, '*', { limit: '1000' }),
         client.selectRows(TABLES.sharedPredictionResults, 'fixture_id,model_key,model_id,payload,created_at,updated_at', { order: 'updated_at.desc', limit: '5000' }),
-        client.selectRows(TABLES.predictionRequests, '*', { order: 'created_at.desc', limit: '5000' })
+        client.selectAllRows(TABLES.predictionRequests, '*', { order: 'created_at.desc' })
       ]);
       return { users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests };
     },

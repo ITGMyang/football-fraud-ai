@@ -475,16 +475,17 @@ async function routeApi(request, env, access) {
       if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
       return json({ error: fixtureValidation.error, code: fixtureValidation.code }, 403);
     }
-    const queuedRequest = access.role === 'user' && predictionAccess.billing.active
+    const queuedRequest = access.role === 'user'
       ? await storage.reservePredictionRequest({
         ownerId,
         fixtureId: String(context.matchId || contextKey(context)),
-        planId: predictionAccess.billing.planId,
+        planId: predictionAccess.billing.planId || 'free',
         dailyLimit: predictionDailyLimit(predictionAccess.billing.planId),
         cooldownSeconds: 90
       })
       : null;
     if (queuedRequest && !queuedRequest.ok) {
+      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
       return json({ error: predictionQueueError(queuedRequest), code: queuedRequest.code, retryAfterSeconds: queuedRequest.retryAfterSeconds || 0 }, queuedRequest.code === 'DAILY_PREDICTION_LIMIT' ? 402 : 429);
     }
     try {
@@ -528,15 +529,16 @@ async function routeApi(request, env, access) {
       return json({ error: fixtureValidation.error, code: fixtureValidation.code }, 403);
     }
     let queuedRequest = null;
-    if (access.role === 'user' && predictionAccess.billing.active) {
+    if (access.role === 'user') {
       queuedRequest = await storage.reservePredictionRequest({
         ownerId,
         fixtureId: String(context?.matchId || contextKey(context)),
-        planId: predictionAccess.billing.planId,
+        planId: predictionAccess.billing.planId || 'free',
         dailyLimit: predictionDailyLimit(predictionAccess.billing.planId),
         cooldownSeconds: 90
       });
       if (!queuedRequest?.ok) {
+        if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
         const status = queuedRequest?.code === 'DAILY_PREDICTION_LIMIT' ? 402 : 429;
         return json({
           error: predictionQueueError(queuedRequest),

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FutBots</title>
-    <link rel="stylesheet" href="/styles.css?v=20260722-001">
+    <link rel="stylesheet" href="/styles.css?v=20260722-002">
   </head>
   <body>
     <nav class="floating-nav" aria-label="Main navigation">
@@ -159,6 +159,14 @@
 
         <section class="admin-tab-panel active" role="tabpanel" data-admin-panel="overview">
           <div id="adminCoreMetrics" class="admin-core-grid" aria-label="核心运营指标"></div>
+          <div class="admin-module admin-overview-detail">
+            <div class="admin-subsection-head"><div><span>确认收入</span><h3>分时段收入</h3></div></div>
+            <div id="adminRevenueSummary" class="admin-usage-summary"></div>
+            <div class="admin-subsection-head"><div><span>订单状态</span><h3>处理结果</h3></div></div>
+            <div id="adminOrderStatusSummary" class="admin-usage-summary"></div>
+            <div class="admin-subsection-head"><div><span>付费用户</span><h3>当前有效套餐</h3></div></div>
+            <div id="adminPaidPlanSummary" class="admin-usage-summary"></div>
+          </div>
         </section>
 
         <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="shared-pool" aria-labelledby="adminSharedPoolTitle" hidden>
@@ -196,6 +204,7 @@
             <div><span>赛事热度</span><h3 id="adminLeaguesTitle">赛事数据使用情况</h3></div>
             <small>共享赛程缓存与各账号私有导入数据仍然完全分开。</small>
           </div>
+          <div id="adminLeagueAudit" class="admin-usage-summary"></div>
           <div id="adminLeaguePerformance" class="admin-table-wrap"></div>
         </section>
 
@@ -204,6 +213,7 @@
             <div><span>访问控制</span><h3 id="adminUsersTitle">用户与会员权限</h3></div>
             <small>用户身份与登录信息直接读取自 Supabase Auth。</small>
           </div>
+          <div id="adminUserSummary" class="admin-usage-summary"></div>
           <div id="adminUserAccess" class="admin-table-wrap"></div>
         </section>
 
@@ -212,7 +222,9 @@
             <div><span>收入管理</span><h3 id="adminOrdersTitle">AllScale 订单</h3></div>
             <small>确认收入只统计已完成付款的订单。</small>
           </div>
+          <div id="adminOrderPlanSummary" class="admin-usage-summary"></div>
           <div id="adminOrders" class="admin-table-wrap"></div>
+          <div id="adminOrderPlanTables"></div>
         </section>
       </section>
 
@@ -384,6 +396,6 @@
 
     <script src="/vendor/supabase.js"></script>
     <script type="module" src="/auth-client.js?v=20260721-001"></script>
-    <script defer src="/app.js?v=20260722-001"></script>
+    <script defer src="/app.js?v=20260722-002"></script>
   </body>
 </html>

@@ -1213,6 +1213,9 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-usage-summary { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 0 16px; }
 .admin-usage-summary span { padding: 8px 11px; border: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 0.78rem; font-weight: 800; }
 .admin-usage-summary strong { color: #173f32; }
+.admin-overview-detail { padding-top: 30px; }
+.admin-order-plan-section { padding-top: 18px; }
+.admin-order-plan-section + .admin-order-plan-section { margin-top: 18px; }
 .admin-subsection-head { margin-top: 38px; padding: 0 0 14px; border-bottom: 1px solid var(--line); }
 .admin-subsection-head span { color: #278565; font-size: 0.72rem; font-weight: 900; }
 .admin-subsection-head h3 { margin: 4px 0 0; font-size: 1.35rem; }

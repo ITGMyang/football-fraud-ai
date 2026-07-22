@@ -164,6 +164,56 @@ test('shared prediction pool uses schedule match details when a private context 
   });
 });
 
+test('admin dashboard audits revenue periods, plans, users, and duplicate competition data', () => {
+  const now = Date.parse('2026-07-22T12:00:00Z');
+  const dashboard = buildAdminDashboard({
+    users: [
+      { id: 'u1', email: 'day@example.com', created_at: '2026-07-22T02:00:00Z' },
+      { id: 'u2', email: 'week@example.com', created_at: '2026-07-01T02:00:00Z' },
+      { id: 'u3', email: 'month@example.com', created_at: '2026-06-01T02:00:00Z' }
+    ],
+    entitlements: [
+      { owner_id: 'u1', plan_id: 'day', valid_until: '2026-07-23T12:00:00Z' },
+      { owner_id: 'u2', plan_id: 'week', valid_until: '2026-07-25T12:00:00Z' },
+      { owner_id: 'u3', plan_id: 'month', valid_until: '2026-08-20T12:00:00Z' }
+    ],
+    orders: [
+      { id: 'today-day', owner_id: 'u1', plan_id: 'day', amount_cents: 299, status: 20, confirmed_at: '2026-07-22T03:00:00Z', created_at: '2026-07-22T02:55:00Z' },
+      { id: 'week-week', owner_id: 'u2', plan_id: 'week', amount_cents: 1199, status: 20, confirmed_at: '2026-07-18T03:00:00Z', created_at: '2026-07-18T02:55:00Z' },
+      { id: 'month-month', owner_id: 'u3', plan_id: 'month', amount_cents: 2999, status: 20, confirmed_at: '2026-07-02T03:00:00Z', created_at: '2026-07-02T02:55:00Z' },
+      { id: 'pending-day', owner_id: 'u1', plan_id: 'day', amount_cents: 299, status: 1, created_at: '2026-07-22T04:00:00Z' },
+      { id: 'failed-week', owner_id: 'u2', plan_id: 'week', amount_cents: 1199, status: -1, created_at: '2026-07-22T05:00:00Z' }
+    ],
+    contexts: [{ owner_id: 'u1', payload: { id: 'tiny-1', matchId: 'tiny-1', competition: 'Tiny Cup' } }],
+    aiUsage: [{ owner_id: 'u1', context_id: 'tiny-1', request_kind: 'ranking', total_tokens: 25000, status: 'success', created_at: '2026-07-22T06:00:00Z' }],
+    predictionRequests: [
+      { owner_id: 'u1', fixture_id: 'tiny-1', status: 'success', cached: true, created_at: '2026-07-22T06:00:00Z' },
+      { owner_id: 'u1', fixture_id: 'tiny-1', status: 'error', cached: false, created_at: '2026-07-22T07:00:00Z' }
+    ],
+    schedules: [
+      { payload: { competitionId: '900', matches: [{ matchId: 'tiny-1', competition: 'Tiny Cup' }] } },
+      { payload: { competitionId: '900', matches: [{ matchId: 'tiny-1', competition: 'Tiny Cup' }] } }
+    ]
+  }, now);
+
+  assert.deepEqual(dashboard.orders.revenue.today, { count: 1, amountUsd: 2.99 });
+  assert.deepEqual(dashboard.orders.revenue.week, { count: 2, amountUsd: 14.98 });
+  assert.deepEqual(dashboard.orders.revenue.month, { count: 3, amountUsd: 44.97 });
+  assert.deepEqual(dashboard.orders.statusCounts, { pending: 1, completed: 3, failed: 1 });
+  assert.equal(dashboard.orders.byPlan.day.pending, 1);
+  assert.equal(dashboard.orders.byPlan.week.failed, 1);
+  assert.deepEqual(dashboard.users.activePlans, { day: 1, week: 1, month: 1, developer: 0 });
+  assert.equal(dashboard.users.newToday, 1);
+  assert.equal(dashboard.users.purchasesToday.day, 1);
+  assert.equal(dashboard.userRows[0].predictionRequests, 2);
+  assert.equal(dashboard.userRows[0].cachedResponses, 1);
+  assert.equal(dashboard.userRows[0].failedRequests, 1);
+  assert.equal(dashboard.leagueAudit.duplicateFixtures, 1);
+  assert.equal(dashboard.leagueAudit.duplicateLeagues, 1);
+  assert.equal(dashboard.leagues[0].totalTokens, 25000);
+  assert.equal(dashboard.leagues[0].reviewRequired, true);
+});
+
 test('admin route and dashboard API are wired into the app shell', async () => {
   const [markup, app, worker] = await Promise.all([
     readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
@@ -178,6 +228,10 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(markup, /data-admin-tab="models"/);
   assert.match(markup, /data-admin-tab="shared-pool"/);
   assert.match(markup, /id="adminSharedPool"/);
+  assert.match(markup, /id="adminRevenueSummary"/);
+  assert.match(markup, /id="adminLeagueAudit"/);
+  assert.match(markup, /id="adminUserSummary"/);
+  assert.match(markup, /id="adminOrderPlanTables"/);
   assert.match(markup, /data-admin-panel="orders"/);
   assert.match(app, /\/api\/admin\/dashboard/);
   assert.match(app, /activateAdminTab/);
@@ -185,7 +239,12 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(app, /renderAdminSharedPool/);
   assert.match(app, /startAdminAutoRefresh/);
   assert.match(app, /未配置单价/);
+  assert.match(app, /小样本高消耗/);
+  assert.match(app, /共享池返回/);
+  assert.match(app, /近 30 日收入/);
   assert.match(worker, /'\/admin'/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/dashboard'/);
   assert.match(worker, /isAdminUser/);
+  assert.doesNotMatch(worker, /access\.role === 'user' && predictionAccess\.billing\.active/);
+  assert.match(worker, /planId: predictionAccess\.billing\.planId \|\| 'free'/);
 });

@@ -347,6 +347,27 @@ function renderAdminDashboard(dashboard) {
     adminMetric('待处理订单', formatNumber(dashboard.orders?.pendingCount), `${formatNumber(dashboard.orders?.failedCount)} 笔失败`)
   ].join('');
 
+  const revenue = dashboard.orders?.revenue || {};
+  $('#adminRevenueSummary').innerHTML = [
+    `今日收入 <strong>${money(revenue.today?.amountUsd)}</strong> · ${formatNumber(revenue.today?.count)} 笔`,
+    `近 7 日收入 <strong>${money(revenue.week?.amountUsd)}</strong> · ${formatNumber(revenue.week?.count)} 笔`,
+    `近 30 日收入 <strong>${money(revenue.month?.amountUsd)}</strong> · ${formatNumber(revenue.month?.count)} 笔`,
+    `累计收入 <strong>${money(revenue.total?.amountUsd)}</strong> · ${formatNumber(revenue.total?.count)} 笔`
+  ].map((item) => `<span>${item}</span>`).join('');
+  const orderStatuses = dashboard.orders?.statusCounts || {};
+  $('#adminOrderStatusSummary').innerHTML = [
+    `待处理 <strong>${formatNumber(orderStatuses.pending)}</strong> 笔`,
+    `已完成 <strong>${formatNumber(orderStatuses.completed)}</strong> 笔`,
+    `失败 <strong>${formatNumber(orderStatuses.failed)}</strong> 笔`
+  ].map((item) => `<span>${item}</span>`).join('');
+  const activePlans = dashboard.users?.activePlans || {};
+  $('#adminPaidPlanSummary').innerHTML = [
+    `日卡 <strong>${formatNumber(activePlans.day)}</strong> 人`,
+    `周卡 <strong>${formatNumber(activePlans.week)}</strong> 人`,
+    `月卡 <strong>${formatNumber(activePlans.month)}</strong> 人`,
+    `开发者 <strong>${formatNumber(activePlans.developer)}</strong> 人`
+  ].map((item) => `<span>${item}</span>`).join('');
+
   const modelUsage = dashboard.modelUsage || {};
   const selectedUsage = modelUsage.selected || {};
   const totalUsage = modelUsage.total || {};
@@ -377,27 +398,60 @@ function renderAdminDashboard(dashboard) {
   const poolSummary = $('#adminSharedPoolSummary');
   if (poolSummary) poolSummary.textContent = `${formatNumber(dashboard.sharedPool?.totalMatches)} 场比赛，共 ${formatNumber(dashboard.sharedPool?.totalResults)} 个可复用模型结果。`;
   renderAdminSharedPool();
+  const leagueAudit = dashboard.leagueAudit || {};
+  $('#adminLeagueAudit').innerHTML = [
+    `重复赛事 <strong>${formatNumber(leagueAudit.duplicateFixtures)}</strong> 条`,
+    `重复联赛缓存 <strong>${formatNumber(leagueAudit.duplicateLeagues)}</strong> 条`,
+    `待审核小样本赛事 <strong>${formatNumber(leagueAudit.reviewCompetitions)}</strong> 个`
+  ].map((item) => `<span>${item}</span>`).join('');
   $('#adminLeaguePerformance').innerHTML = adminTable(
-    ['赛事', '缓存比赛', '用户私有导入', 'AI 结果'],
-    (dashboard.leagues || []).map((row) => [row.name, formatNumber(row.cachedMatches), formatNumber(row.imports), formatNumber(row.predictions)]),
+    ['赛事', '去重后比赛', '用户导入', '模型调用', 'Token', '失败', '审计标记'],
+    (dashboard.leagues || []).map((row) => [
+      row.name, formatNumber(row.cachedMatches), formatNumber(row.imports), formatNumber(row.modelCalls),
+      formatNumber(row.totalTokens), formatNumber(row.failedCalls), row.reviewRequired ? '小样本高消耗' : '正常'
+    ]),
     '暂时没有赛事使用数据。'
   );
+  const purchasesToday = dashboard.users?.purchasesToday || {};
+  $('#adminUserSummary').innerHTML = [
+    `总用户 <strong>${formatNumber(dashboard.users?.total)}</strong>`,
+    `今日新增 <strong>${formatNumber(dashboard.users?.newToday)}</strong>`,
+    `日卡 / 今日新增 <strong>${formatNumber(activePlans.day)} / ${formatNumber(purchasesToday.day)}</strong>`,
+    `周卡 / 今日新增 <strong>${formatNumber(activePlans.week)} / ${formatNumber(purchasesToday.week)}</strong>`,
+    `月卡 / 今日新增 <strong>${formatNumber(activePlans.month)} / ${formatNumber(purchasesToday.month)}</strong>`
+  ].map((item) => `<span>${item}</span>`).join('');
   $('#adminUserAccess').innerHTML = adminTable(
-    ['账号', '登录方式', '当前方案', '预测次数', '今日调用', '最后登录'],
+    ['账号', '登录方式', '当前方案', '预测请求', '共享池返回', '失败请求', 'AI 结果', '今日调用', '最后登录'],
     (dashboard.userRows || []).map((row) => [
-      row.email || shortId(row.id), row.provider, row.planId, formatNumber(row.predictionRuns),
+      row.email || shortId(row.id), row.provider, adminPlanName(row.planId), formatNumber(row.predictionRequests),
+      formatNumber(row.cachedResponses), formatNumber(row.failedRequests), formatNumber(row.predictionRuns),
       formatNumber(row.callsToday), formatAdminDate(row.lastSeenAt)
     ]),
     '暂时没有用户数据。'
   );
-  $('#adminOrders').innerHTML = adminTable(
+  const planOrders = dashboard.orders?.byPlan || {};
+  $('#adminOrderPlanSummary').innerHTML = ['day', 'week', 'month'].map((planId) => {
+    const item = planOrders[planId] || {};
+    return `<span>${adminPlanName(planId)} <strong>${formatNumber(item.total)}</strong> 笔 · ${money(item.revenueUsd)} · 待处理 ${formatNumber(item.pending)} / 失败 ${formatNumber(item.failed)}</span>`;
+  }).join('');
+  $('#adminOrders').innerHTML = renderAdminOrderTable(dashboard.recentOrders || [], '暂时没有订单。');
+  $('#adminOrderPlanTables').innerHTML = ['day', 'week', 'month'].map((planId) => `
+    <section class="admin-order-plan-section">
+      <div class="admin-subsection-head"><div><span>${adminPlanName(planId)}</span><h3>${adminPlanName(planId)}订单明细</h3></div></div>
+      ${renderAdminOrderTable(dashboard.recentOrdersByPlan?.[planId] || [], `暂时没有${adminPlanName(planId)}订单。`)}
+    </section>
+  `).join('');
+}
+
+function renderAdminOrderTable(rows = [], emptyMessage = '暂时没有订单。') {
+  return adminTable(
     ['订单', '账号', '方案', '金额', '状态', '详细信息', '创建时间'],
-    (dashboard.recentOrders || []).map((row) => [
+    rows.map((row) => [
       shortId(row.id), row.email || shortId(row.ownerId), adminPlanName(row.planId), money(row.amountUsd), orderStatus(row.status),
       row.failureReason || (row.confirmedAt ? `确认 ${formatAdminDate(row.confirmedAt)} · 到期 ${formatAdminDate(row.expiresAt)}` : row.requestId || '等待支付平台确认'),
       formatAdminDate(row.createdAt)
     ]),
-    '暂时没有订单。'
+    emptyMessage
   );
 }
 

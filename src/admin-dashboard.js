@@ -29,6 +29,10 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
     .sort((a, b) => timestamp(b.created_at) - timestamp(a.created_at))[0] || null;
   const confirmedOrders = orders.filter((row) => Number(row.status) === 20);
   const activeEntitlements = entitlements.filter((row) => timestamp(row.valid_until) > now);
+  const leagueSummary = summarizeLeagues(contexts, rankings, schedules, aiUsage);
+  const orderSummary = summarizeOrders(orders, now);
+  const activePlans = countPlans(activeEntitlements);
+  const purchasesToday = countPlanOwners(confirmedOrders.filter((row) => dateKey(row.confirmed_at || row.created_at) === today));
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -57,38 +61,104 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
       total: summarizeUsage(aiUsage)
     },
     sharedPool: summarizeSharedPool(sharedPredictions, aiUsage, contexts, schedules),
-    leagues: summarizeLeagues(contexts, rankings, schedules),
+    leagues: leagueSummary.rows,
+    leagueAudit: leagueSummary.audit,
     users: {
       total: users.length,
+      newToday: users.filter((user) => dateKey(user.created_at) === today).length,
       activeToday: users.filter((user) => dateKey(user.last_sign_in_at) === today).length,
       active7d: users.filter((user) => withinDays(user.last_sign_in_at, now, 7)).length,
       active30d: users.filter((user) => withinDays(user.last_sign_in_at, now, 30)).length,
-      paid: new Set(activeEntitlements.map((row) => String(row.owner_id))).size
+      paid: new Set(activeEntitlements.map((row) => String(row.owner_id))).size,
+      activePlans,
+      purchasesToday
     },
-    userRows: summarizeUsers(users, rankings, aiUsage, entitlements, now),
-    orders: {
-      confirmedRevenueUsd: roundMoney(sum(confirmedOrders, (row) => Number(row.amount_cents) / 100)),
-      confirmedCount: confirmedOrders.length,
-      pendingCount: orders.filter((row) => [0, 1].includes(Number(row.status))).length,
-      failedCount: orders.filter((row) => Number(row.status) < 0).length
-    },
-    recentOrders: [...orders]
-      .sort((a, b) => timestamp(b.created_at) - timestamp(a.created_at))
-      .slice(0, 20)
-      .map((row) => ({
-        id: row.id,
-        ownerId: row.owner_id,
-        email: users.find((user) => String(user.id) === String(row.owner_id))?.email || '',
-        planId: row.plan_id,
-        amountUsd: roundMoney(Number(row.amount_cents || 0) / 100),
-        status: Number(row.status),
-        failureReason: Number(row.status) < 0 ? (row.request_id || 'Payment provider rejected the order') : '',
-        requestId: row.request_id || '',
-        createdAt: row.created_at,
-        confirmedAt: row.confirmed_at || '',
-        expiresAt: row.expires_at || ''
-      }))
+    userRows: summarizeUsers(users, rankings, aiUsage, entitlements, predictionRequests, now),
+    orders: orderSummary,
+    recentOrders: orderSummaryRows(orders, users).slice(0, 20),
+    recentOrdersByPlan: Object.fromEntries(['day', 'week', 'month'].map((planId) => [
+      planId,
+      orderSummaryRows(orders.filter((row) => row.plan_id === planId), users).slice(0, 20)
+    ]))
   };
+}
+
+function summarizeOrders(orders, now) {
+  const confirmed = orders.filter((row) => Number(row.status) === 20);
+  const revenue = {
+    today: revenuePeriod(confirmed.filter((row) => dateKey(row.confirmed_at || row.created_at) === dateKey(now))),
+    week: revenuePeriod(confirmed.filter((row) => withinDays(row.confirmed_at || row.created_at, now, 7))),
+    month: revenuePeriod(confirmed.filter((row) => withinDays(row.confirmed_at || row.created_at, now, 30))),
+    total: revenuePeriod(confirmed)
+  };
+  const statusCounts = orderStatusCounts(orders);
+  return {
+    confirmedRevenueUsd: revenue.total.amountUsd,
+    confirmedCount: statusCounts.completed,
+    pendingCount: statusCounts.pending,
+    failedCount: statusCounts.failed,
+    revenue,
+    statusCounts,
+    byPlan: Object.fromEntries(['day', 'week', 'month'].map((planId) => {
+      const planOrders = orders.filter((row) => row.plan_id === planId);
+      const counts = orderStatusCounts(planOrders);
+      return [planId, {
+        ...counts,
+        total: planOrders.length,
+        customers: new Set(planOrders.map((row) => String(row.owner_id || '')).filter(Boolean)).size,
+        revenueUsd: revenuePeriod(planOrders.filter((row) => Number(row.status) === 20)).amountUsd
+      }];
+    }))
+  };
+}
+
+function revenuePeriod(rows) {
+  return {
+    count: rows.length,
+    amountUsd: roundMoney(sum(rows, (row) => Number(row.amount_cents) / 100))
+  };
+}
+
+function orderStatusCounts(rows) {
+  return {
+    pending: rows.filter((row) => ![20].includes(Number(row.status)) && Number(row.status) >= 0).length,
+    completed: rows.filter((row) => Number(row.status) === 20).length,
+    failed: rows.filter((row) => Number(row.status) < 0).length
+  };
+}
+
+function orderSummaryRows(orders, users) {
+  return [...orders]
+    .sort((a, b) => timestamp(b.created_at) - timestamp(a.created_at))
+    .map((row) => ({
+      id: row.id,
+      ownerId: row.owner_id,
+      email: users.find((user) => String(user.id) === String(row.owner_id))?.email || '',
+      planId: row.plan_id,
+      amountUsd: roundMoney(Number(row.amount_cents || 0) / 100),
+      status: Number(row.status),
+      failureReason: Number(row.status) < 0 ? (row.request_id || 'Payment provider rejected the order') : '',
+      requestId: row.request_id || '',
+      createdAt: row.created_at,
+      confirmedAt: row.confirmed_at || '',
+      expiresAt: row.expires_at || ''
+    }));
+}
+
+function countPlans(rows) {
+  const counts = { day: 0, week: 0, month: 0, developer: 0 };
+  for (const row of rows) {
+    if (Object.hasOwn(counts, row.plan_id)) counts[row.plan_id] += 1;
+  }
+  return counts;
+}
+
+function countPlanOwners(rows) {
+  const owners = { day: new Set(), week: new Set(), month: new Set(), developer: new Set() };
+  for (const row of rows) {
+    if (Object.hasOwn(owners, row.plan_id) && row.owner_id) owners[row.plan_id].add(String(row.owner_id));
+  }
+  return Object.fromEntries(Object.entries(owners).map(([planId, ids]) => [planId, ids.size]));
 }
 
 function summarizeUsage(rows) {
@@ -238,15 +308,32 @@ function usageRowCost(row = {}) {
     : { value: estimated, available: true, estimated: true };
 }
 
-function summarizeLeagues(contextRows, rankingRows, scheduleRows) {
+function summarizeLeagues(contextRows, rankingRows, scheduleRows, usageRows) {
   const leagues = new Map();
   const contextsByOwnerAndId = new Map();
+  const fixtureOccurrences = new Map();
+  const scheduleLeagueOccurrences = new Map();
+  const leagueItem = (name) => {
+    const displayName = String(name || '').trim() || 'Unknown Competition';
+    const key = displayName.toLowerCase().replace(/\s+/g, ' ');
+    const item = leagues.get(key) || {
+      name: displayName,
+      cachedMatches: 0,
+      imports: 0,
+      predictions: 0,
+      modelCalls: 0,
+      failedCalls: 0,
+      totalTokens: 0,
+      fixtureIds: new Set()
+    };
+    leagues.set(key, item);
+    return item;
+  };
   for (const row of contextRows) {
     const context = row.payload || {};
     const name = context.competition || context.fixture?.competition || 'Unknown Competition';
-    const item = leagues.get(name) || { name, cachedMatches: 0, imports: 0, predictions: 0 };
+    const item = leagueItem(name);
     item.imports += 1;
-    leagues.set(name, item);
     for (const id of [context.id, context.matchId, context.sourceUrl].filter(Boolean)) {
       contextsByOwnerAndId.set(`${row.owner_id || ''}|${id}`, name);
     }
@@ -254,26 +341,63 @@ function summarizeLeagues(contextRows, rankingRows, scheduleRows) {
   for (const row of rankingRows) {
     const ranking = row.payload || {};
     const name = contextsByOwnerAndId.get(`${row.owner_id || ''}|${ranking.contextId || ''}`) || 'Unknown Competition';
-    const item = leagues.get(name) || { name, cachedMatches: 0, imports: 0, predictions: 0 };
+    const item = leagueItem(name);
     item.predictions += (ranking.results || []).length;
-    leagues.set(name, item);
+  }
+  for (const row of usageRows) {
+    const name = contextsByOwnerAndId.get(`${row.owner_id || ''}|${row.context_id || ''}`) || 'Unknown Competition';
+    const item = leagueItem(name);
+    item.modelCalls += 1;
+    item.totalTokens += positiveNumber(row.total_tokens);
+    if (row.status !== 'success') item.failedCalls += 1;
   }
   for (const row of scheduleRows) {
     const schedule = row.payload || row;
+    const scheduleKey = String(schedule.competitionId || schedule.competition || '').trim().toLowerCase();
+    if (scheduleKey) scheduleLeagueOccurrences.set(scheduleKey, (scheduleLeagueOccurrences.get(scheduleKey) || 0) + 1);
     for (const match of schedule.matches || []) {
       const name = match.competition || `Competition ${schedule.competitionId || ''}`.trim();
-      const item = leagues.get(name) || { name, cachedMatches: 0, imports: 0, predictions: 0 };
-      item.cachedMatches += 1;
-      leagues.set(name, item);
+      const item = leagueItem(name);
+      const fixtureId = String(match.matchId || match.fixtureId || match.id || '');
+      if (fixtureId) {
+        fixtureOccurrences.set(fixtureId, (fixtureOccurrences.get(fixtureId) || 0) + 1);
+        item.fixtureIds.add(fixtureId);
+      }
     }
   }
-  return [...leagues.values()].sort((a, b) => b.predictions - a.predictions || b.imports - a.imports || b.cachedMatches - a.cachedMatches).slice(0, 20);
+  const rows = [...leagues.values()].map((item) => {
+    const cachedMatches = item.fixtureIds.size;
+    const reviewRequired = item.modelCalls > 0
+      && (item.imports <= 1 || cachedMatches <= 1)
+      && item.totalTokens >= 10000;
+    return {
+      name: item.name,
+      cachedMatches,
+      imports: item.imports,
+      predictions: item.predictions,
+      modelCalls: item.modelCalls,
+      failedCalls: item.failedCalls,
+      totalTokens: item.totalTokens,
+      reviewRequired
+    };
+  }).sort((a, b) => b.totalTokens - a.totalTokens || b.predictions - a.predictions || b.imports - a.imports || b.cachedMatches - a.cachedMatches);
+  return {
+    rows,
+    audit: {
+      duplicateFixtures: sum([...fixtureOccurrences.values()], (count) => Math.max(0, count - 1)),
+      duplicateLeagues: sum([...scheduleLeagueOccurrences.values()], (count) => Math.max(0, count - 1)),
+      reviewCompetitions: rows.filter((row) => row.reviewRequired).length
+    }
+  };
 }
 
-function summarizeUsers(users, rankings, aiUsage, entitlements, now) {
+function summarizeUsers(users, rankings, aiUsage, entitlements, predictionRequests, now) {
   const rankingCount = countBy(rankings, (row) => row.owner_id);
   const today = dateKey(now);
   const todayCalls = countBy(aiUsage.filter((row) => dateKey(row.created_at) === today), (row) => row.owner_id);
+  const requestCount = countBy(predictionRequests, (row) => row.owner_id);
+  const cachedResponses = countBy(predictionRequests.filter((row) => row.cached), (row) => row.owner_id);
+  const failedRequests = countBy(predictionRequests.filter((row) => row.status === 'error'), (row) => row.owner_id);
   const entitlementMap = new Map(entitlements.map((row) => [String(row.owner_id), row]));
   return users.map((user) => {
     const entitlement = entitlementMap.get(String(user.id)) || {};
@@ -284,6 +408,9 @@ function summarizeUsers(users, rankings, aiUsage, entitlements, now) {
       planId: timestamp(entitlement.valid_until) > now ? (entitlement.plan_id || 'paid') : 'free',
       validUntil: entitlement.valid_until || '',
       predictionRuns: rankingCount.get(String(user.id)) || 0,
+      predictionRequests: requestCount.get(String(user.id)) || 0,
+      cachedResponses: cachedResponses.get(String(user.id)) || 0,
+      failedRequests: failedRequests.get(String(user.id)) || 0,
       callsToday: todayCalls.get(String(user.id)) || 0,
       createdAt: user.created_at || '',
       lastSeenAt: user.last_sign_in_at || ''
