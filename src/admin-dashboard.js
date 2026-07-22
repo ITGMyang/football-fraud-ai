@@ -1,7 +1,7 @@
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'deepseek', 'qwen'];
 
-export function buildAdminDashboard(input = {}, now = Date.now()) {
+export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) {
   const today = dateKey(now);
   const users = input.users || [];
   const rankings = input.rankings || [];
@@ -14,6 +14,11 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
   const sharedPredictions = input.sharedPredictions || [];
   const predictionRequests = input.predictionRequests || [];
   const todayUsage = aiUsage.filter((row) => dateKey(row.created_at) === today);
+  const availableUsageDates = [...new Set(aiUsage.map((row) => dateKey(row.created_at)).filter(Boolean))].sort().reverse();
+  const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(options.selectedDate || ''))
+    ? String(options.selectedDate)
+    : today;
+  const selectedUsage = aiUsage.filter((row) => dateKey(row.created_at) === requestedDate);
   const todayPredictionRequests = predictionRequests.filter((row) => dateKey(row.created_at) === today);
   const todayRefreshes = systemEvents.filter((row) => row.event_type === 'api_football_refresh' && dateKey(row.created_at) === today);
   const latestRefresh = [...systemEvents]
@@ -40,6 +45,12 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
       cachedMatches: uniqueScheduleMatches(schedules)
     },
     models: summarizeModels(todayUsage),
+    modelUsage: {
+      selectedDate: requestedDate,
+      availableDates: availableUsageDates,
+      selected: summarizeUsage(selectedUsage),
+      total: summarizeUsage(aiUsage)
+    },
     sharedPool: summarizeSharedPool(sharedPredictions, aiUsage, contexts, schedules),
     leagues: summarizeLeagues(contexts, rankings, schedules),
     users: {
@@ -72,6 +83,18 @@ export function buildAdminDashboard(input = {}, now = Date.now()) {
         confirmedAt: row.confirmed_at || '',
         expiresAt: row.expires_at || ''
       }))
+  };
+}
+
+function summarizeUsage(rows) {
+  return {
+    calls: rows.length,
+    users: new Set(rows.map((row) => String(row.owner_id || '')).filter(Boolean)).size,
+    tokens: sum(rows, (row) => row.total_tokens),
+    costUsd: roundMoney(sum(rows, (row) => row.cost_usd)),
+    costReportedCalls: rows.filter((row) => row.cost_reported).length,
+    errors: rows.filter((row) => row.status !== 'success').length,
+    models: summarizeModels(rows)
   };
 }
 

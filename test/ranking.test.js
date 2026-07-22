@@ -35,6 +35,10 @@ test('ranks markets from one model and keeps top four sorted by AI probability',
     MODEL_GPT: 'openai/test'
   }, fakeFetch);
 
+  const totalPick = ranking.results[0].picks.find((pick) => pick.marketId === 'b');
+  assert.equal(totalPick.market.selection, 'Over');
+  assert.equal(totalPick.market.marketType, 'Goals Total');
+
   assert.equal(ranking.results.length, 1);
   assert.equal(ranking.results[0].picks.length, 4);
   assert.deepEqual(ranking.results[0].picks.map((pick) => pick.marketId), ['c', 'b', 'e', 'a']);

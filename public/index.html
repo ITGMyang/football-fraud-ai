@@ -166,10 +166,20 @@
 
         <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="models" aria-labelledby="adminModelsTitle" hidden>
           <div class="admin-module-head">
-            <div><span>模型成本</span><h3 id="adminModelsTitle">今日 AI 调用</h3></div>
-            <small>Token 与成本数据从管理后台上线后开始统计。</small>
+            <div><span>模型成本</span><h3 id="adminModelsTitle">历史 AI 调用</h3></div>
+            <small>按日期查看调用明细，并统计全部历史记录。</small>
           </div>
+          <div class="admin-pool-toolbar admin-model-toolbar">
+            <label for="adminModelDate">统计日期</label>
+            <input id="adminModelDate" type="date">
+          </div>
+          <div id="adminModelSelectedSummary" class="admin-usage-summary"></div>
           <div id="adminModelUsage" class="admin-table-wrap"></div>
+          <div class="admin-subsection-head">
+            <div><span>全部历史</span><h3>总调用</h3></div>
+          </div>
+          <div id="adminModelTotalSummary" class="admin-usage-summary"></div>
+          <div id="adminModelTotalUsage" class="admin-table-wrap"></div>
         </section>
 
         <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="leagues" aria-labelledby="adminLeaguesTitle" hidden>

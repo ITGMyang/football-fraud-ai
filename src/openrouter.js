@@ -193,8 +193,8 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       provider: client.name,
       generatedAt: new Date().toISOString(),
       usage: modelUsageFromResponse(data, { provider, model }),
-      picks,
-      scorePicks,
+      picks: picks.map(englishPredictionPick),
+      scorePicks: scorePicks.map(englishPredictionPick),
       bttsPick
     };
   } catch (error) {
@@ -209,6 +209,24 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       bttsPick: null
     };
   }
+}
+
+function englishPredictionPick(pick) {
+  return pick?.market ? { ...pick, market: englishPredictionMarket(pick.market) } : pick;
+}
+
+function englishPredictionMarket(market = {}) {
+  const marketType = String(market.marketType || '');
+  const selection = String(market.selection || '').trim();
+  if (/\u5927\/\u5c0f|\u5927\u5c0f|\u603b\u8fdb\u7403|total|over|under/i.test(marketType)) {
+    return { ...market, marketType: 'Goals Total', selection: /\u5927|over/i.test(selection) ? 'Over' : /\u5c0f|under/i.test(selection) ? 'Under' : selection };
+  }
+  if (/\u80dc\u5e73\u8d1f|1x2|moneyline/i.test(marketType)) {
+    return { ...market, marketType: 'Moneyline', selection: /\u5e73|draw|tie/i.test(selection) ? 'Draw' : selection, line: '1X2' };
+  }
+  if (/\u6bd4\u5206|score/i.test(marketType)) return { ...market, marketType: 'Correct Score', line: 'Correct Score' };
+  if (/\u8ba9\u7403|\u8ba9\u5206|\u4e9a\u6d32|handicap/i.test(marketType)) return { ...market, marketType: 'Asian Handicap' };
+  return market;
 }
 
 export function modelUsageFromResponse(data = {}, options = {}) {

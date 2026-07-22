@@ -1164,6 +1164,13 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-pool-toolbar { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
 .admin-pool-toolbar label { color: var(--muted); font-size: 0.78rem; font-weight: 900; }
 .admin-pool-toolbar input { width: min(420px, 100%); }
+.admin-model-toolbar input { width: 210px; }
+.admin-usage-summary { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 0 16px; }
+.admin-usage-summary span { padding: 8px 11px; border: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 0.78rem; font-weight: 800; }
+.admin-usage-summary strong { color: #173f32; }
+.admin-subsection-head { margin-top: 38px; padding: 0 0 14px; border-bottom: 1px solid var(--line); }
+.admin-subsection-head span { color: #278565; font-size: 0.72rem; font-weight: 900; }
+.admin-subsection-head h3 { margin: 4px 0 0; font-size: 1.35rem; }
 .admin-pool-table td:first-child strong,
 .admin-pool-table td:first-child small { display: block; }
 .admin-pool-table td:first-child small { margin-top: 4px; color: var(--muted); font-weight: 500; }

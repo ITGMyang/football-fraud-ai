@@ -45,6 +45,7 @@ let backendSchedules = [];
 let adminSharedPoolMatches = [];
 let adminRefreshTimer = null;
 let adminDashboardLoading = false;
+let adminModelUsageDate = '';
 const analyticsState = {
   raw: null,
   date: '',
@@ -72,6 +73,10 @@ bind('#refreshAnalytics', 'click', refreshAnalyticsData);
 bind('#reloadBackend', 'click', loadBackendSchedules);
 bind('#reloadAdmin', 'click', loadAdminDashboard);
 bind('#adminSharedPoolSearch', 'input', renderAdminSharedPool);
+bind('#adminModelDate', 'change', (event) => {
+  adminModelUsageDate = event.target.value;
+  loadAdminDashboard();
+});
 document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
   tab.addEventListener('click', () => activateAdminTab(tab.dataset.adminTab));
 });
@@ -233,7 +238,8 @@ async function loadAdminDashboard(options = {}) {
     notice.textContent = '正在加载最新运营数据...';
   }
   try {
-    const { dashboard } = await api('/api/admin/dashboard');
+    const query = adminModelUsageDate ? `?date=${encodeURIComponent(adminModelUsageDate)}` : '';
+    const { dashboard } = await api(`/api/admin/dashboard${query}`);
     renderAdminDashboard(dashboard || {});
     notice.textContent = '';
     notice.dataset.tone = '';
@@ -275,14 +281,31 @@ function renderAdminDashboard(dashboard) {
     adminMetric('待处理订单', formatNumber(dashboard.orders?.pendingCount), `${formatNumber(dashboard.orders?.failedCount)} 笔失败`)
   ].join('');
 
+  const modelUsage = dashboard.modelUsage || {};
+  const selectedUsage = modelUsage.selected || {};
+  const totalUsage = modelUsage.total || {};
+  const modelDate = $('#adminModelDate');
+  adminModelUsageDate = modelUsage.selectedDate || adminModelUsageDate;
+  if (modelDate && modelDate.value !== adminModelUsageDate) modelDate.value = adminModelUsageDate;
+  $('#adminModelSelectedSummary').innerHTML = adminUsageSummary(selectedUsage);
   $('#adminModelUsage').innerHTML = adminTable(
     ['模型', '供应商', '调用次数', '输入 Token', '输出 Token', 'Token 总数', '成本', '错误'],
-    (dashboard.models || []).map((row) => [
+    (selectedUsage.models || dashboard.models || []).map((row) => [
       row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
       formatNumber(row.outputTokens), formatNumber(row.totalTokens),
       row.costReportedCalls ? money(row.costUsd) : '未配置单价', formatNumber(row.errors)
     ]),
-    '今天暂时没有模型调用记录。'
+    '该日期暂时没有模型调用记录。'
+  );
+  $('#adminModelTotalSummary').innerHTML = adminUsageSummary(totalUsage);
+  $('#adminModelTotalUsage').innerHTML = adminTable(
+    ['模型', '供应商', '调用次数', '输入 Token', '输出 Token', 'Token 总数', '成本', '错误'],
+    (totalUsage.models || []).map((row) => [
+      row.modelName, row.provider, formatNumber(row.requests), formatNumber(row.inputTokens),
+      formatNumber(row.outputTokens), formatNumber(row.totalTokens),
+      row.costReportedCalls ? money(row.costUsd) : '未配置单价', formatNumber(row.errors)
+    ]),
+    '暂时没有模型调用记录。'
   );
   adminSharedPoolMatches = dashboard.sharedPool?.matches || [];
   const poolSummary = $('#adminSharedPoolSummary');
@@ -310,6 +333,16 @@ function renderAdminDashboard(dashboard) {
     ]),
     '暂时没有订单。'
   );
+}
+
+function adminUsageSummary(usage = {}) {
+  return [
+    `调用 <strong>${formatNumber(usage.calls)}</strong> 次`,
+    `用户 <strong>${formatNumber(usage.users)}</strong> 人`,
+    `Token <strong>${formatNumber(usage.tokens)}</strong>`,
+    `成本 <strong>${money(usage.costUsd)}</strong>`,
+    `错误 <strong>${formatNumber(usage.errors)}</strong> 次`
+  ].map((item) => `<span>${item}</span>`).join('');
 }
 
 function activateAdminTab(tabName = 'overview') {
@@ -1903,7 +1936,7 @@ function renderBttsPrediction(pick) {
     <section class="btts-prediction" aria-label="Both teams to score prediction">
       <div class="btts-answer">
         <span>Both Teams to Score</span>
-        <strong>${escapeHtml(pick.selection || 'Unavailable')}</strong>
+        <strong>${escapeHtml(englishMarketSelection({ selection: pick.selection }) || 'Unavailable')}</strong>
       </div>
       <div class="btts-metrics">
         <div><span>AI Probability</span><strong>${percent(pick.estimatedProbability)}</strong></div>
@@ -1973,7 +2006,7 @@ function renderRankingPick(pick, marketMap, index) {
         <div><span>${categoryKey === 'moneyline' ? '1X2' : 'Line'}</span><strong>${escapeHtml(categoryKey === 'moneyline' ? outcome : (displayMarketLine(market) || 'None'))}</strong></div>
         <div><span>AI Probability</span><strong>${percent(pick.estimatedProbability)}</strong></div>
         <div><span>Confidence</span><strong>${percent(pick.confidence)}</strong></div>
-        <div><span>Selection</span><strong>${escapeHtml(market.selection || 'None')}</strong></div>
+        <div><span>Selection</span><strong>${escapeHtml(englishMarketSelection(market))}</strong></div>
       </div>
       <div class="prediction-reason">
         <span>Analysis</span>
@@ -2608,17 +2641,27 @@ function displayMarketType(type) {
 function formatCategorySummaryLabel(category, market) {
   if (category === 'moneyline') return marketOutcomeDisplay(market);
   if (category === 'score') return `Score ${market.selection || ''}`;
-  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} goals`;
-  return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
+  if (category === 'total') return `${englishMarketSelection(market)} ${displayMarketLine(market)} goals`;
+  return `${englishMarketSelection(market)} ${displayMarketLine(market)}`.trim();
 }
 
 function formatPredictionTitle(market) {
   const category = marketCategory(market);
   if (category === 'moneyline') return marketOutcomeDisplay(market);
   if (category === 'score') return `Score ${market.selection || ''}`.trim();
-  if (category === 'handicap') return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
-  if (category === 'total') return `${market.selection || ''} ${displayMarketLine(market)} goals`.trim();
-  return `${market.selection || ''} ${displayMarketLine(market)}`.trim();
+  if (category === 'handicap') return `${englishMarketSelection(market)} ${displayMarketLine(market)}`.trim();
+  if (category === 'total') return `${englishMarketSelection(market)} ${displayMarketLine(market)} goals`.trim();
+  return `${englishMarketSelection(market)} ${displayMarketLine(market)}`.trim();
+}
+
+function englishMarketSelection(market = {}) {
+  const selection = String(market.selection || '').trim();
+  if (/^\u5927$/u.test(selection)) return 'Over';
+  if (/^\u5c0f$/u.test(selection)) return 'Under';
+  if (/^\u5e73(?:\u5c40)?$/u.test(selection)) return 'Draw';
+  if (/^\u662f$/u.test(selection)) return 'Yes';
+  if (/^\u5426$/u.test(selection)) return 'No';
+  return selection || 'None';
 }
 
 function displayMarketLine(market = {}) {

@@ -233,7 +233,7 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
     async readAdminDashboardData() {
       const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests] = await Promise.all([
         client.listAuthUsers(),
-        client.selectRows(TABLES.aiUsageEvents, '*', { order: 'created_at.desc', limit: '5000' }),
+        client.selectAllRows(TABLES.aiUsageEvents, '*', { order: 'created_at.desc' }),
         client.selectRows(TABLES.systemEvents, '*', { order: 'created_at.desc', limit: '500' }),
         client.selectRows(TABLES.rankings, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
         client.selectRows(TABLES.matchContexts, 'owner_id,payload,created_at', { order: 'created_at.desc', limit: '5000' }),
@@ -408,6 +408,15 @@ class SupabaseRestClient {
       if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
     }
     return this.request(`${table}?${query.toString()}`);
+  }
+
+  async selectAllRows(table, columns = '*', filters = {}, pageSize = 1000) {
+    const rows = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const page = await this.selectRows(table, columns, { ...filters, limit: pageSize, offset });
+      rows.push(...page);
+      if (page.length < pageSize) return rows;
+    }
   }
 
   async rpc(name, body) {

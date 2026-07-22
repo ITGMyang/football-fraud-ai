@@ -52,3 +52,13 @@ test('legacy non-English AI predictions are hidden from the English interface', 
   assert.match(app, /if \(!isEnglishPredictionResult\(result\)\) continue;/);
   assert.doesNotMatch(app, /\?{8,}/);
 });
+
+test('legacy market selections are translated before rendering prediction cards', async () => {
+  const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+
+  assert.match(app, /function englishMarketSelection\(market/);
+  assert.match(app, /englishMarketSelection\(market\)/);
+  assert.match(app, /return 'Over'/);
+  assert.match(app, /return 'Under'/);
+  assert.match(app, /return 'Draw'/);
+});

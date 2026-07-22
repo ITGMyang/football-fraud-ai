@@ -291,3 +291,28 @@ test('Supabase admin dashboard read includes auth users and operational tables',
     assert.ok(requests.some(({ url }) => url.includes(`/${table}?`)), `expected ${table} read`);
   }
 });
+
+test('Supabase admin dashboard reads every model usage page for accurate totals', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url) => {
+    const text = String(url);
+    requests.push(text);
+    if (text.includes('/auth/v1/admin/users')) return new Response('{"users":[]}');
+    if (text.includes('/ai_usage_events?')) {
+      const offset = Number(new URL(text).searchParams.get('offset') || 0);
+      const rows = offset === 0
+        ? Array.from({ length: 1000 }, (_, index) => ({ id: `usage-${index}` }))
+        : offset === 1000 ? [{ id: 'usage-1000' }] : [];
+      return new Response(JSON.stringify(rows));
+    }
+    return new Response('[]');
+  });
+
+  const data = await storage.readAdminDashboardData();
+
+  assert.equal(data.aiUsage.length, 1001);
+  assert.ok(requests.some((url) => url.includes('offset=1000')));
+});

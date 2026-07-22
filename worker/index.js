@@ -146,7 +146,7 @@ async function routeApi(request, env, access) {
       dashboard: buildAdminDashboard({
         ...data,
         apiFootballDailyLimit: Number(env.API_FOOTBALL_DAILY_LIMIT) || 7500
-      }),
+      }, Date.now(), { selectedDate: url.searchParams.get('date') || '' }),
       billingReconciliation: reconciliation
     });
   }

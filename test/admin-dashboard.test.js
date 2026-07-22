@@ -80,7 +80,8 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
     ],
     aiUsage: [
       { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'GPT 5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0.5, cost_reported: true, status: 'success', created_at: '2026-07-21T10:00:00Z' },
-      { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'Gemini', provider: 'APIMart', input_tokens: 800, output_tokens: 200, total_tokens: 1000, cost_usd: 0, cost_reported: false, status: 'error', created_at: '2026-07-21T10:05:00Z' }
+      { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'Gemini', provider: 'APIMart', input_tokens: 800, output_tokens: 200, total_tokens: 1000, cost_usd: 0, cost_reported: false, status: 'error', created_at: '2026-07-21T10:05:00Z' },
+      { owner_id: 'u2', request_kind: 'ranking', context_id: 'match-2', model_name: 'Qwen Max', provider: 'OpenRouter', input_tokens: 600, output_tokens: 150, total_tokens: 750, cost_usd: 0.1, cost_reported: true, status: 'success', created_at: '2026-07-20T10:05:00Z' }
     ],
     systemEvents: [{ event_type: 'api_football_refresh', payload: { apiCalls: 18, errors: [] }, created_at: '2026-07-21T09:40:00Z' }],
     orders: [
@@ -92,7 +93,7 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
       { owner_id: 'u1', fixture_id: 'match-1', status: 'success', cached: false, created_at: '2026-07-21T10:00:00Z' },
       { owner_id: 'u1', fixture_id: 'match-1', status: 'error', cached: false, created_at: '2026-07-21T10:10:00Z' }
     ]
-  }, now);
+  }, now, { selectedDate: '2026-07-20' });
 
   assert.equal(dashboard.core.apiFootballCallsToday, 18);
   assert.equal(dashboard.core.apiFootballDailyLimit, 7500);
@@ -103,6 +104,13 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
   assert.equal(dashboard.core.modelCostTodayUsd, 0.5);
   assert.equal(dashboard.models[0].modelName, 'GPT 5.5');
   assert.equal(dashboard.models[0].totalTokens, 1250);
+  assert.equal(dashboard.modelUsage.selectedDate, '2026-07-20');
+  assert.deepEqual(dashboard.modelUsage.availableDates, ['2026-07-21', '2026-07-20']);
+  assert.equal(dashboard.modelUsage.selected.calls, 1);
+  assert.equal(dashboard.modelUsage.selected.models[0].modelName, 'Qwen Max');
+  assert.equal(dashboard.modelUsage.total.calls, 3);
+  assert.equal(dashboard.modelUsage.total.users, 2);
+  assert.equal(dashboard.modelUsage.total.tokens, 3000);
   assert.equal(dashboard.users.total, 2);
   assert.equal(dashboard.users.activeToday, 1);
   assert.equal(dashboard.users.paid, 1);
