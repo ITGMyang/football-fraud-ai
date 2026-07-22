@@ -463,18 +463,40 @@ async function routeApi(request, env, access) {
   const predictMatch = url.pathname.match(/^\/api\/predict\/([^/]+)$/);
   if (request.method === 'POST' && predictMatch) {
     const id = decodeURIComponent(predictMatch[1]);
-    const market = (await storage.readDb({ ownerId })).markets.find((item) => item.id === id);
+    const db = await storage.readDb({ ownerId });
+    const market = db.markets.find((item) => item.id === id);
     if (!market) return json({ error: 'Market not found' }, 404);
+    const context = (db.matchContexts || []).find((item) => item.matchName === market.matchName) || null;
+    if (!context) return json({ error: 'Import the API-Football match before requesting a prediction.', code: 'MATCH_CONTEXT_REQUIRED' }, 400);
     const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
     if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
+    const fixtureValidation = validatePredictionFixture(context, predictionAccess.billing);
+    if (!fixtureValidation.ok) {
+      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
+      return json({ error: fixtureValidation.error, code: fixtureValidation.code }, 403);
+    }
+    const queuedRequest = access.role === 'user' && predictionAccess.billing.active
+      ? await storage.reservePredictionRequest({
+        ownerId,
+        fixtureId: String(context.matchId || contextKey(context)),
+        planId: predictionAccess.billing.planId,
+        dailyLimit: predictionDailyLimit(predictionAccess.billing.planId),
+        cooldownSeconds: 90
+      })
+      : null;
+    if (queuedRequest && !queuedRequest.ok) {
+      return json({ error: predictionQueueError(queuedRequest), code: queuedRequest.code, retryAfterSeconds: queuedRequest.retryAfterSeconds || 0 }, queuedRequest.code === 'DAILY_PREDICTION_LIMIT' ? 402 : 429);
+    }
     try {
       const report = await predictMarket(market, env, workerFetch);
       await recordAiUsage(storage, report.predictions, {
         ownerId, requestKind: 'market', contextId: market.id
       });
       await storage.saveReport(report, { ownerId });
-      return json({ report, billing: predictionAccess.billing });
+      if (queuedRequest?.requestId) await storage.completePredictionRequest(queuedRequest.requestId, { status: 'success' }).catch(() => null);
+      return json({ report, billing: predictionAccess.billing, usage: queuedRequest ? { usedToday: queuedRequest.usedToday, dailyLimit: queuedRequest.dailyLimit } : null });
     } catch (error) {
+      if (queuedRequest?.requestId) await storage.completePredictionRequest(queuedRequest.requestId, { status: 'error', errorMessage: error.message }).catch(() => null);
       if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
       throw error;
     }
