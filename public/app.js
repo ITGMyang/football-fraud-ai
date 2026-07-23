@@ -50,6 +50,7 @@ let adminSharedPoolMatches = [];
 let adminRefreshTimer = null;
 let adminDashboardLoading = false;
 let adminModelUsageDate = '';
+let adminAccuracyData = null;
 let activePredictionTask = null;
 const analyticsState = {
   raw: null,
@@ -78,6 +79,7 @@ bind('#refreshAnalytics', 'click', refreshAnalyticsData);
 bind('#reloadBackend', 'click', loadBackendSchedules);
 bind('#reloadAdmin', 'click', loadAdminDashboard);
 bind('#adminSharedPoolSearch', 'input', renderAdminSharedPool);
+bind('#adminAccuracy', 'change', renderAdminAccuracy);
 bind('#adminModelDate', 'change', (event) => {
   adminModelUsageDate = event.target.value;
   loadAdminDashboard();
@@ -398,6 +400,8 @@ function renderAdminDashboard(dashboard) {
   const poolSummary = $('#adminSharedPoolSummary');
   if (poolSummary) poolSummary.textContent = `${formatNumber(dashboard.sharedPool?.totalMatches)} 场比赛，共 ${formatNumber(dashboard.sharedPool?.totalResults)} 个可复用模型结果。`;
   renderAdminSharedPool();
+  adminAccuracyData = dashboard.accuracy || null;
+  renderAdminAccuracy();
   const leagueAudit = dashboard.leagueAudit || {};
   $('#adminLeagueAudit').innerHTML = [
     `重复赛事 <strong>${formatNumber(leagueAudit.duplicateFixtures)}</strong> 条`,
@@ -471,7 +475,7 @@ function adminModelCost(row = {}) {
 }
 
 function activateAdminTab(tabName = 'overview') {
-  const selected = ['overview', 'models', 'shared-pool', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
+  const selected = ['overview', 'models', 'shared-pool', 'accuracy', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
   document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
     const active = tab.dataset.adminTab === selected;
     tab.classList.toggle('active', active);
@@ -482,6 +486,155 @@ function activateAdminTab(tabName = 'overview') {
     panel.hidden = !active;
     panel.classList.toggle('active', active);
   });
+}
+
+function renderAdminAccuracy() {
+  const container = $('#adminAccuracy');
+  if (!container) return;
+  const data = adminAccuracyData;
+  if (!data?.evaluatedCount) {
+    container.innerHTML = `
+      <div class="admin-accuracy-empty">
+        <strong>暂无可结算的全站预测</strong>
+        <span>比赛完场并抓取到最终比分后，准确率会自动出现在这里。</span>
+      </div>
+    `;
+    return;
+  }
+
+  const currentDate = container.querySelector('[data-admin-accuracy-date]')?.value || 'all';
+  const currentModel = container.querySelector('[data-admin-accuracy-model]')?.value || 'all';
+  const currentCategory = container.querySelector('[data-admin-accuracy-category]')?.value || 'all';
+  const allRows = (data.evaluations || []).filter((row) => row.counted);
+  const dates = [...new Set(allRows.map(evaluationDate))].sort().reverse();
+  const modelNames = [...new Set(allRows.map((row) => row.modelName || 'AI'))].sort();
+  const categories = [...new Set(allRows.map((row) => row.category || 'other'))].sort();
+  const rows = allRows.filter((row) => {
+    if (currentDate !== 'all' && evaluationDate(row) !== currentDate) return false;
+    if (currentModel !== 'all' && (row.modelName || 'AI') !== currentModel) return false;
+    if (currentCategory !== 'all' && (row.category || 'other') !== currentCategory) return false;
+    return true;
+  });
+  const hits = rows.filter((row) => row.hit).length;
+  const total = rows.length;
+  const accuracy = total ? hits / total : 0;
+  const percentage = Math.round(accuracy * 100);
+  const matches = new Set(rows.map((row) => row.contextId)).size;
+  const uniqueModelPredictions = new Set(rows.map((row) => `${row.contextId}|${row.modelName || 'AI'}`)).size;
+  const models = summarizeAnalyticsRows(rows, (row) => row.modelName || 'AI');
+  const marketRows = summarizeAnalyticsRows(rows, (row) => row.category || 'other');
+  const score = marketRows.find((row) => row.key === 'score');
+  const trend = adminAccuracyTrend(rows);
+
+  container.innerHTML = `
+    <div class="admin-accuracy-hero">
+      <div class="admin-accuracy-ring" style="--accuracy:${percentage}">
+        <strong>${percentage}%</strong>
+        <span>综合准确率</span>
+      </div>
+      <div class="admin-accuracy-story">
+        <span class="admin-accuracy-kicker">VERIFIED PERFORMANCE</span>
+        <h4>${formatNumber(hits)} 次命中，来自 ${formatNumber(total)} 条已结算预测</h4>
+        <p>同一场比赛的共享结果只统计一次。正确比分 Top 4 作为一个组合，命中任意一个即记为命中。</p>
+      </div>
+      <dl class="admin-accuracy-facts">
+        <div><dt>已结算比赛</dt><dd>${formatNumber(matches)}</dd></div>
+        <div><dt>独立模型预测</dt><dd>${formatNumber(uniqueModelPredictions)}</dd></div>
+        <div><dt>比分组合</dt><dd>${score ? `${formatNumber(score.hits)}/${formatNumber(score.total)}` : '0/0'}</dd></div>
+      </dl>
+    </div>
+
+    <div class="admin-accuracy-toolbar">
+      <label><span>比赛日期</span><select data-admin-accuracy-date>
+        <option value="all"${currentDate === 'all' ? ' selected' : ''}>全部日期</option>
+        ${dates.map((date) => `<option value="${escapeHtml(date)}"${currentDate === date ? ' selected' : ''}>${escapeHtml(date)}</option>`).join('')}
+      </select></label>
+      <label><span>模型</span><select data-admin-accuracy-model>
+        <option value="all"${currentModel === 'all' ? ' selected' : ''}>全部模型</option>
+        ${modelNames.map((model) => `<option value="${escapeHtml(model)}"${currentModel === model ? ' selected' : ''}>${escapeHtml(model)}</option>`).join('')}
+      </select></label>
+      <label><span>预测类型</span><select data-admin-accuracy-category>
+        <option value="all"${currentCategory === 'all' ? ' selected' : ''}>全部类型</option>
+        ${categories.map((category) => `<option value="${escapeHtml(category)}"${currentCategory === category ? ' selected' : ''}>${escapeHtml(adminAccuracyCategory(category))}</option>`).join('')}
+      </select></label>
+      <div class="admin-accuracy-sample"><strong>${formatNumber(matches)}</strong><span>场有效样本</span></div>
+    </div>
+
+    <div class="admin-accuracy-grid">
+      <section class="admin-accuracy-block">
+        <header><span>模型排行榜</span><strong>${formatNumber(models.length)} 个模型</strong></header>
+        <div class="admin-accuracy-bars">${adminAccuracyBars(models)}</div>
+      </section>
+      <section class="admin-accuracy-block">
+        <header><span>预测类型表现</span><strong>${formatNumber(marketRows.length)} 个市场</strong></header>
+        <div class="admin-accuracy-bars">${adminAccuracyBars(marketRows, true)}</div>
+      </section>
+    </div>
+
+    <section class="admin-accuracy-trend">
+      <header><div><span>近期走势</span><strong>按比赛日期汇总</strong></div><small>柱高代表当日准确率</small></header>
+      ${trend.length ? `<div class="admin-trend-bars">${trend.slice(-14).map((point) => `
+        <div class="admin-trend-column" title="${escapeHtml(point.date)} · ${Math.round(point.accuracy * 100)}%">
+          <b>${Math.round(point.accuracy * 100)}%</b>
+          <i><span style="height:${Math.max(3, Math.round(point.accuracy * 100))}%"></span></i>
+          <small>${escapeHtml(point.date.slice(5))}</small>
+        </div>
+      `).join('')}</div>` : '<div class="admin-empty">当前筛选条件下没有走势数据。</div>'}
+    </section>
+
+    <section class="admin-accuracy-ledger">
+      <header><div><span>核查明细</span><strong>最近 ${formatNumber(Math.min(rows.length, 120))} 条</strong></div><small>完场比分与预测逐条可追溯</small></header>
+      <div class="admin-table-wrap">
+        ${rows.length ? `<table class="admin-table admin-accuracy-table"><thead><tr><th>比赛</th><th>日期</th><th>模型</th><th>类型</th><th>预测</th><th>完场比分</th><th>结果</th></tr></thead><tbody>${rows.slice(0, 120).map((row) => `
+          <tr>
+            <td>${escapeHtml(row.contextName)}</td>
+            <td>${escapeHtml(evaluationDate(row))}</td>
+            <td>${escapeHtml(row.modelName)}</td>
+            <td>${escapeHtml(adminAccuracyCategory(row.category))}</td>
+            <td class="admin-accuracy-selection">${escapeHtml(row.selection)}</td>
+            <td>${escapeHtml(row.actualScore)}</td>
+            <td><span class="admin-result-pill ${row.hit ? 'hit' : 'miss'}">${row.hit ? '命中' : '未命中'}</span></td>
+          </tr>
+        `).join('')}</tbody></table>` : '<div class="admin-empty">当前筛选条件下没有已结算预测。</div>'}
+      </div>
+    </section>
+  `;
+}
+
+function adminAccuracyBars(rows, categories = false) {
+  if (!rows.length) return '<div class="admin-empty">当前筛选条件下没有统计数据。</div>';
+  return rows.map((row, index) => {
+    const pct = Math.round((row.accuracy || 0) * 100);
+    const label = categories ? adminAccuracyCategory(row.key) : row.key;
+    return `
+      <div class="admin-accuracy-bar">
+        <span class="admin-accuracy-rank">${String(index + 1).padStart(2, '0')}</span>
+        <div><strong>${escapeHtml(label)}</strong><small>${formatNumber(row.hits)} 命中 / ${formatNumber(row.total)} 条</small></div>
+        <i><b style="width:${pct}%"></b></i>
+        <em>${pct}%</em>
+      </div>
+    `;
+  }).join('');
+}
+
+function adminAccuracyTrend(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const date = evaluationDate(row);
+    const item = map.get(date) || { date, total: 0, hits: 0, accuracy: 0 };
+    item.total += 1;
+    if (row.hit) item.hits += 1;
+    item.accuracy = item.total ? item.hits / item.total : 0;
+    map.set(date, item);
+  }
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function adminAccuracyCategory(category) {
+  return category === 'moneyline' ? '胜平负'
+    : category === 'handicap' ? '亚洲让球'
+      : category === 'total' ? '进球数'
+        : category === 'score' ? '正确比分 Top 4' : '其他';
 }
 
 function renderAdminSharedPool() {

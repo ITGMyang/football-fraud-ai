@@ -1227,11 +1227,99 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
 .admin-pool-status.early { color: #76551a; border-color: #dec88f; background: #fff7dd; }
 .admin-pool-status.live { color: #fff; border-color: #278565; background: #278565; }
 .admin-pool-status.failed { color: #9f3528; border-color: #e4aaa2; background: #fff0ed; }
+.admin-accuracy-panel { --admin-ink: #173f32; --admin-soft: #e9f2ec; --admin-faint: #f3f6f2; }
+.admin-accuracy-hero {
+  display: grid;
+  grid-template-columns: 210px minmax(300px, 1fr) minmax(280px, 0.75fr);
+  align-items: center;
+  gap: 40px;
+  min-height: 300px;
+  padding: 34px 40px;
+  color: #fff;
+  background: var(--admin-ink);
+  border-bottom: 5px solid var(--signal);
+}
+.admin-accuracy-ring {
+  display: grid;
+  place-content: center;
+  width: 176px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  text-align: center;
+  background:
+    radial-gradient(circle at center, var(--admin-ink) 0 59%, transparent 60%),
+    conic-gradient(var(--signal) calc(var(--accuracy) * 1%), #456158 0);
+}
+.admin-accuracy-ring strong { color: #fff; font-size: 3.1rem; line-height: 1; }
+.admin-accuracy-ring span { margin-top: 8px; color: #b9c8bf; font-size: 0.75rem; font-weight: 800; }
+.admin-accuracy-kicker { color: #75c19e; font-size: 0.72rem; font-weight: 900; }
+.admin-accuracy-story h4 { max-width: 700px; margin: 10px 0 14px; color: #fff; font-size: clamp(1.6rem, 3vw, 2.6rem); line-height: 1.12; }
+.admin-accuracy-story p { max-width: 680px; margin: 0; color: #b9c8bf; line-height: 1.7; }
+.admin-accuracy-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border-top: 1px solid #456158; border-left: 1px solid #456158; }
+.admin-accuracy-facts div { min-width: 0; padding: 20px 14px; border-right: 1px solid #456158; border-bottom: 1px solid #456158; }
+.admin-accuracy-facts dt { color: #9fb3a8; font-size: 0.7rem; font-weight: 800; }
+.admin-accuracy-facts dd { margin: 8px 0 0; color: #fff; font-size: 1.45rem; font-weight: 900; }
+.admin-accuracy-toolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) minmax(150px, 0.7fr);
+  align-items: end;
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: #fff;
+}
+.admin-accuracy-toolbar label { display: grid; gap: 7px; padding: 18px; border-right: 1px solid var(--line); }
+.admin-accuracy-toolbar label span { color: var(--muted); font-size: 0.72rem; font-weight: 900; }
+.admin-accuracy-toolbar select { width: 100%; min-width: 0; }
+.admin-accuracy-sample { display: flex; align-items: baseline; justify-content: center; gap: 8px; min-height: 83px; padding: 20px; }
+.admin-accuracy-sample strong { color: var(--admin-ink); font-size: 2rem; }
+.admin-accuracy-sample span { color: var(--muted); font-size: 0.78rem; font-weight: 800; }
+.admin-accuracy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.admin-accuracy-block { min-width: 0; padding: 28px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #fff; }
+.admin-accuracy-block > header,
+.admin-accuracy-trend > header,
+.admin-accuracy-ledger > header { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+.admin-accuracy-block > header span,
+.admin-accuracy-trend > header span,
+.admin-accuracy-ledger > header span { display: block; color: var(--admin-ink); font-size: 1.2rem; font-weight: 900; }
+.admin-accuracy-block > header strong,
+.admin-accuracy-trend > header strong,
+.admin-accuracy-ledger > header strong { color: var(--muted); font-size: 0.76rem; }
+.admin-accuracy-trend > header small,
+.admin-accuracy-ledger > header small { color: var(--muted); }
+.admin-accuracy-bars { display: grid; gap: 16px; }
+.admin-accuracy-bar { display: grid; grid-template-columns: 28px minmax(120px, 0.8fr) minmax(100px, 1fr) 48px; align-items: center; gap: 12px; }
+.admin-accuracy-rank { color: #9aaba2; font-size: 0.72rem; font-weight: 900; }
+.admin-accuracy-bar div strong,
+.admin-accuracy-bar div small { display: block; }
+.admin-accuracy-bar div strong { color: var(--admin-ink); }
+.admin-accuracy-bar div small { margin-top: 2px; color: var(--muted); font-size: 0.68rem; }
+.admin-accuracy-bar > i { height: 8px; overflow: hidden; background: #e1e7e1; }
+.admin-accuracy-bar > i b { display: block; height: 100%; background: var(--signal); }
+.admin-accuracy-bar em { color: var(--admin-ink); font-style: normal; font-weight: 900; text-align: right; }
+.admin-accuracy-trend,
+.admin-accuracy-ledger { padding: 30px 28px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); background: #fff; }
+.admin-trend-bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); align-items: end; gap: 10px; min-height: 220px; padding-top: 12px; border-bottom: 1px solid var(--line); }
+.admin-trend-column { display: grid; grid-template-rows: 22px 150px 28px; gap: 5px; min-width: 0; text-align: center; }
+.admin-trend-column > b { color: var(--admin-ink); font-size: 0.68rem; }
+.admin-trend-column > i { display: flex; align-items: end; justify-content: center; background: var(--admin-faint); }
+.admin-trend-column > i span { width: min(30px, 62%); background: var(--signal); }
+.admin-trend-column > small { color: var(--muted); font-size: 0.65rem; }
+.admin-accuracy-ledger { padding-right: 0; padding-left: 0; }
+.admin-accuracy-ledger > header { padding: 0 28px; }
+.admin-accuracy-selection { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.admin-result-pill { display: inline-block; min-width: 64px; padding: 5px 9px; color: #fff; font-size: 0.72rem; font-weight: 900; text-align: center; }
+.admin-result-pill.hit { background: var(--signal); }
+.admin-result-pill.miss { color: #9f3528; border: 1px solid #e4aaa2; background: #fff0ed; }
+.admin-accuracy-empty { display: grid; gap: 6px; padding: 60px 28px; border-top: 2px solid var(--admin-ink); background: #fff; }
+.admin-accuracy-empty strong { color: var(--admin-ink); font-size: 1.25rem; }
+.admin-accuracy-empty span { color: var(--muted); }
 
 @media (max-width: 1100px) {
   .admin-tabs { margin: 0 22px; }
   .admin-core-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 22px; }
   .admin-module { margin: 0 22px; }
+  .admin-accuracy-hero { grid-template-columns: 180px 1fr; }
+  .admin-accuracy-facts { grid-column: 1 / -1; }
   .prediction-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .market-overview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1321,6 +1409,16 @@ pre { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-r
   .admin-module { margin: 0 12px; padding-top: 32px; }
   .admin-module-head { align-items: flex-start; flex-direction: column; gap: 8px; }
   .admin-module-head small { text-align: left; }
+  .admin-accuracy-hero { grid-template-columns: 1fr; gap: 24px; padding: 28px 22px; }
+  .admin-accuracy-ring { width: 150px; }
+  .admin-accuracy-ring strong { font-size: 2.5rem; }
+  .admin-accuracy-facts { grid-column: auto; grid-template-columns: 1fr; }
+  .admin-accuracy-toolbar,
+  .admin-accuracy-grid { grid-template-columns: 1fr; }
+  .admin-accuracy-toolbar label { border-bottom: 1px solid var(--line); }
+  .admin-accuracy-bar { grid-template-columns: 24px minmax(100px, 1fr) 48px; }
+  .admin-accuracy-bar > i { grid-column: 2 / -1; }
+  .admin-trend-bars { grid-template-columns: repeat(7, minmax(38px, 1fr)); overflow-x: auto; }
   .backend-head { align-items: stretch; flex-direction: column; padding: 22px 18px; }
   .backend-actions { justify-content: space-between; }
   .backend-summary { grid-template-columns: repeat(2, 1fr); }

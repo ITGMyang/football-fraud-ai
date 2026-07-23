@@ -292,7 +292,7 @@ test('Supabase admin dashboard read includes auth users and operational tables',
   }
 });
 
-test('Supabase admin dashboard reads every model usage page for accurate totals', async () => {
+test('Supabase admin dashboard reads every usage and prediction page for accurate totals', async () => {
   const requests = [];
   const storage = createSupabaseStorage({
     SUPABASE_URL: 'https://project.supabase.co',
@@ -308,11 +308,20 @@ test('Supabase admin dashboard reads every model usage page for accurate totals'
         : offset === 1000 ? [{ id: 'usage-1000' }] : [];
       return new Response(JSON.stringify(rows));
     }
+    if (text.includes('/rankings?')) {
+      const offset = Number(new URL(text).searchParams.get('offset') || 0);
+      const rows = offset === 0
+        ? Array.from({ length: 1000 }, (_, index) => ({ id: `ranking-${index}` }))
+        : offset === 1000 ? [{ id: 'ranking-1000' }] : [];
+      return new Response(JSON.stringify(rows));
+    }
     return new Response('[]');
   });
 
   const data = await storage.readAdminDashboardData();
 
   assert.equal(data.aiUsage.length, 1001);
+  assert.equal(data.rankings.length, 1001);
   assert.ok(requests.some((url) => url.includes('offset=1000')));
+  assert.ok(requests.some((url) => url.includes('/rankings?') && url.includes('offset=1000')));
 });

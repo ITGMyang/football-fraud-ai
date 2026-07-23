@@ -164,6 +164,46 @@ test('shared prediction pool uses schedule match details when a private context 
   });
 });
 
+test('admin dashboard calculates deduplicated site-wide prediction accuracy', () => {
+  const sharedResult = {
+    modelName: 'Qwen 3.7 Max',
+    generatedAt: '2026-07-22T10:00:00Z',
+    picks: [{
+      market: {
+        matchName: 'Alpha v Beta',
+        marketType: 'Goals Total',
+        selection: 'Over',
+        line: '2.5'
+      }
+    }],
+    scorePicks: [
+      { score: '1:0' },
+      { score: '2:1' },
+      { score: '1:1' },
+      { score: '0:1' }
+    ]
+  };
+  const dashboard = buildAdminDashboard({
+    contexts: [
+      { owner_id: 'u1', created_at: '2026-07-22T12:00:00Z', payload: { matchId: 'fixture-1', matchName: 'Alpha v Beta', kickoff: '2026-07-22T20:00:00Z', actualScore: '2:1' } },
+      { owner_id: 'u2', created_at: '2026-07-22T12:01:00Z', payload: { matchId: 'fixture-1', matchName: 'Alpha v Beta', kickoff: '2026-07-22T20:00:00Z', actualScore: '2:1' } }
+    ],
+    rankings: [
+      { owner_id: 'u1', created_at: '2026-07-22T10:00:00Z', payload: { id: 'r1', contextId: 'fixture-1', createdAt: '2026-07-22T10:00:00Z', results: [sharedResult] } },
+      { owner_id: 'u2', created_at: '2026-07-22T10:05:00Z', payload: { id: 'r2', contextId: 'fixture-1', createdAt: '2026-07-22T10:00:00Z', results: [sharedResult] } }
+    ]
+  }, Date.parse('2026-07-23T00:00:00Z'));
+
+  assert.equal(dashboard.accuracy.uniqueModelPredictions, 1);
+  assert.equal(dashboard.accuracy.matchCount, 1);
+  assert.equal(dashboard.accuracy.evaluatedCount, 2);
+  assert.equal(dashboard.accuracy.hits, 2);
+  assert.equal(dashboard.accuracy.total, 2);
+  assert.equal(dashboard.accuracy.accuracy, 1);
+  assert.equal(dashboard.accuracy.categories.find((row) => row.key === 'score').total, 1);
+  assert.equal(dashboard.accuracy.categories.find((row) => row.key === 'score').accuracy, 1);
+});
+
 test('admin dashboard audits revenue periods, plans, users, and duplicate competition data', () => {
   const now = Date.parse('2026-07-22T12:00:00Z');
   const dashboard = buildAdminDashboard({
@@ -227,6 +267,8 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(markup, /data-admin-tab="overview"/);
   assert.match(markup, /data-admin-tab="models"/);
   assert.match(markup, /data-admin-tab="shared-pool"/);
+  assert.match(markup, /data-admin-tab="accuracy"/);
+  assert.match(markup, /id="adminAccuracy"/);
   assert.match(markup, /id="adminSharedPool"/);
   assert.match(markup, /id="adminRevenueSummary"/);
   assert.match(markup, /id="adminLeagueAudit"/);
@@ -237,6 +279,7 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(app, /activateAdminTab/);
   assert.match(app, /历史估算/);
   assert.match(app, /renderAdminSharedPool/);
+  assert.match(app, /renderAdminAccuracy/);
   assert.match(app, /startAdminAutoRefresh/);
   assert.match(app, /未配置单价/);
   assert.match(app, /小样本高消耗/);

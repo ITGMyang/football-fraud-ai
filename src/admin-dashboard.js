@@ -1,4 +1,6 @@
 import { calculateModelCostUsd } from './model-cost.js';
+import { contextKey } from './context-utils.js';
+import { actualResultFromContext, buildAnalytics } from './evaluation.js';
 
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'deepseek', 'qwen'];
@@ -33,6 +35,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
   const orderSummary = summarizeOrders(orders, now);
   const activePlans = countPlans(activeEntitlements);
   const purchasesToday = countPlanOwners(confirmedOrders.filter((row) => dateKey(row.confirmed_at || row.created_at) === today));
+  const accuracy = summarizeSiteAccuracy(rankings, contexts);
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -60,6 +63,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
       selected: summarizeUsage(selectedUsage),
       total: summarizeUsage(aiUsage)
     },
+    accuracy,
     sharedPool: summarizeSharedPool(sharedPredictions, aiUsage, contexts, schedules),
     leagues: leagueSummary.rows,
     leagueAudit: leagueSummary.audit,
@@ -81,6 +85,70 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
       orderSummaryRows(orders.filter((row) => row.plan_id === planId), users).slice(0, 20)
     ]))
   };
+}
+
+function summarizeSiteAccuracy(rankingRows, contextRows) {
+  const contexts = deduplicateAccuracyContexts(contextRows);
+  const rankings = deduplicateAccuracyRankings(rankingRows);
+  const analytics = buildAnalytics({ rankings, contexts });
+  const counted = analytics.evaluations.filter((row) => row.counted);
+  const hits = counted.filter((row) => row.hit).length;
+  const total = counted.length;
+  return {
+    ...analytics,
+    uniqueModelPredictions: rankings.length,
+    hits,
+    total,
+    accuracy: total ? hits / total : 0
+  };
+}
+
+function deduplicateAccuracyContexts(rows) {
+  const selected = new Map();
+  for (const row of rows) {
+    const context = row.payload || row;
+    const key = String(contextKey(context) || '');
+    if (!key) continue;
+    const candidate = {
+      context,
+      hasScore: Boolean(actualResultFromContext(context)),
+      updatedAt: timestamp(row.updated_at || row.created_at || context.capturedAt)
+    };
+    const current = selected.get(key);
+    if (!current
+      || (candidate.hasScore && !current.hasScore)
+      || (candidate.hasScore === current.hasScore && candidate.updatedAt > current.updatedAt)) {
+      selected.set(key, candidate);
+    }
+  }
+  return [...selected.values()].map((row) => row.context);
+}
+
+function deduplicateAccuracyRankings(rows) {
+  const selected = new Map();
+  for (const row of rows) {
+    const ranking = row.payload || row;
+    const contextId = String(ranking.contextId || '');
+    if (!contextId) continue;
+    for (const result of ranking.results || []) {
+      if (result.error) continue;
+      const key = `${contextId}|${modelKey(result.modelName || result.modelId)}`;
+      const generatedAt = result.generatedAt || ranking.createdAt || row.created_at || '';
+      const candidate = {
+        generatedAt: timestamp(generatedAt),
+        ranking: {
+          id: `${contextId}:${modelKey(result.modelName || result.modelId)}`,
+          contextId,
+          contextName: ranking.contextName || '',
+          createdAt: generatedAt,
+          results: [result]
+        }
+      };
+      const current = selected.get(key);
+      if (!current || candidate.generatedAt > current.generatedAt) selected.set(key, candidate);
+    }
+  }
+  return [...selected.values()].map((row) => row.ranking);
 }
 
 function summarizeOrders(orders, now) {

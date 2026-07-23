@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FutBots</title>
-    <link rel="stylesheet" href="/styles.css?v=20260722-002">
+    <link rel="stylesheet" href="/styles.css?v=20260723-001">
   </head>
   <body>
     <nav class="floating-nav" aria-label="Main navigation">
@@ -152,6 +152,7 @@
           <button class="active" type="button" role="tab" aria-selected="true" data-admin-tab="overview">数据总览</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="models">模型用量</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="shared-pool">共享预测池</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="accuracy">全站准确率</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="leagues">赛事数据</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="users">用户权限</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="orders">订单财务</button>
@@ -179,6 +180,14 @@
             <input id="adminSharedPoolSearch" type="search" placeholder="输入球队、赛事或 Fixture ID">
           </div>
           <div id="adminSharedPool" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-module admin-tab-panel admin-accuracy-panel" role="tabpanel" data-admin-panel="accuracy" aria-labelledby="adminAccuracyTitle" hidden>
+          <div class="admin-module-head">
+            <div><span>赛后验证</span><h3 id="adminAccuracyTitle">全站预测准确率</h3></div>
+            <small>按比赛与模型去重，只统计已获取完场比分的预测。</small>
+          </div>
+          <div id="adminAccuracy" aria-live="polite"></div>
         </section>
 
         <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="models" aria-labelledby="adminModelsTitle" hidden>
@@ -396,6 +405,6 @@
 
     <script src="/vendor/supabase.js"></script>
     <script type="module" src="/auth-client.js?v=20260721-001"></script>
-    <script defer src="/app.js?v=20260722-002"></script>
+    <script defer src="/app.js?v=20260723-001"></script>
   </body>
 </html>
