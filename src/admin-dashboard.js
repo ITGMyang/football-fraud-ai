@@ -91,16 +91,30 @@ function summarizeSiteAccuracy(rankingRows, contextRows) {
   const contexts = deduplicateAccuracyContexts(contextRows);
   const rankings = deduplicateAccuracyRankings(rankingRows);
   const analytics = buildAnalytics({ rankings, contexts });
-  const counted = analytics.evaluations.filter((row) => row.counted);
+  const contextMap = new Map(contexts.map((context) => [String(contextKey(context) || ''), context]));
+  const evaluations = analytics.evaluations.map((row) => ({
+    ...row,
+    competition: accuracyCompetition(contextMap.get(String(row.contextId || '')))
+  }));
+  const counted = evaluations.filter((row) => row.counted);
   const hits = counted.filter((row) => row.hit).length;
   const total = counted.length;
   return {
     ...analytics,
+    evaluations,
     uniqueModelPredictions: rankings.length,
     hits,
     total,
     accuracy: total ? hits / total : 0
   };
+}
+
+function accuracyCompetition(context = {}) {
+  return context.competition
+    || context.league?.name
+    || context.fixture?.competition
+    || context.fixture?.league?.name
+    || 'Unknown Competition';
 }
 
 function deduplicateAccuracyContexts(rows) {

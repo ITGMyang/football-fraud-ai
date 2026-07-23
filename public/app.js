@@ -583,19 +583,79 @@ function renderAdminAccuracy() {
     </section>
 
     <section class="admin-accuracy-ledger">
-      <header><div><span>核查明细</span><strong>最近 ${formatNumber(Math.min(rows.length, 120))} 条</strong></div><small>完场比分与预测逐条可追溯</small></header>
-      <div class="admin-table-wrap">
-        ${rows.length ? `<table class="admin-table admin-accuracy-table"><thead><tr><th>比赛</th><th>日期</th><th>模型</th><th>类型</th><th>预测</th><th>完场比分</th><th>结果</th></tr></thead><tbody>${rows.slice(0, 120).map((row) => `
-          <tr>
-            <td>${escapeHtml(row.contextName)}</td>
-            <td>${escapeHtml(evaluationDate(row))}</td>
-            <td>${escapeHtml(row.modelName)}</td>
-            <td>${escapeHtml(adminAccuracyCategory(row.category))}</td>
-            <td class="admin-accuracy-selection">${escapeHtml(row.selection)}</td>
-            <td>${escapeHtml(row.actualScore)}</td>
-            <td><span class="admin-result-pill ${row.hit ? 'hit' : 'miss'}">${row.hit ? '命中' : '未命中'}</span></td>
-          </tr>
-        `).join('')}</tbody></table>` : '<div class="admin-empty">当前筛选条件下没有已结算预测。</div>'}
+      <header><div><span>核查明细</span><strong>${formatNumber(matches)} 场比赛 · ${formatNumber(total)} 条预测</strong></div><small>按比赛与模型归档，避免重复信息</small></header>
+      ${rows.length
+        ? `<div class="admin-accuracy-match-list">${groupAdminAccuracyMatches(rows).map(renderAdminAccuracyMatch).join('')}</div>`
+        : '<div class="admin-empty">当前筛选条件下没有已结算预测。</div>'}
+    </section>
+  `;
+}
+
+function groupAdminAccuracyMatches(rows = []) {
+  const matches = new Map();
+  for (const row of rows) {
+    const matchKey = String(row.contextId || row.contextName || 'match');
+    if (!matches.has(matchKey)) {
+      matches.set(matchKey, {
+        id: matchKey,
+        name: row.contextName || '比赛',
+        competition: row.competition || 'Unknown Competition',
+        date: evaluationDate(row),
+        actualScore: row.actualScore || '-',
+        models: new Map()
+      });
+    }
+    const match = matches.get(matchKey);
+    const modelName = row.modelName || 'AI';
+    if (!match.models.has(modelName)) match.models.set(modelName, []);
+    match.models.get(modelName).push(row);
+  }
+  return [...matches.values()].map((match) => ({
+    ...match,
+    models: [...match.models.entries()].map(([name, predictions]) => ({ name, predictions }))
+  }));
+}
+
+function renderAdminAccuracyMatch(match) {
+  const predictionCount = match.models.reduce((total, model) => total + model.predictions.length, 0);
+  return `
+    <article class="admin-accuracy-match">
+      <header class="admin-accuracy-match-head">
+        <div class="admin-accuracy-match-title">
+          <span class="admin-competition-label">${escapeHtml(match.competition)}</span>
+          <h4>${escapeHtml(match.name)}</h4>
+        </div>
+        <dl class="admin-accuracy-match-meta">
+          <div><dt>比赛日期</dt><dd>${escapeHtml(match.date)}</dd></div>
+          <div><dt>完场比分</dt><dd>${escapeHtml(match.actualScore)}</dd></div>
+          <div><dt>预测记录</dt><dd>${formatNumber(predictionCount)}</dd></div>
+        </dl>
+      </header>
+      <div class="admin-accuracy-model-list">
+        ${match.models.map(renderAdminAccuracyModel).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function renderAdminAccuracyModel(model) {
+  const hits = model.predictions.filter((row) => row.hit).length;
+  const total = model.predictions.length;
+  const percentage = total ? Math.round((hits / total) * 100) : 0;
+  return `
+    <section class="admin-accuracy-model">
+      <header>
+        <div><strong>${escapeHtml(model.name)}</strong><span>${formatNumber(hits)}/${formatNumber(total)} 命中</span></div>
+        <b>${percentage}%</b>
+      </header>
+      <div class="admin-accuracy-predictions">
+        ${model.predictions.map((row) => `
+          <div class="admin-accuracy-prediction">
+            <span>${escapeHtml(adminAccuracyCategory(row.category))}</span>
+            <strong>${escapeHtml(row.selection)}</strong>
+            <span class="admin-result-pill ${row.hit ? 'hit' : 'miss'}">${row.hit ? '命中' : '未命中'}</span>
+          </div>
+        `).join('')}
       </div>
     </section>
   `;

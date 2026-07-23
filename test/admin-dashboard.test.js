@@ -185,8 +185,8 @@ test('admin dashboard calculates deduplicated site-wide prediction accuracy', ()
   };
   const dashboard = buildAdminDashboard({
     contexts: [
-      { owner_id: 'u1', created_at: '2026-07-22T12:00:00Z', payload: { matchId: 'fixture-1', matchName: 'Alpha v Beta', kickoff: '2026-07-22T20:00:00Z', actualScore: '2:1' } },
-      { owner_id: 'u2', created_at: '2026-07-22T12:01:00Z', payload: { matchId: 'fixture-1', matchName: 'Alpha v Beta', kickoff: '2026-07-22T20:00:00Z', actualScore: '2:1' } }
+      { owner_id: 'u1', created_at: '2026-07-22T12:00:00Z', payload: { matchId: 'fixture-1', matchName: 'Alpha v Beta', competition: 'World Cup', kickoff: '2026-07-22T20:00:00Z', actualScore: '2:1' } },
+      { owner_id: 'u2', created_at: '2026-07-22T12:01:00Z', payload: { matchId: 'fixture-1', matchName: 'Alpha v Beta', competition: 'World Cup', kickoff: '2026-07-22T20:00:00Z', actualScore: '2:1' } }
     ],
     rankings: [
       { owner_id: 'u1', created_at: '2026-07-22T10:00:00Z', payload: { id: 'r1', contextId: 'fixture-1', createdAt: '2026-07-22T10:00:00Z', results: [sharedResult] } },
@@ -200,6 +200,7 @@ test('admin dashboard calculates deduplicated site-wide prediction accuracy', ()
   assert.equal(dashboard.accuracy.hits, 2);
   assert.equal(dashboard.accuracy.total, 2);
   assert.equal(dashboard.accuracy.accuracy, 1);
+  assert.equal(dashboard.accuracy.evaluations[0].competition, 'World Cup');
   assert.equal(dashboard.accuracy.categories.find((row) => row.key === 'score').total, 1);
   assert.equal(dashboard.accuracy.categories.find((row) => row.key === 'score').accuracy, 1);
 });
@@ -280,6 +281,10 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(app, /历史估算/);
   assert.match(app, /renderAdminSharedPool/);
   assert.match(app, /renderAdminAccuracy/);
+  assert.match(app, /groupAdminAccuracyMatches/);
+  assert.match(app, /renderAdminAccuracyMatch/);
+  assert.match(app, /renderAdminAccuracyModel/);
+  assert.doesNotMatch(app, /admin-accuracy-table/);
   assert.match(app, /startAdminAutoRefresh/);
   assert.match(app, /未配置单价/);
   assert.match(app, /小样本高消耗/);
