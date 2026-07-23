@@ -1038,7 +1038,7 @@ function syntheticScorePick(score, totalPick, markets, index = 0) {
     scoreType: normalizeScoreType(null, index),
     estimatedProbability: Math.max(0.08, Math.min(0.22, Number(totalPick?.estimatedProbability || 0.5) * 0.25)),
     confidence: Math.max(0.2, Math.min(0.45, Number(totalPick?.confidence || 0.35) * 0.75)),
-    reason: '根据大小球主判断补齐的兼容比分'
+    reason: 'Compatible score added to match the primary goals-total prediction.'
   };
 }
 

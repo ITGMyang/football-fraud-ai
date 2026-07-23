@@ -47,6 +47,9 @@ test('legacy non-English AI predictions are silently excluded from the English i
 
   assert.match(app, /function isEnglishPredictionResult\(result\)/);
   assert.match(app, /function predictionNarrativeText\(result/);
+  assert.match(app, /function normalizePredictionNarrative\(value/);
+  assert.match(app, /Compatible score added to match the primary goals-total prediction/);
+  assert.match(app, /normalizePredictionNarrative\(pick\.reason/);
   assert.doesNotMatch(app, /test\(JSON\.stringify\(result \|\| \{\}\)\)/);
   assert.doesNotMatch(app, /Legacy non-English predictions/i);
   assert.doesNotMatch(app, /hasLegacyResults/);

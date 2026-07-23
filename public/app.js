@@ -2184,7 +2184,15 @@ function predictionNarrativeText(result = {}) {
   for (const pick of result.scorePicks || []) text.push(pick.reason, ...(pick.risks || []));
   if (result.bttsPick) text.push(result.bttsPick.reason, ...(result.bttsPick.risks || []));
   if (result.error) text.push(result.error);
-  return text.filter(Boolean).join(' ');
+  return text.map((value) => normalizePredictionNarrative(value)).filter(Boolean).join(' ');
+}
+
+function normalizePredictionNarrative(value, fallback = '') {
+  const text = String(value || '').trim();
+  if (text === '根据大小球主判断补齐的兼容比分') {
+    return 'Compatible score added to match the primary goals-total prediction.';
+  }
+  return text || fallback;
 }
 
 function isNewerModelResult(candidate, existing) {
@@ -2266,7 +2274,7 @@ function renderModelRanking(result, marketMap) {
 
 function renderBttsPrediction(pick) {
   if (!pick) return '';
-  const risks = Array.isArray(pick.risks) ? pick.risks.filter(Boolean).slice(0, 3) : [];
+  const risks = Array.isArray(pick.risks) ? pick.risks.map((risk) => normalizePredictionNarrative(risk)).filter(Boolean).slice(0, 3) : [];
   return `
     <section class="btts-prediction" aria-label="Both teams to score prediction">
       <div class="btts-answer">
@@ -2279,7 +2287,7 @@ function renderBttsPrediction(pick) {
       </div>
       <div class="btts-analysis">
         <span>Analysis</span>
-        <p>${escapeHtml(pick.reason || 'No analysis provided')}</p>
+        <p>${escapeHtml(normalizePredictionNarrative(pick.reason, 'No analysis provided'))}</p>
         ${risks.length ? `<small>${risks.map(escapeHtml).join(' · ')}</small>` : ''}
       </div>
     </section>
@@ -2301,7 +2309,7 @@ function renderScorePredictions(scorePicks) {
             <em>${escapeHtml(scoreTypeLabel(pick.scoreType, index))}</em>
             <strong>${escapeHtml(pick.score || pick.market?.selection || '')}</strong>
             <div>AI Probability ${percent(pick.estimatedProbability)}</div>
-            <p>${escapeHtml(pick.reason || 'No reason provided')}</p>
+            <p>${escapeHtml(normalizePredictionNarrative(pick.reason, 'No reason provided'))}</p>
           </article>
         `).join('') : '<p class="meta">This model did not return four valid score predictions.</p>'}
       </div>
@@ -2320,7 +2328,7 @@ function renderRankingPick(pick, marketMap, index) {
   const market = pick.market || marketMap.get(pick.marketId) || {};
   const categoryKey = marketCategory(market);
   const category = MARKET_GROUPS.find((group) => group.key === categoryKey) || MARKET_GROUPS.at(-1);
-  const risks = Array.isArray(pick.risks) ? pick.risks.filter(Boolean).slice(0, 3) : [];
+  const risks = Array.isArray(pick.risks) ? pick.risks.map((risk) => normalizePredictionNarrative(risk)).filter(Boolean).slice(0, 3) : [];
   const outcome = marketOutcomeLabel(market);
   const outcomeDisplay = marketOutcomeDisplay(market);
   const winnerFlag = categoryKey === 'moneyline' ? renderMoneylineFlag(market) : '';
@@ -2345,7 +2353,7 @@ function renderRankingPick(pick, marketMap, index) {
       </div>
       <div class="prediction-reason">
         <span>Analysis</span>
-        <p>${escapeHtml(pick.reason || 'No reason provided')}</p>
+        <p>${escapeHtml(normalizePredictionNarrative(pick.reason, 'No reason provided'))}</p>
       </div>
       <div class="prediction-risks">
         <span>Risks</span>

@@ -619,6 +619,8 @@ test('ranking score predictions stay consistent with under total pick', async ()
     const [home, away] = pick.score.split(':').map(Number);
     return home + away <= 2;
   }));
+  assert.ok(ranking.results[0].scorePicks.every((pick) => !/[\u3400-\u9fff]/u.test(pick.reason || '')));
+  assert.match(ranking.results[0].scorePicks.at(-1).reason, /compatible score/i);
 });
 
 test('gpt-prefixed model uses OpenAI provider automatically', async () => {
