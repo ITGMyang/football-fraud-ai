@@ -42,13 +42,14 @@ test('dynamic UI and API errors no longer use legacy Chinese interface copy', as
   }
 });
 
-test('legacy non-English AI predictions are hidden from the English interface', async () => {
+test('legacy non-English AI predictions are silently excluded from the English interface', async () => {
   const app = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 
   assert.match(app, /function isEnglishPredictionResult\(result\)/);
   assert.match(app, /function predictionNarrativeText\(result/);
   assert.doesNotMatch(app, /test\(JSON\.stringify\(result \|\| \{\}\)\)/);
-  assert.match(app, /Legacy non-English predictions are hidden/);
+  assert.doesNotMatch(app, /Legacy non-English predictions/i);
+  assert.doesNotMatch(app, /hasLegacyResults/);
   assert.match(app, /if \(!isEnglishPredictionResult\(result\)\) continue;/);
   assert.doesNotMatch(app, /\?{8,}/);
 });

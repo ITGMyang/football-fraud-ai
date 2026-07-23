@@ -2093,10 +2093,7 @@ function renderMarketCard(market, group) {
 function renderRankings(rankings, markets) {
   const generated = collectLatestGeneratedResults(rankings);
   if (!generated.length) {
-    const hasLegacyResults = currentContextRankings(rankings).some((ranking) => (ranking.results || []).length);
-    rankingsEl.innerHTML = hasLegacyResults
-      ? '<p class="meta">Legacy non-English predictions are hidden. Run the models again to create a new English prediction.</p>'
-      : '<p class="meta">No AI prediction has been generated yet. Run the models to receive each model\'s Top 4 and switch between saved results.</p>';
+    rankingsEl.innerHTML = '<p class="meta">No AI prediction has been generated yet. Run the models to receive each model\'s Top 4 and switch between saved results.</p>';
     return;
   }
 
