@@ -18,10 +18,8 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
         const evaluation = evaluatePick(pick, actual, context, ranking, modelName);
         if (evaluation) evaluations.push(evaluation);
       }
-      for (const scorePick of result.scorePicks || []) {
-        const evaluation = evaluateScorePick(scorePick, actual, context, ranking, modelName);
-        if (evaluation) evaluations.push(evaluation);
-      }
+      const scoreEvaluation = evaluateScorePicks(result.scorePicks, actual, context, ranking, modelName);
+      if (scoreEvaluation) evaluations.push(scoreEvaluation);
     }
   }
 
@@ -89,20 +87,27 @@ function evaluatePick(pick, actual, context, ranking, modelName) {
   });
 }
 
-function evaluateScorePick(pick, actual, context, ranking, modelName) {
-  const score = normalizeScore(pick.score || pick.market?.selection);
-  if (!score) return null;
+function evaluateScorePicks(picks, actual, context, ranking, modelName) {
+  const candidates = (picks || [])
+    .map((pick) => ({
+      score: normalizeScore(pick.score || pick.market?.selection),
+      probability: pick.estimatedProbability
+    }))
+    .filter((pick) => pick.score);
+  if (!candidates.length) return null;
+  const hit = candidates.some((pick) => pick.score === actual.score);
+  const probabilities = candidates.map((pick) => pick.probability).filter(Number.isFinite);
   return buildEvaluation({
     context,
     ranking,
     modelName,
     category: 'score',
-    selection: score,
-    probability: pick.estimatedProbability,
+    selection: candidates.map((pick) => pick.score).join(' / '),
+    probability: probabilities.length ? Math.max(...probabilities) : null,
     actual,
-    hit: score === actual.score,
+    hit,
     counted: true,
-    outcome: score === actual.score ? 'hit' : 'miss'
+    outcome: hit ? 'hit' : 'miss'
   });
 }
 

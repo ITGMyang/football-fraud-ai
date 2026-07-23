@@ -32,11 +32,55 @@ test('builds post-match analytics from finished contexts and rankings', () => {
   const analytics = buildAnalytics({ rankings, contexts });
 
   assert.equal(analytics.matchCount, 1);
-  assert.equal(analytics.evaluatedCount, 5);
+  assert.equal(analytics.evaluatedCount, 4);
   assert.equal(analytics.models[0].key, 'GPT 5.5');
   assert.equal(analytics.models[0].hits, 4);
-  assert.equal(analytics.models[0].total, 5);
+  assert.equal(analytics.models[0].total, 4);
   assert.equal(analytics.categories.find((row) => row.key === 'score').hits, 1);
+  assert.equal(analytics.categories.find((row) => row.key === 'score').total, 1);
+  assert.equal(analytics.categories.find((row) => row.key === 'score').accuracy, 1);
+  assert.equal(analytics.evaluations.find((row) => row.category === 'score').selection, '0:2 / 0:1');
+});
+
+test('counts four correct-score candidates as one match-level prediction', () => {
+  const contexts = [
+    {
+      matchId: 'score-hit',
+      matchName: 'Alpha v Beta',
+      kickoff: '2026-07-22 20:00',
+      actualScore: '2:1'
+    },
+    {
+      matchId: 'score-miss',
+      matchName: 'Gamma v Delta',
+      kickoff: '2026-07-22 22:00',
+      actualScore: '3:3'
+    }
+  ];
+  const rankings = contexts.map((context, index) => ({
+    id: `score-ranking-${index}`,
+    contextId: context.matchId,
+    createdAt: '2026-07-22T10:00:00.000Z',
+    results: [{
+      modelName: 'Qwen',
+      picks: [],
+      scorePicks: [
+        { score: '1:0' },
+        { score: '2:1' },
+        { score: '1:1' },
+        { score: '0:1' }
+      ]
+    }]
+  }));
+
+  const analytics = buildAnalytics({ rankings, contexts });
+  const scoreSummary = analytics.categories.find((row) => row.key === 'score');
+
+  assert.equal(analytics.evaluatedCount, 2);
+  assert.equal(scoreSummary.hits, 1);
+  assert.equal(scoreSummary.total, 2);
+  assert.equal(scoreSummary.accuracy, 0.5);
+  assert.equal(analytics.evaluations.filter((row) => row.category === 'score').length, 2);
 });
 
 test('ignores unfinished contexts without actual score', () => {
