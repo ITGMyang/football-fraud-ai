@@ -6,7 +6,7 @@ const HAN = /[\p{Script=Han}]/u;
 
 test('public website and authentication copy remain English-only outside the admin console', async () => {
   const [markup, ...files] = await Promise.all([
-    readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../public/legacy.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth-client.js', import.meta.url), 'utf8'),
     readFile(new URL('../public/auth-utils.js', import.meta.url), 'utf8')
   ]);
@@ -19,7 +19,7 @@ test('public website and authentication copy remain English-only outside the adm
 });
 
 test('primary website actions and billing plans use English labels', async () => {
-  const markup = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const markup = await readFile(new URL('../public/legacy.html', import.meta.url), 'utf8');
 
   assert.match(markup, /FutBots/);
   assert.doesNotMatch(markup, /Football Fraud/);

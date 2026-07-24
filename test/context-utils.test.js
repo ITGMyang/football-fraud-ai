@@ -24,3 +24,13 @@ test('finds context by existing context key or source url', () => {
   assert.equal(findExistingContext(contexts, '54330001')?.matchName, 'Panama v England');
   assert.equal(findExistingContext(contexts, 'https://www.dongqiudi.com/match/54330001')?.matchName, 'Panama v England');
 });
+
+test('finds an imported API-Football context by its normalized context id', () => {
+  const context = {
+    id: 'api-football:1523211',
+    matchId: '1523211',
+    matchName: 'Qingdao Jonoon v Tianjin Teda'
+  };
+
+  assert.equal(findExistingContext([context], context.id), context);
+});

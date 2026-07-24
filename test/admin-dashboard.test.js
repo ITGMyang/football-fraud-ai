@@ -257,7 +257,7 @@ test('admin dashboard audits revenue periods, plans, users, and duplicate compet
 
 test('admin route and dashboard API are wired into the app shell', async () => {
   const [markup, app, worker] = await Promise.all([
-    readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../public/legacy.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
     readFile(new URL('../worker/index.js', import.meta.url), 'utf8')
   ]);

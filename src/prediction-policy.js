@@ -38,3 +38,8 @@ export function filterVisibleMatches(matches = [], now = Date.now(), entitlement
     return Number.isFinite(kickoff) && kickoff >= now && kickoff <= end;
   });
 }
+
+export function shouldHydratePredictionContext(access, context, selector) {
+  const mayPredict = access?.role === 'guest' || access?.role === 'user';
+  return mayPredict && !context && Boolean(String(selector || '').trim());
+}

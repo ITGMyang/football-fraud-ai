@@ -189,7 +189,8 @@ export function filterApiFootballMatches(schedule, date = todayInShanghai()) {
 
 export function extractApiFootballFixtureId(value) {
   const text = String(value || '').trim();
-  return text.match(/api-football:\/\/fixture\/(\d+)/i)?.[1]
+  return text.match(/^api-football:(\d+)$/i)?.[1]
+    || text.match(/api-football:\/\/fixture\/(\d+)/i)?.[1]
     || text.match(/[?&](?:fixture|id)=(\d+)/i)?.[1]
     || text.match(/fixtures?\/(\d+)/i)?.[1]
     || text.match(/^\d+$/)?.[0]

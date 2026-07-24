@@ -2,12 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
+  extractApiFootballFixtureId,
   fetchApiFootballContext,
   fetchApiFootballMatches,
   fetchApiFootballOddsFixtureIds,
   filterApiFootballMatches,
   filterMatchesWithOdds
 } from '../src/api-football.js';
+
+test('API-Football context IDs resolve back to fixture IDs for prediction hydration', () => {
+  assert.equal(extractApiFootballFixtureId('api-football:1523211'), '1523211');
+});
 import {
   aggregateApiFootballSchedules,
   buildApiFootballSchedules,

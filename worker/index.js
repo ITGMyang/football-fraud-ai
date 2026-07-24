@@ -27,7 +27,12 @@ import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.
 import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
 import { buildAdminDashboard } from '../src/admin-dashboard.js';
 import { isAdminUser } from '../src/auth.js';
-import { filterVisibleMatches, predictionDailyLimit, validatePredictionFixture } from '../src/prediction-policy.js';
+import {
+  filterVisibleMatches,
+  predictionDailyLimit,
+  shouldHydratePredictionContext,
+  validatePredictionFixture
+} from '../src/prediction-policy.js';
 import {
   createAllScaleCheckout,
   getAllScaleCheckoutStatus,
@@ -36,14 +41,17 @@ import {
 
 const APP_SHELL_ROUTES = new Set([
   '/',
-  '/analytics',
   '/auth/callback',
   '/auth/reset',
+  '/login'
+]);
+
+const LEGACY_SHELL_ROUTES = new Set([
+  '/analytics',
   '/admin',
   '/backend',
   '/data',
-  '/history',
-  '/login'
+  '/history'
 ]);
 
 export default {
@@ -59,6 +67,17 @@ export default {
       }
       if (request.method === 'POST' && url.pathname === '/api/billing/webhook') {
         return handleAllScaleWebhook(request, env);
+      }
+      const teamCrestMatch = url.pathname.match(/^\/media\/team-crests\/(\d+)\.png$/);
+      if (request.method === 'GET' && teamCrestMatch) {
+        const upstream = await fetch(`https://media.api-sports.io/football/teams/${teamCrestMatch[1]}.png`, {
+          cf: { cacheEverything: true, cacheTtl: 7 * 24 * 60 * 60 }
+        });
+        if (!upstream.ok) return new Response('Team crest not found', { status: 404 });
+        const headers = new Headers(upstream.headers);
+        headers.set('Cache-Control', 'public, max-age=604800, immutable');
+        headers.set('Content-Type', 'image/png');
+        return new Response(upstream.body, { status: 200, headers });
       }
       if (request.method === 'POST' && url.pathname === '/api/internal/api-football-cache/refresh') {
         const expected = String(env.CRON_SECRET || '').trim();
@@ -78,6 +97,12 @@ export default {
       }
       const apiResponse = await routeApi(request, env, access);
       if (apiResponse) return apiResponse;
+      if (request.method === 'GET' && LEGACY_SHELL_ROUTES.has(url.pathname)) {
+        const shellResponse = await env.ASSETS.fetch(new Request(new URL('/legacy.html', url.origin), request));
+        const headers = new Headers(shellResponse.headers);
+        headers.set('Cache-Control', 'no-cache');
+        return new Response(shellResponse.body, { status: shellResponse.status, headers });
+      }
       if (request.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || url.pathname.startsWith('/match/'))) {
         const shellResponse = await env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
         const headers = new Headers(shellResponse.headers);
@@ -510,6 +535,12 @@ async function routeApi(request, env, access) {
     let context = contextSelector
       ? findExistingContext(db.matchContexts || [], contextSelector)
       : (db.matchContexts || [])[0] || null;
+    if (shouldHydratePredictionContext(access, context, contextSelector)) {
+      context = await storage.upsertMatchContext(
+        await fetchApiFootballContext(contextSelector, apiFootballContextOptions(env, storage), workerFetch),
+        { ownerId }
+      );
+    }
     if (!db.markets.length && !context) return json({ error: 'No API-Football match data has been imported' }, 400);
     if (context && shouldRefreshLineupBeforePrediction(context)) {
       try {

@@ -12,6 +12,8 @@ import { contextKey, findExistingContext, hasLineupPlayers } from './context-uti
 import { buildAnalytics, shouldRefreshForAnalytics } from './evaluation.js';
 import { authConfig } from './auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from './guest-access.js';
+import { shouldHydratePredictionContext } from './prediction-policy.js';
+import { resolvePublicAsset } from './static-assets.js';
 import {
   clearMarkets,
   readDb,
@@ -28,6 +30,8 @@ loadEnv();
 const PORT = Number(process.env.PORT || 3888);
 const PUBLIC_DIR = path.resolve('public');
 const openRouterFetch = createOpenRouterFetch(process.env, fetch);
+const APP_SHELL_ROUTES = new Set(['/', '/login', '/auth/callback', '/auth/reset']);
+const LEGACY_SHELL_ROUTES = new Set(['/analytics', '/admin', '/backend', '/data', '/history']);
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -44,7 +48,24 @@ server.listen(PORT, () => {
 async function route(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/history' || url.pathname === '/data' || url.pathname === '/login' || url.pathname === '/auth/callback' || url.pathname === '/auth/reset' || /^\/match\/[^/]+$/.test(url.pathname))) {
+  const teamCrestMatch = url.pathname.match(/^\/media\/team-crests\/(\d+)\.png$/);
+  if (req.method === 'GET' && teamCrestMatch) {
+    const upstream = await fetch(`https://media.api-sports.io/football/teams/${teamCrestMatch[1]}.png`);
+    if (!upstream.ok) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Team crest not found');
+    }
+    res.writeHead(200, {
+      'Cache-Control': 'public, max-age=604800, immutable',
+      'Content-Type': 'image/png'
+    });
+    return res.end(Buffer.from(await upstream.arrayBuffer()));
+  }
+
+  if (req.method === 'GET' && LEGACY_SHELL_ROUTES.has(url.pathname)) {
+    return serveFile(res, 'legacy.html', 'text/html; charset=utf-8');
+  }
+  if (req.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || /^\/match\/[^/]+$/.test(url.pathname))) {
     return serveFile(res, 'index.html', 'text/html; charset=utf-8');
   }
   if (req.method === 'GET' && url.pathname === '/app.js') return serveFile(res, 'app.js', 'text/javascript; charset=utf-8');
@@ -52,6 +73,14 @@ async function route(req, res) {
   if (req.method === 'GET' && url.pathname === '/auth-utils.js') return serveFile(res, 'auth-utils.js', 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && url.pathname === '/vendor/supabase.js') return serveFile(res, 'vendor/supabase.js', 'text/javascript; charset=utf-8');
   if (req.method === 'GET' && url.pathname === '/styles.css') return serveFile(res, 'styles.css', 'text/css; charset=utf-8');
+
+  if (req.method === 'GET') {
+    const asset = resolvePublicAsset(PUBLIC_DIR, url.pathname);
+    if (asset && fs.existsSync(asset.file) && fs.statSync(asset.file).isFile()) {
+      res.writeHead(200, { 'Content-Type': asset.contentType });
+      return res.end(fs.readFileSync(asset.file));
+    }
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/auth/config') return json(res, 200, authConfig(process.env));
   if (req.method === 'OPTIONS' && url.pathname === '/api/import/chrome') return corsJson(res, 204, {});
@@ -194,9 +223,15 @@ async function route(req, res) {
     const body = await readJson(req);
     const db = readDb({ ownerId });
     const contextSelector = body.contextId || body.sourceUrl || body.matchId;
-    const context = contextSelector
+    let context = contextSelector
       ? findExistingContext(db.matchContexts || [], contextSelector)
       : (db.matchContexts || [])[0] || null;
+    if (shouldHydratePredictionContext(access, context, contextSelector)) {
+      context = upsertMatchContext(
+        await fetchApiFootballContext(contextSelector, fullApiFootballOptions(process.env), fetch),
+        { ownerId }
+      );
+    }
     if (!db.markets.length && !context) return json(res, 400, { error: 'No API-Football match data has been imported' });
     const requestedModel = body.model || 'all';
     const fixtureId = String(context?.matchId || '');

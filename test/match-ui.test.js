@@ -36,7 +36,7 @@ test('AI context cards use API-Football team images instead of flag emoji', asyn
 });
 
 test('landing page omits the requested promotional and schedule helper copy', async () => {
-  const markup = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const markup = await readFile(new URL('../public/legacy.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 
   assert.doesNotMatch(markup, /把明日赛程、阵容、指数、天气/);
@@ -47,7 +47,7 @@ test('landing page omits the requested promotional and schedule helper copy', as
 
 test('match UI uses API-Football instead of Dongqiudi endpoints', async () => {
   const [markup, source, worker, server, config] = await Promise.all([
-    readFile(new URL('../public/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../public/legacy.html', import.meta.url), 'utf8'),
     readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
     readFile(new URL('../worker/index.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/server.js', import.meta.url), 'utf8'),
@@ -69,7 +69,7 @@ test('match UI uses API-Football instead of Dongqiudi endpoints', async () => {
 });
 
 test('backend cache monitor is a separate read-only Supabase view', async () => {
-  const markup = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const markup = await readFile(new URL('../public/legacy.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
 
@@ -115,17 +115,17 @@ test('user API-Football imports persist the full shared catalog context', async 
   assert.match(worker, /fetchApiFootballContext\(fixtureId, apiFootballContextOptions\(env, storage\)/);
 });
 
-test('Cloudflare serves the current app shell for the backend route', async () => {
+test('Cloudflare serves the legacy console shell for the backend route', async () => {
   const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
   const config = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
 
-  assert.match(worker, /APP_SHELL_ROUTES\.has\(url\.pathname\)/);
-  assert.match(worker, /new URL\('\/index\.html', url\.origin\)/);
+  assert.match(worker, /LEGACY_SHELL_ROUTES\.has\(url\.pathname\)/);
+  assert.match(worker, /new URL\('\/legacy\.html', url\.origin\)/);
   assert.match(config, /"html_handling":\s*"none"/);
 });
 
 test('pricing page creates AllScale checkout and displays account entitlement', async () => {
-  const markup = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const markup = await readFile(new URL('../public/legacy.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
   const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
 

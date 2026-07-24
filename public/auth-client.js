@@ -189,8 +189,10 @@ async function updatePassword(event) {
 
 async function signOut() {
   if (!client) return;
-  await client.auth.signOut();
-  window.location.assign(`/login?next=${encodeURIComponent(currentNextPath())}`);
+  await client.auth.signOut({ scope: 'local' });
+  sessionStorage.removeItem('footballFraud.authNext');
+  sessionStorage.removeItem('futbots.authNext');
+  window.location.assign('/');
 }
 
 function renderSession() {
