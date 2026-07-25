@@ -505,6 +505,25 @@ test('all competitions combines API-Football schedules for the selected date', (
   assert.deepEqual(combined.upcomingTodayMatches.map((match) => match.matchId), ['world-cup', 'league']);
 });
 
+test('public match response only exposes fixtures from the selected date', () => {
+  const schedule = {
+    competitionId: 'all',
+    source: 'api-football',
+    fetchedAt: '2026-07-25T01:00:00.000Z',
+    matches: [
+      { matchId: 'day-one', date: '2026-07-25', status: 'scheduled', hasOdds: true },
+      { matchId: 'day-two', date: '2026-07-26', status: 'scheduled', hasOdds: true },
+      { matchId: 'no-odds', date: '2026-07-26', status: 'scheduled', hasOdds: false }
+    ]
+  };
+
+  const first = filterApiFootballMatches(schedule, '2026-07-25');
+  const second = filterApiFootballMatches(schedule, '2026-07-26');
+
+  assert.deepEqual(first.matches.map((match) => match.matchId), ['day-one']);
+  assert.deepEqual(second.matches.map((match) => match.matchId), ['day-two']);
+});
+
 test('legacy imported contexts inherit team images from the shared schedule cache', () => {
   const contexts = [{
     source: 'api-football',

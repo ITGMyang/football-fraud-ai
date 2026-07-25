@@ -178,7 +178,7 @@ export function scheduleFromMatches(matches, { date = todayInShanghai(), competi
 
 export function filterApiFootballMatches(schedule, date = todayInShanghai()) {
   const matches = Array.isArray(schedule?.matches)
-    ? schedule.matches.filter((match) => match.hasOdds === true)
+    ? schedule.matches.filter((match) => match.hasOdds === true && match.date === date)
     : [];
   return {
     ...scheduleFromMatches(matches, { date, competitionId: schedule?.competitionId, fetchedAt: schedule?.fetchedAt }),
