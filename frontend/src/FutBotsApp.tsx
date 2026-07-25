@@ -1,9 +1,9 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
 
-import { accountIdentity, analysisRequestPlan, createApiClient, hasPlayerInformation, normalizeMatches, predictionActionLabel, predictionHistory, predictionModelRail, rankingForMatch, rankingView, teamCrestUrl, userFacingError } from "./api.js";
+import { accountIdentity, analysisRequestPlan, createApiClient, hasPlayerInformation, normalizeMatches, predictionHistory, predictionModelRail, rankingForMatch, rankingView, teamCrestUrl, userFacingError } from "./api.js";
 
-type Screen = "splash" | "auth" | "login" | "signup" | "dashboard" | "profile" | "plans" | "details";
+type Screen = "auth" | "login" | "signup" | "dashboard" | "profile" | "plans" | "details";
 type Team = { name: string; flag: string };
 type Match = {
   id: string;
@@ -82,24 +82,25 @@ type AuthConfig = {
   error?: string;
 };
 
-function AssetIcon({ src, alt = "", size = 18 }: { src: string; alt?: string; size?: number }) {
-  return <img className="asset-icon" src={src} alt={alt} width={size} height={size} />;
-}
+const FREE_MODEL_NAME = "Qwen 3.7 Max";
 
-function Logo({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={compact ? "logo logo--compact" : "logo"}>
-      <img src="/assets/brand-ball.svg" alt="" />
-      <img src="/assets/brand-wordmark.svg" alt="FutBots" />
-    </div>
-  );
-}
-
-function TeamFlag({ team, size = 34 }: { team: Team; size?: number }) {
+function TeamFlag({ team, size = 34, className = "", style }: {
+  team: Team;
+  size?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return team.flag ? (
-    <img className="team-flag" src={teamCrestUrl(team.flag)} alt={`${team.name} crest`} width={size} height={size} />
+    <img
+      className={`team-flag ${className}`.trim()}
+      src={teamCrestUrl(team.flag)}
+      alt={`${team.name} crest`}
+      width={size}
+      height={size}
+      style={style}
+    />
   ) : (
-    <span className="team-flag team-flag--fallback" style={{ width: size, height: size }}>
+    <span className={`team-flag team-flag--fallback ${className}`.trim()} style={{ width: size, height: size, ...style }}>
       {team.name.slice(0, 2).toUpperCase()}
     </span>
   );
@@ -123,51 +124,38 @@ function AccountAvatar({ session, size = 32 }: { session: Session | null; size?:
   );
 }
 
-function BackButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button className="circle-button" onClick={onClick} aria-label="Go back">
-      <AssetIcon src="/assets/back.svg" size={24} />
-    </button>
-  );
-}
+/* ============ AUTH SCREENS (Figma 1:664 / 1:849 / 1:549) ============ */
 
-function BrandSplash() {
-  return (
-    <section className="splash" aria-label="FutBots">
-      <div className="splash__background" />
-      <div className="splash__brand">
-        <div className="splash__ball">
-          <img className="splash__ring" src="/assets/brand-ring.svg" alt="" />
-          <img className="splash__rotor" src="/assets/brand-rotor.svg" alt="" />
-          <img className="splash__core" src="/assets/brand-core.svg" alt="" />
-        </div>
-        <img className="splash__wordmark" src="/assets/brand-wordmark.svg" alt="FutBots" />
-      </div>
-    </section>
-  );
-}
-
-function AuthShell({ title, children, showBall = false }: {
-  title?: string;
+function AuthDialog({ plain = false, brandFooter = false, children }: {
+  plain?: boolean;
+  brandFooter?: boolean;
   children: React.ReactNode;
-  showBall?: boolean;
 }) {
   return (
-    <section className={`auth-shell ${showBall ? "auth-shell--flags" : ""}`}>
-      <div className="auth-shell__scrim" />
-      <div className="auth-shell__content">
-        {showBall && (
-          <div className="auth-hero">
-            <img src="/assets/brand-ball.svg" alt="" />
-            <h1>Not Sure? Bot It</h1>
-          </div>
-        )}
-        {title && <h1 className="auth-title">{title}</h1>}
-        {children}
-      </div>
-      <div className="auth-footer">
-        <img className="auth-footer__wordmark" src="/assets/brand-wordmark.svg" alt="FutBots" />
-        <p>Predictions are informational and are never used to place bets automatically.</p>
+    <section className={`screen ${plain ? "screen--plain" : "screen--flags"}`}>
+      <div className="auth-dialog">
+        <aside className="auth-side" aria-hidden="true">
+          <img className="auth-side__ball" src="/assets/figma-logo-ball.svg" alt="" />
+          <img className="auth-side__wordmark" src="/assets/figma-wordmark.svg" alt="" />
+        </aside>
+        <div className="auth-main">
+          {children}
+          <footer className="auth-footer">
+            {brandFooter ? (
+              <div className="auth-footer__brand">
+                <img className="auth-footer__ball" src="/assets/figma-icon-futbot.png" alt="" />
+                <img className="auth-footer__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
+              </div>
+            ) : (
+              <img className="auth-footer__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
+            )}
+            <p className="auth-footer__disclaimer">
+              By continuing, you acknowledge that the predictions are provided for
+              informational purposes only and will not be used to place bets
+              automatically.
+            </p>
+          </footer>
+        </div>
       </div>
     </section>
   );
@@ -181,24 +169,36 @@ function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled,
   error: string;
 }) {
   return (
-    <AuthShell showBall>
-      <div className="social-actions">
-        <button onClick={() => navigate("login")}>
-          <AssetIcon src="/assets/brand-ball.svg" size={32} />
-          Login with FutBots account
-        </button>
-        <button onClick={() => void signInProvider("google")}>
-          <AssetIcon src="/assets/google.svg" size={32} />
-          Continue with Google
-        </button>
-        <button disabled={!telegramEnabled} onClick={() => void signInProvider("custom:telegram")}>
-          <AssetIcon src="/assets/telegram.svg" size={32} />
-          {telegramEnabled ? "Continue with Telegram" : "Telegram unavailable"}
-        </button>
-        <button className="guest-button" onClick={continueGuest}>Browse as guest</button>
-        {error && <p className="auth-message error-text" role="alert">{error}</p>}
+    <AuthDialog>
+      <div className="auth-content">
+        <div className="auth-hero">
+          <img className="auth-hero__ball" src="/assets/figma-logo-ball.svg" alt="" />
+          <h1>Not Sure? Bot It</h1>
+        </div>
+        <div className="auth-actions">
+          <button className="social-button" onClick={() => navigate("login")}>
+            <span className="social-button__icon social-button__icon--futbot">
+              <img src="/assets/figma-icon-futbot.png" alt="" />
+            </span>
+            Login with FutBot account
+          </button>
+          <button className="social-button" onClick={() => void signInProvider("google")}>
+            <span className="social-button__icon">
+              <img src="/assets/figma-icon-google.svg" alt="" />
+            </span>
+            Continue with Google
+          </button>
+          <button className="social-button" disabled={!telegramEnabled} onClick={() => void signInProvider("custom:telegram")}>
+            <span className="social-button__icon">
+              <img src="/assets/figma-icon-telegram.svg" alt="" />
+            </span>
+            {telegramEnabled ? "Continue with Telegram" : "Telegram unavailable"}
+          </button>
+          <button className="text-link" type="button" onClick={continueGuest}>Browse as guest</button>
+          {error && <p className="auth-message error-text" role="alert">{error}</p>}
+        </div>
       </div>
-    </AuthShell>
+    </AuthDialog>
   );
 }
 
@@ -215,6 +215,9 @@ function AccountForm({ mode, navigate, submitAuth }: {
     const data = new FormData(event.currentTarget);
     const password = String(data.get("password") || "");
     if (password.length < 8) return setMessage("Password must be at least 8 characters.");
+    if (signup && String(data.get("confirmPassword") || "") !== password) {
+      return setMessage("Passwords do not match.");
+    }
     setBusy(true);
     setMessage("");
     try {
@@ -227,48 +230,200 @@ function AccountForm({ mode, navigate, submitAuth }: {
   };
 
   return (
-    <AuthShell title={signup ? "Create account" : "Welcome back"} showBall={!signup}>
-      <form className="account-form" onSubmit={(event) => void submit(event)}>
-        <label><span>Email</span><input name="email" type="email" autoComplete="email" required /></label>
-        <label>
-          <span>Password</span>
-          <input name="password" type="password" autoComplete={signup ? "new-password" : "current-password"} required />
-        </label>
-        <button className="primary-button" type="submit" disabled={busy}>
-          {busy ? "Please wait..." : signup ? "Create" : "Login"}
-        </button>
-        <button className="text-button" type="button" onClick={() => navigate(signup ? "login" : "signup")}>
-          {signup ? "Already have an account? Login" : "Create account"}
-        </button>
-        {message && <p className="auth-message" role="status">{message}</p>}
+    <AuthDialog plain={signup} brandFooter={signup}>
+      <form className="auth-content" onSubmit={(event) => void submit(event)}>
+        <div className="auth-hero">
+          {signup ? (
+            <h1 className="auth-title">Create account</h1>
+          ) : (
+            <>
+              <img className="auth-hero__ball" src="/assets/figma-logo-ball.svg" alt="" />
+              <h1>Not Sure? Bot It</h1>
+            </>
+          )}
+        </div>
+        <div className="auth-actions">
+          <input className="field" name="email" type="email" placeholder="Email" aria-label="Email" autoComplete="email" required />
+          <input
+            className="field"
+            name="password"
+            type="password"
+            placeholder="Password"
+            aria-label="Password"
+            autoComplete={signup ? "new-password" : "current-password"}
+            required
+          />
+          {signup && (
+            <input
+              className="field"
+              name="confirmPassword"
+              type="password"
+              placeholder="Confirm Password"
+              aria-label="Confirm Password"
+              autoComplete="new-password"
+              required
+            />
+          )}
+          <button className="primary-button" type="submit" disabled={busy}>
+            {busy ? "Please wait..." : signup ? "Create" : "Login"}
+          </button>
+          <button className="text-link" type="button" onClick={() => navigate(signup ? "login" : "signup")}>
+            {signup ? "Login" : "Create account"}
+          </button>
+          {message && <p className="auth-message" role="status">{message}</p>}
+        </div>
       </form>
-    </AuthShell>
+    </AuthDialog>
   );
 }
 
-function CalendarStrip({ selectedDate, onDate }: { selectedDate: string; onDate: (date: string) => void }) {
-  const dates = useMemo(() => {
-    const base = new Date(`${selectedDate}T12:00:00+08:00`);
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(base);
-      date.setDate(base.getDate() + index - 3);
-      return {
-        value: date.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }),
-        weekday: date.toLocaleDateString("en-US", { weekday: "narrow", timeZone: "Asia/Shanghai" }),
-        day: date.toLocaleDateString("en-US", { day: "2-digit", timeZone: "Asia/Shanghai" })
-      };
-    });
-  }, [selectedDate]);
-  const month = new Date(`${selectedDate}T12:00:00+08:00`).toLocaleDateString("en-US", {
+/* ============ HOME (Figma 1:171 / 1:273) ============ */
+
+const DAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
+
+function isoInShanghai(date: Date) {
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
+}
+
+function shanghaiNoon(iso: string) {
+  return new Date(`${iso}T12:00:00+08:00`);
+}
+
+function shortDateLabel(iso: string) {
+  return shanghaiNoon(iso).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Shanghai"
+  });
+}
+
+function monthLabel(iso: string) {
+  return shanghaiNoon(iso).toLocaleDateString("en-US", {
     month: "long", year: "numeric", timeZone: "Asia/Shanghai"
   });
+}
+
+type CalendarDay = { iso: string; letter: string; num: number };
+
+function calendarWindow(): CalendarDay[] {
+  const today = shanghaiNoon(todayShanghai());
+  return Array.from({ length: 61 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index - 30);
+    return {
+      iso: isoInShanghai(date),
+      letter: DAY_LETTERS[shanghaiWeekday(date)],
+      num: Number(date.toLocaleDateString("en-US", { day: "numeric", timeZone: "Asia/Shanghai" }))
+    };
+  });
+}
+
+function shanghaiWeekday(date: Date) {
+  const name = date.toLocaleDateString("en-US", { weekday: "short", timeZone: "Asia/Shanghai" });
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+}
+
+function HomeHeader({ session, access, navigate }: {
+  session: Session | null;
+  access: Access;
+  navigate: (screen: Screen) => void;
+}) {
+  const planLabel = access.billing?.active ? "AI Pass" : access.billing?.freePredictionUsed ? "Trial Used" : "Free Trial";
+  return (
+    <header className="home-header">
+      <div className="home-brand" aria-hidden="true">
+        <img className="home-brand__ball" src="/assets/figma-icon-futbot.png" alt="" />
+        <img className="home-brand__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
+      </div>
+      <button className="pill" onClick={() => session ? navigate("profile") : navigate("auth")}>
+        {session ? <AccountAvatar session={session} size={21.5} /> : <img src="/assets/figma-icon-user.svg" alt="" />}
+        <span>{session ? planLabel : "Login"}</span>
+      </button>
+    </header>
+  );
+}
+
+function CalendarSection({ selectedDate, onDate }: {
+  selectedDate: string;
+  onDate: (date: string) => void;
+}) {
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const firstCenter = useRef(true);
+  const drag = useRef({ down: false, startX: 0, startScroll: 0, dragged: false });
+  const days = useMemo(() => calendarWindow(), []);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const active = strip.querySelector<HTMLElement>(`[data-iso="${selectedDate}"]`);
+    if (!active) return;
+    const left = active.getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft;
+    strip.scrollTo({
+      left: left - strip.clientWidth / 2 + active.offsetWidth / 2,
+      behavior: firstCenter.current ? "auto" : "smooth"
+    });
+    firstCenter.current = false;
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const onMove = (event: PointerEvent) => {
+      if (!drag.current.down) return;
+      const dx = event.clientX - drag.current.startX;
+      if (Math.abs(dx) > 5) {
+        drag.current.dragged = true;
+        strip.classList.add("is-dragging");
+        strip.scrollLeft = drag.current.startScroll - dx;
+      }
+    };
+    const onUp = () => {
+      drag.current.down = false;
+      strip.classList.remove("is-dragging");
+      window.setTimeout(() => { drag.current.dragged = false; }, 0);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  const scrollByPage = (direction: number) => {
+    const strip = stripRef.current;
+    if (strip) strip.scrollBy({ left: direction * strip.clientWidth, behavior: "smooth" });
+  };
+
   return (
     <div className="calendar">
-      <div className="calendar__month"><span>{month}</span></div>
-      <div className="calendar__days">
-        {dates.map((date) => (
-          <button className={`calendar__day ${date.value === selectedDate ? "is-active" : ""}`} key={date.value} onClick={() => onDate(date.value)}>
-            <span>{date.weekday}</span><b>{date.day}</b>
+      <div className="calendar__month">
+        <button className="cal-nav cal-nav--prev" onClick={() => scrollByPage(-1)} aria-label="Previous week">
+          <img src="/assets/figma-chevron-a.svg" alt="" />
+        </button>
+        <span>{monthLabel(selectedDate)}</span>
+        <button className="cal-nav" onClick={() => scrollByPage(1)} aria-label="Next week">
+          <img src="/assets/figma-chevron-b.svg" alt="" />
+        </button>
+      </div>
+      <div
+        className="calendar__days"
+        ref={stripRef}
+        onPointerDown={(event) => {
+          const strip = stripRef.current;
+          if (!strip) return;
+          drag.current = { down: true, startX: event.clientX, startScroll: strip.scrollLeft, dragged: false };
+        }}
+      >
+        {days.map((day) => (
+          <button
+            className={`day ${day.iso === selectedDate ? "day--active" : ""}`}
+            key={day.iso}
+            data-iso={day.iso}
+            onClick={() => {
+              if (drag.current.dragged) return;
+              onDate(day.iso);
+            }}
+          >
+            <span>{day.letter}</span><b>{day.num}</b>
           </button>
         ))}
       </div>
@@ -276,73 +431,243 @@ function CalendarStrip({ selectedDate, onDate }: { selectedDate: string; onDate:
   );
 }
 
-function StatusBadge({ match }: { match: Match }) {
-  const label = match.status === "live" ? "Live" : match.status === "complete" ? "Complete" : "Upcoming";
-  return <span className={`status-badge status-badge--${match.status}`}>{label}</span>;
+function Filters({ selectedDate, onDate, competitions, competition, onCompetition }: {
+  selectedDate: string;
+  onDate: (date: string) => void;
+  competitions: string[];
+  competition: string;
+  onCompetition: (value: string) => void;
+}) {
+  const [openPanel, setOpenPanel] = useState<"" | "date" | "type">("");
+  const [pickerMonth, setPickerMonth] = useState(() => {
+    const selected = shanghaiNoon(selectedDate);
+    return new Date(selected.getFullYear(), selected.getMonth(), 1);
+  });
+  const windowDays = useMemo(() => calendarWindow(), []);
+  const windowStart = windowDays[0].iso;
+  const windowEnd = windowDays[windowDays.length - 1].iso;
+
+  useEffect(() => {
+    const selected = shanghaiNoon(selectedDate);
+    setPickerMonth(new Date(selected.getFullYear(), selected.getMonth(), 1));
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const onDocumentClick = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest(".filter")) setOpenPanel("");
+    };
+    document.addEventListener("click", onDocumentClick);
+    return () => document.removeEventListener("click", onDocumentClick);
+  }, []);
+
+  const pickerLabel = pickerMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const daysInMonth = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 0).getDate();
+  const padding = new Date(pickerMonth.getFullYear(), pickerMonth.getMonth(), 1).getDay();
+  const monthIso = (day: number) =>
+    `${pickerMonth.getFullYear()}-${String(pickerMonth.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const prevDisabled = pickerMonth.getFullYear() === Number(windowStart.slice(0, 4)) && pickerMonth.getMonth() <= Number(windowStart.slice(5, 7)) - 1;
+  const nextDisabled = pickerMonth.getFullYear() === Number(windowEnd.slice(0, 4)) && pickerMonth.getMonth() >= Number(windowEnd.slice(5, 7)) - 1;
+
+  return (
+    <div className="filters">
+      <div className={`filter ${openPanel === "date" ? "is-open" : ""}`}>
+        <span>Data</span>
+        <button
+          className="filter__control g-stroke"
+          onClick={() => setOpenPanel(openPanel === "date" ? "" : "date")}
+        >
+          <span>{shortDateLabel(selectedDate)}</span>
+          <img src="/assets/figma-chevron-down.svg" alt="" />
+        </button>
+        <div className="dd-panel dp-panel g-stroke">
+          <div className="dp-head">
+            <button
+              className="cal-nav cal-nav--prev"
+              disabled={prevDisabled}
+              onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))}
+              aria-label="Previous month"
+            >
+              <img src="/assets/figma-chevron-a.svg" alt="" />
+            </button>
+            <span>{pickerLabel}</span>
+            <button
+              className="cal-nav"
+              disabled={nextDisabled}
+              onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))}
+              aria-label="Next month"
+            >
+              <img src="/assets/figma-chevron-b.svg" alt="" />
+            </button>
+          </div>
+          <div className="dp-grid">
+            {DAY_LETTERS.map((letter, index) => <span className="dp-dow" key={`${letter}-${index}`}>{letter}</span>)}
+            {Array.from({ length: padding }, (_, index) => <span key={`pad-${index}`} />)}
+            {Array.from({ length: daysInMonth }, (_, index) => {
+              const iso = monthIso(index + 1);
+              const outside = iso < windowStart || iso > windowEnd;
+              return (
+                <button
+                  className={`dp-day ${iso === selectedDate ? "is-selected" : ""}`}
+                  key={iso}
+                  disabled={outside}
+                  onClick={() => {
+                    onDate(iso);
+                    setOpenPanel("");
+                  }}
+                >
+                  {index + 1}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className={`filter ${openPanel === "type" ? "is-open" : ""}`}>
+        <span>Match type</span>
+        <button
+          className="filter__control g-stroke"
+          onClick={() => setOpenPanel(openPanel === "type" ? "" : "type")}
+        >
+          <span>{competition}</span>
+          <img src="/assets/figma-chevron-down.svg" alt="" />
+        </button>
+        <div className="dd-panel g-stroke">
+          {["All Competitions", ...competitions].map((item) => (
+            <button
+              className="dd-item"
+              key={item}
+              onClick={() => {
+                onCompetition(item);
+                setOpenPanel("");
+              }}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function PredictionCard({ match, ranking, onStart, onDetails, onResult }: {
-  match: Match;
-  ranking: RankingView | null;
-  onStart: () => void;
-  onDetails: () => void;
-  onResult: () => void;
-}) {
+function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
   return (
-    <article className="prediction-card">
-      <div className="prediction-card__top"><span>{match.date}</span><StatusBadge match={match} /></div>
-      <div className="prediction-card__teams">
-        <div><TeamFlag team={match.teamA} /><b>{match.teamA.name}</b></div>
-        <strong>{match.score || "VS"}</strong>
-        <div><TeamFlag team={match.teamB} /><b>{match.teamB.name}</b></div>
+    <article className="fsd">
+      <div className="fsd__bg" aria-hidden="true">
+        <img src="/assets/figma-stadium.jpg" alt="" />
       </div>
-      <div className="prediction-card__meta"><span>{match.round}</span></div>
-      <div className="prediction-card__actions">
-        <button className="card-link" onClick={onDetails}>View details</button>
-        <button
-          className="primary-button primary-button--card"
-          onClick={ranking ? onResult : onStart}
-          disabled={match.status === "complete" && !ranking}
-        >
-          {predictionActionLabel(ranking)}
-        </button>
+      <div className="fsd__title">
+        <img src="/assets/figma-sparkle-white.svg" alt="" />
+        <h2>Free Score Day</h2>
+        <span className="fsd__free">FREE</span>
       </div>
+      <div className="teams teams--light">
+        <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+        <b>vs.</b>
+        <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+      </div>
+      <button className="glow-btn" onClick={onTry}>
+        <img src="/assets/figma-sparkle-black.svg" alt="" />
+        Try it for free
+      </button>
     </article>
   );
 }
 
-function SideNavigation({ screen, navigate, access, session, onSignOut }: {
-  screen: Screen;
-  navigate: (screen: Screen) => void;
-  access: Access;
-  session: Session | null;
-  onSignOut: () => Promise<void>;
+function startingIn(kickoff: string) {
+  const time = new Date(kickoff || "").getTime();
+  if (!Number.isFinite(time)) return "";
+  const diff = time - Date.now();
+  if (diff <= 0) return "";
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  return `${hours}h ${minutes}m`;
+}
+
+function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
+  match: Match;
+  ranking: RankingView | null;
+  analyzing: boolean;
+  onStart: () => void;
+  onSee: () => void;
 }) {
-  const plan = access.billing?.active ? "AI Pass Active" : access.billing?.freePredictionUsed ? "Trial Used" : "Free Trial";
-  const identity = accountIdentity(session?.user || {});
+  const soon = startingIn(match.kickoff);
+  const head = (
+    <div className="pcard__head">
+      <span className="pcard__date">{match.date}</span>
+      {match.status === "live" ? (
+        <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
+      ) : match.score ? (
+        <span className="badge badge--score">{match.score}</span>
+      ) : soon ? (
+        <span className="badge badge--soon"><img src="/assets/figma-icon-clock.svg" alt="" />Starting in: {soon}</span>
+      ) : null}
+    </div>
+  );
+
+  if (analyzing) {
+    return (
+      <article className="pcard state-swap">
+        {head}
+        <div className="teams">
+          <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+          <b>vs.</b>
+          <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+        </div>
+        <div className="analyzing">
+          <img src="/assets/figma-spinner.svg" alt="" />
+          <span>Analyzing...</span>
+        </div>
+      </article>
+    );
+  }
+
+  if (ranking) {
+    return (
+      <article className="pcard pcard--done">
+        <div className="pcard__head">
+          <span className="pcard__date">{match.date}</span>
+          {match.status === "live" ? (
+            <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
+          ) : match.score ? (
+            <span className="badge badge--score">{match.score}</span>
+          ) : null}
+        </div>
+        <div className="pcard__result">
+          <div className="stacked-teams">
+            <div><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+            <div><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+          </div>
+          <button className="see-link" onClick={onSee}>
+            See Predictions
+            <img src="/assets/figma-arrow-sm.svg" alt="" />
+          </button>
+        </div>
+      </article>
+    );
+  }
+
   return (
-    <aside className="desktop-nav">
-      <Logo />
-      <nav>
-        <button className={screen === "dashboard" ? "is-active" : ""} onClick={() => navigate("dashboard")}>Predictions</button>
-        <button className={screen === "profile" ? "is-active" : ""} onClick={() => navigate("profile")}>My Profile</button>
-        <button className={screen === "plans" ? "is-active" : ""} onClick={() => navigate("plans")}>Plans</button>
-      </nav>
-      <div className="desktop-nav__plan">
-        <span>Current access</span><b>{plan}</b>
-        {access.billing?.validUntil && <small>Through {new Date(access.billing.validUntil).toLocaleDateString()}</small>}
+    <article className="pcard">
+      {head}
+      <div className="teams">
+        <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+        <b>vs.</b>
+        <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
       </div>
-      <button className="desktop-nav__account" onClick={() => session ? void onSignOut() : navigate("login")}>
-        <AccountAvatar session={session} />
-        <span><b>{session ? identity.name : "Guest mode"}</b><small>{session ? identity.provider : "Sign in to save predictions"}</small></span>
-        <strong>{session ? "Log out" : "Log in"}</strong>
-      </button>
-      <a className="console-link" href="/backend">Data Console</a>
-    </aside>
+      {match.status === "complete" ? (
+        <span className="see-link" role="presentation">Predictions closed</span>
+      ) : (
+        <button className="glow-btn" onClick={onStart}>
+          <img src="/assets/figma-sparkle-black.svg" alt="" />
+          Start Free Analyze
+        </button>
+      )}
+    </article>
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, onOpenMatch, onOpenResult, onSignOut }: {
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, pendingMatchId, onOpenMatch, onOpenResult }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -352,283 +677,399 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   session: Session | null;
   selectedDate: string;
   onDate: (date: string) => void;
+  pendingMatchId: string;
   onOpenMatch: (match: Match) => void;
   onOpenResult: (match: Match) => void;
-  onSignOut: () => Promise<void>;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const identity = accountIdentity(session?.user || {});
+  const [competition, setCompetition] = useState("All Competitions");
+  const competitions = useMemo(() => [...new Set(matches.map((match) => match.round))], [matches]);
+  const visible = competition === "All Competitions"
+    ? matches
+    : matches.filter((match) => match.round === competition);
+  const featured = visible.find((match) => match.status !== "complete" && !rankingForMatch(rankings, match.id)) || null;
+
   return (
-    <div className="app-with-nav">
-      <SideNavigation screen="dashboard" navigate={navigate} access={access} session={session} onSignOut={onSignOut} />
-      <main className="dashboard">
-        <div className="dashboard__top">
-          <header className="dashboard-header">
-            <Logo compact />
-            <button className="plan-pill" onClick={() => navigate("profile")}>
-              <AccountAvatar session={session} size={24} />
-              {session ? identity.name : "Guest"}
-            </button>
-            <button className="circle-button" onClick={() => setMenuOpen((value) => !value)} aria-label="Open menu">
-              <AssetIcon src="/assets/menu.svg" size={22} />
-            </button>
-          </header>
-          {menuOpen && (
-            <div className="mobile-menu">
-              <button onClick={() => navigate("profile")}>Profile</button>
-              <button onClick={() => navigate("plans")}>Plans</button>
-              {session
-                ? <button onClick={() => void onSignOut()}>Log out</button>
-                : <button onClick={() => navigate("login")}>Log in</button>}
-            </div>
-          )}
-          <CalendarStrip selectedDate={selectedDate} onDate={onDate} />
+    <section className="screen screen--home">
+      <div className="home-wrap">
+        <div className="home-top">
+          <HomeHeader session={session} access={access} navigate={navigate} />
+          <CalendarSection selectedDate={selectedDate} onDate={onDate} />
+          <Filters
+            selectedDate={selectedDate}
+            onDate={onDate}
+            competitions={competitions}
+            competition={competition}
+            onCompetition={setCompetition}
+          />
         </div>
-        <div className="dashboard__content">
-          <div className="dashboard__main">
-            <div className="section-heading"><h1>Predictions</h1><span>Verified pre-match odds</span></div>
-            {error && <div className="app-notice app-notice--error" role="alert">{error}</div>}
-            {loading && <div className="loading-field"><AssetIcon src="/assets/spinner.svg" size={28} />Loading matches…</div>}
-            {!loading && !matches.length && <div className="empty-state"><b>No eligible matches on this date.</b><p>Choose another day in the calendar.</p></div>}
-            <div className="prediction-grid">
-              {matches.map((match) => (
-                <PredictionCard
-                  key={match.id}
-                  match={match}
-                  ranking={rankingForMatch(rankings, match.id) as RankingView | null}
-                  onStart={() => onOpenMatch(match)}
-                  onDetails={() => onOpenMatch(match)}
-                  onResult={() => onOpenResult(match)}
-                />
-              ))}
-            </div>
+        <div className="home-body">
+          {error && <p className="app-note app-note--error" role="alert">{error}</p>}
+          {featured && <FreeScoreDay match={featured} onTry={() => onOpenMatch(featured)} />}
+          <div className="predictions">
+            <h2>Predictions</h2>
+            {loading ? (
+              <div className="analyzing">
+                <img src="/assets/figma-spinner.svg" alt="" />
+                <span>Loading matches...</span>
+              </div>
+            ) : visible.length ? (
+              <div className="pcards">
+                {visible.map((match) => (
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    ranking={rankingForMatch(rankings, match.id) as RankingView | null}
+                    analyzing={pendingMatchId === match.id}
+                    onStart={() => onOpenMatch(match)}
+                    onSee={() => onOpenResult(match)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-note">
+                <b>No eligible matches on this date.</b>
+                <p>Choose another day in the calendar.</p>
+              </div>
+            )}
           </div>
-          <aside className="desktop-insight">
-            <span className="eyebrow">FutBot AI</span>
-            <h2>Match intelligence, model by model.</h2>
-            <p>Lineups, form, injuries, odds and recent performance are combined into one evidence-backed view.</p>
-            <div className="insight-stat"><b>{matches.length}</b><span>eligible matches today</span></div>
-            <button onClick={() => navigate("plans")}>Explore plans</button>
-          </aside>
         </div>
-      </main>
+      </div>
+    </section>
+  );
+}
+
+/* ============ DETAILS (Figma 1:477) ============ */
+
+const SCORE_ROW_FLAG_Y = [77, 140, 204, 271];
+const SCORE_ROW_SCORE_Y = [79, 147, 207, 272];
+const SCORE_ROW_LABEL_Y = [101, 164, 228, 295];
+const SCORE_CARD_HEIGHTS = [140, 204, 271, 348];
+
+function CardChrome({ title, badge }: { title: string; badge: string }) {
+  return (
+    <>
+      <img className="d-ball" style={{ left: 25, top: 21 }} src="/assets/figma-ball-section.svg" alt="" />
+      <p className="d-section" style={{ left: 55, top: 22 }}>{title}</p>
+      <div className="ai-badge" style={{ left: 313.5, top: 19 }}>
+        <img src="/assets/figma-sparkle-badge.svg" alt="" />
+        <span>{badge}</span>
+      </div>
+      <div className="d-line-h" style={{ left: 19, top: 55 }} />
+    </>
+  );
+}
+
+function TeamColumn({ match }: { match: Match }) {
+  return (
+    <>
+      <div className="d-line-v" style={{ left: 256, top: 90 }} />
+      <TeamFlag team={match.teamB} size={22} className="d-flag" style={{ left: 303, top: 90 }} />
+      <p className="d-label d-label--c" style={{ left: 314, top: 114 }}>{match.teamB.name}</p>
+      <TeamFlag team={match.teamA} size={22} className="d-flag" style={{ left: 303, top: 160 }} />
+      <p className="d-label d-label--c" style={{ left: 314, top: 184 }}>{match.teamA.name}</p>
+    </>
+  );
+}
+
+function ScoreCard({ match, scores, badge }: { match: Match; scores: ScorePick[]; badge: string }) {
+  const rows = scores.slice(0, 4);
+  if (!rows.length) return null;
+  return (
+    <div className="d-card d-card--score g-stroke" style={{ height: SCORE_CARD_HEIGHTS[rows.length - 1] }}>
+      <CardChrome title="Score Predictions" badge={badge} />
+      {rows.map((pick, index) => (
+        <Fragment key={`${pick.score}-${index}`}>
+          <TeamFlag team={match.teamA} size={22} className="d-flag" style={{ left: 39, top: SCORE_ROW_FLAG_Y[index] }} />
+          <TeamFlag team={match.teamB} size={22} className="d-flag" style={{ left: 303, top: SCORE_ROW_FLAG_Y[index] }} />
+          <p className="d-score" style={{ left: 184, top: SCORE_ROW_SCORE_Y[index] }}>{pick.score}</p>
+          <p className="d-label d-label--c" style={{ left: 50, top: SCORE_ROW_LABEL_Y[index] }}>{match.teamA.name}</p>
+          <p className="d-label d-label--c" style={{ left: 314, top: SCORE_ROW_LABEL_Y[index] }}>{match.teamB.name}</p>
+        </Fragment>
+      ))}
     </div>
   );
 }
 
-function PickPanel({ title, pick, rank }: { title: string; pick: PredictionPick | null; rank?: number }) {
+function PicksCard({ match, title, picks, badge, handicap = false }: {
+  match: Match;
+  title: string;
+  picks: PredictionPick[];
+  badge: string;
+  handicap?: boolean;
+}) {
+  const rows = picks.slice(0, 2);
+  if (!rows.length) return null;
   return (
-    <section className="detail-panel">
-      <header>
-        <div><AssetIcon src="/assets/section-ball.svg" size={18} />{title}</div>
-        <span className="ai-badge">{rank ? `Top ${rank}` : "By FutBot AI"}</span>
-      </header>
-      {pick ? (
-        <div className="live-pick">
-          <strong>{pick.label}</strong>
-          <div><span>Probability</span><b>{pick.probability}%</b><span>Confidence</span><b>{pick.confidence}%</b></div>
-          <p>{pick.reason || "No model rationale was returned."}</p>
-          {pick.risks.length > 0 && <small>Risk: {pick.risks.join(" · ")}</small>}
+    <div className={`d-card ${handicap ? "d-card--handicap" : "d-card--total"} g-stroke`}>
+      <CardChrome title={title} badge={badge} />
+      {rows.length === 1 ? (
+        <p className="d-pick" style={{ left: 25, top: 127 }}>{rows[0].label}</p>
+      ) : (
+        <>
+          <p className="d-num" style={{ left: 25, top: 90 }}>#1</p>
+          <p className="d-pick" style={{ left: 25, top: 106 }}>{rows[0].label}</p>
+          <p className="d-num" style={{ left: 25, top: 153 }}>#2</p>
+          <p className="d-pick" style={{ left: 25, top: 169 }}>{rows[1].label}</p>
+        </>
+      )}
+      <TeamColumn match={match} />
+    </div>
+  );
+}
+
+function PredictModal({ open, match, modelName, freeUser, onClose, onConfirm }: {
+  open: boolean;
+  match: Match;
+  modelName: string;
+  freeUser: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    setVisible(false);
+    const timer = window.setTimeout(() => setMounted(false), 550);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!mounted || !open) return;
+    const timer = window.setTimeout(() => setVisible(true), 20);
+    return () => window.clearTimeout(timer);
+  }, [mounted, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!mounted) return null;
+  return (
+    <div className={`modal ${visible ? "is-open" : ""}`}>
+      <div className="modal__overlay" onClick={onClose} />
+      <section className="modal__sheet" role="dialog" aria-modal="true" aria-label="Free prediction">
+        <div className="modal__head">
+          <h2>{freeUser ? "You Have 1 Free Prediction Left" : "Confirm Your Prediction"}</h2>
+          <div className="ai-badge">
+            <img src="/assets/figma-sparkle-badge.svg" alt="" />
+            <span>By FutBot AI</span>
+          </div>
         </div>
-      ) : <p className="empty-copy">No selection returned for this market.</p>}
-    </section>
+        <div className="teams modal__teams">
+          <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+          <b>vs.</b>
+          <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+        </div>
+        <div className="modal__note">
+          <p>By clicking &ldquo;Confirm,&rdquo; you&rsquo;ll receive predictions for:</p>
+          <ul>
+            <li>Score Predictions</li>
+            <li>Over/Under</li>
+            <li>Asian handicap</li>
+          </ul>
+          <p>{freeUser ? "Your free prediction will reset tomorrow." : `Powered by ${modelName}.`}</p>
+        </div>
+        <button className="glow-btn modal__cta" onClick={onConfirm}>Start Now</button>
+      </section>
+    </div>
   );
 }
 
-function MatchOverview({ match }: { match: Match }) {
-  return (
-    <section className="match-overview">
-      <div className="match-overview__teams">
-        <div><TeamFlag team={match.teamA} size={48} /><b>{match.teamA.name}</b></div>
-        <span><small>{match.date}</small><strong>{match.score || "VS"}</strong><small>{match.round}</small></span>
-        <div><TeamFlag team={match.teamB} size={48} /><b>{match.teamB.name}</b></div>
-      </div>
-      <div className="match-overview__source">
-        <span className="data-ready">Fixture and verified odds ready</span>
-        <span className={match.playerInfoAvailable ? "players-ready" : "players-missing"}>
-          {match.playerInfoAvailable ? "Player information available" : "Player information unavailable"}
-        </span>
-        <p>Detailed match context is imported automatically when prediction starts.</p>
-      </div>
-    </section>
-  );
-}
-
-function ModelWorkbench({ ranking, access, analyzing, pendingModel, error, onPredict, onSeeResult }: {
+function ModelRoom({ match, ranking, access, analyzing, pendingModel, error, onRun, onSee }: {
+  match: Match;
   ranking: RankingView | null;
   access: Access;
   analyzing: boolean;
   pendingModel: string;
   error: string;
-  onPredict: (modelName: string) => void;
-  onSeeResult: (modelName: string) => void;
+  onRun: (modelName: string) => void;
+  onSee: (modelName: string) => void;
 }) {
-  const modelRail = predictionModelRail(ranking?.models || [], analyzing);
-  const allModelsUnlocked = Boolean(access.billing?.active);
+  const rail = predictionModelRail(ranking?.models || [], analyzing) as { name: string; status: string }[];
+  const allUnlocked = Boolean(access.billing?.active);
   return (
-    <section className="model-workbench" aria-live="polite">
-      <div className="model-workbench__intro">
-        <span>Prediction model room</span>
-        <h2>{analyzing ? `Running ${pendingModel}` : "Choose a prediction model"}</h2>
-        <p>Each model runs independently against the same verified match data.</p>
-      </div>
-      {error && <div className="app-notice app-notice--error" role="alert">{error}</div>}
-      <div className="model-runway">
-        {modelRail.map((item, index) => {
+    <div className="d-cards">
+      <div className="m-card g-stroke">
+        <div className="m-card__head">
+          <img className="d-ball" src="/assets/figma-ball-section.svg" alt="" />
+          <p className="d-section">Choose a prediction model</p>
+          <div className="ai-badge">
+            <img src="/assets/figma-sparkle-badge.svg" alt="" />
+            <span>By FutBot AI</span>
+          </div>
+        </div>
+        <p className="m-card__meta">
+          {match.date}{match.playerInfoAvailable ? " · Player information available" : " · Match context loads when prediction starts"}
+        </p>
+        {rail.map((item, index) => {
           const completed = item.status === "complete";
-          const locked = !completed && !allModelsUnlocked && item.name !== "Qwen 3.7 Max";
+          const locked = !completed && !allUnlocked && item.name !== FREE_MODEL_NAME;
           const working = analyzing && item.name === pendingModel;
-          const status = item.status === "complete" ? "See Result" : working ? "Working" : locked ? "Pass required" : "Predict";
           return (
-            <article className={`model-runway__lane ${working ? "model-runway__lane--analyzing" : ""}`} key={item.name}>
-              <span className="model-runway__index">{String(index + 1).padStart(2, "0")}</span>
-              <div>
+            <div className="m-row" key={item.name}>
+              <span className="m-row__index">{String(index + 1).padStart(2, "0")}</span>
+              <div className="m-row__name">
                 <b>{item.name}</b>
-                <small>{locked ? "Unlock with an AI Pass" : item.status === "complete" ? "Prediction available" : "Ready for this fixture"}</small>
+                <small>{locked ? "Unlock with an AI Pass" : completed ? "Prediction available" : "Ready for this fixture"}</small>
               </div>
               <button
-                className="model-runway__action"
+                className={`m-run ${completed ? "m-run--done" : ""}`}
                 type="button"
                 disabled={analyzing || locked}
-                onClick={() => item.status === "complete" ? onSeeResult(item.name) : onPredict(item.name)}
+                onClick={() => completed ? onSee(item.name) : onRun(item.name)}
               >
-                {working && <i />}
-                {status}
+                {working && <img src="/assets/figma-spinner.svg" alt="" />}
+                {completed ? "See Result" : working ? "Analyzing" : locked ? "Pass required" : "Predict"}
               </button>
-            </article>
+            </div>
           );
         })}
       </div>
-    </section>
+      {error && <p className="app-note app-note--error" role="alert">{error}</p>}
+    </div>
   );
 }
 
-function Details({ navigate, match, ranking, showResult, access, session, analyzing, pendingModel, error, onPredict, onSeeResult, onSignOut }: {
+function Details({ navigate, match, ranking, showResult, access, analyzing, pendingModel, error, onPredict, onSeeResult }: {
   navigate: (screen: Screen) => void;
   match: Match | null;
   ranking: RankingView | null;
   showResult: boolean;
   access: Access;
-  session: Session | null;
   analyzing: boolean;
   pendingModel: string;
   error: string;
   onPredict: (modelName: string) => void;
   onSeeResult: () => void;
-  onSignOut: () => Promise<void>;
 }) {
   const [activeModelName, setActiveModelName] = useState("");
+  const [confirmModel, setConfirmModel] = useState("");
   useEffect(() => {
     setActiveModelName(ranking?.models?.[0]?.name || "");
   }, [ranking]);
   const model = ranking?.models.find((item) => item.name === activeModelName) || ranking?.models?.[0] || null;
+  const badge = model ? `By ${model.name}` : "By FutBot AI";
+  const totalPicks = model ? model.picks.filter((pick) => /total|over|under/i.test(pick.type)) : [];
+  const totals = totalPicks.length ? totalPicks : model?.total ? [model.total] : [];
+
   return (
-    <div className="app-with-nav">
-      <SideNavigation screen="details" navigate={navigate} access={access} session={session} onSignOut={onSignOut} />
-      <main className="details-page">
-        <header className="page-title">
-          <BackButton onClick={() => navigate("dashboard")} />
-          <div><span>{match?.round || "FutBot analysis"}</span><h1>{match ? `${match.teamA.name} vs. ${match.teamB.name}` : ranking?.matchName || "Select a match"}</h1></div>
-          <img className="pitch-graphic" src="/assets/pitch.svg" alt="" />
+    <section className="screen screen--details">
+      <div className="details-wrap">
+        <header className="details-head">
+          <button className="icon-btn back-btn" onClick={() => navigate("dashboard")} aria-label="Go back">
+            <img src="/assets/figma-icon-back.svg" alt="" />
+          </button>
+          <h1 className="details-title">
+            {match ? `${match.teamA.name} vs.\n${match.teamB.name}` : ranking?.matchName || "Select a match"}
+          </h1>
+          <img className="details-pitch" src="/assets/figma-pitch.svg" alt="" />
         </header>
-        {match && <MatchOverview match={match} />}
+
         {match && (!ranking || !showResult) ? (
-          <ModelWorkbench
+          <ModelRoom
+            match={match}
             ranking={ranking}
             access={access}
             analyzing={analyzing}
             pendingModel={pendingModel}
             error={error}
-            onPredict={onPredict}
-            onSeeResult={(modelName) => {
+            onRun={setConfirmModel}
+            onSee={(modelName) => {
               setActiveModelName(modelName);
               onSeeResult();
             }}
           />
-        ) : !ranking ? (
-          <div className="empty-state details-empty">
-            <b>No match selected.</b>
-            <p>Return to Predictions and choose a fixture.</p>
-            <button className="primary-button" onClick={() => navigate("dashboard")}>Browse matches</button>
+        ) : !ranking || !match ? (
+          <div className="d-cards">
+            <div className="empty-note">
+              <b>No match selected.</b>
+              <p>Return to Predictions and choose a fixture.</p>
+            </div>
+            <button className="glow-btn" style={{ maxWidth: 368 }} onClick={() => navigate("dashboard")}>
+              Browse matches
+            </button>
           </div>
         ) : (
           <>
-            <div className="model-tabs" role="tablist" aria-label="Prediction models">
-              {ranking.models.map((item) => (
-                <button
-                  className="model-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={item === model}
-                  key={item.name}
-                  onClick={() => setActiveModelName(item.name)}
-                >
-                  {item.name}
-                </button>
-              ))}
-            </div>
-            <div className="result-model-meta">
-              <div><span>Model</span><b>{model?.name}</b></div>
-              <span>{model?.provider || "AI provider"}</span>
-              <span>{model?.phase || "Prediction"}</span>
-              <strong>Top {model?.picks.length || 0}</strong>
-            </div>
-            <div className="details-grid details-grid--complete">
-              <section className="detail-panel score-panel">
-                <header><div><AssetIcon src="/assets/section-ball.svg" size={18} />Score Predictions</div><span className="ai-badge">By {model?.name}</span></header>
-                {model?.scores.length ? model.scores.map((score, index) => (
-                  <div className="score-row live-score-row" key={`${score.score}-${index}`}>
-                    <span>#{index + 1}</span><b>{score.score}</b><span>{score.probability}%</span>
-                    <small>{score.type}</small>
-                    <p>{score.reason}</p>
-                  </div>
-                )) : <p className="empty-copy">No score predictions returned.</p>}
-              </section>
-              <PickPanel title="Both Teams to Score" pick={model?.btts || null} />
-              <section className="top-picks-section">
-                <header>
-                  <div><span>Ranked markets</span><h2>Top Picks</h2></div>
-                  <p>Sorted by model-estimated probability, not implied betting odds.</p>
-                </header>
-                <div className="top-picks-grid">
-                  {model?.picks.length ? model?.picks.map((pick, index) => (
-                    <PickPanel title={pick.type} pick={pick} rank={index + 1} key={`${pick.type}-${pick.label}-${index}`} />
-                  )) : <p className="empty-copy">No qualifying market picks returned.</p>}
-                </div>
-              </section>
+            {ranking.models.length > 1 && (
+              <div className="model-tabs" role="tablist" aria-label="Prediction models">
+                {ranking.models.map((item) => (
+                  <button
+                    className="model-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={item === model}
+                    key={item.name}
+                    onClick={() => setActiveModelName(item.name)}
+                  >
+                    {item.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="d-cards">
+              <ScoreCard match={match} scores={model?.scores || []} badge={badge} />
+              <PicksCard match={match} title="Total" picks={totals} badge={badge} />
+              {model?.handicap && <PicksCard match={match} title="Asian handicap" picks={[model.handicap]} badge={badge} handicap />}
+              {model?.btts && <PicksCard match={match} title="Both Teams to Score" picks={[model.btts]} badge={badge} />}
+              {model?.moneyline && <PicksCard match={match} title="Moneyline" picks={[model.moneyline]} badge={badge} />}
             </div>
           </>
         )}
-      </main>
-    </div>
+      </div>
+      {match && (
+        <PredictModal
+          open={Boolean(confirmModel)}
+          match={match}
+          modelName={confirmModel}
+          freeUser={!access.billing?.active}
+          onClose={() => setConfirmModel("")}
+          onConfirm={() => {
+            const modelName = confirmModel;
+            setConfirmModel("");
+            onPredict(modelName);
+          }}
+        />
+      )}
+    </section>
   );
 }
 
-function HistoryMatchCard({ item, onOpenPrediction }: {
-  item: HistoryMatch;
-  onOpenPrediction: (item: HistoryMatch) => void;
-}) {
-  const resultLabel = item.result === "hit" ? "Hit" : item.result === "miss" ? "Miss" : "Pending";
+/* ============ PROFILE (Figma 1:393) ============ */
+
+function HistoryCard({ item, onOpen }: { item: HistoryMatch; onOpen: () => void }) {
+  const resultBadge = item.result === "hit"
+    ? <span className="badge badge--hit">Hit</span>
+    : item.result === "miss"
+      ? <span className="badge badge--miss">Miss</span>
+      : <span className="badge badge--soon">Pending</span>;
   return (
-    <button className="history-match-card" type="button" onClick={() => onOpenPrediction(item)}>
-      <div className="history-match-card__top">
-        <span className="history-country-flag" aria-label="Competition country">{item.countryFlag}</span>
-        <span>{item.round}</span>
-        <span>{item.date}</span>
+    <article className="pcard pcard--done">
+      <div className="pcard__head">
+        <span className="pcard__date">{item.date}{item.score ? ` · FT ${item.score}` : ""}</span>
+        {resultBadge}
       </div>
-      <div className="history-match-card__teams">
-        <div><TeamFlag team={item.teamA} size={42} /><b>{item.teamA.name}</b></div>
-        <strong>{item.score || "VS"}</strong>
-        <div><TeamFlag team={item.teamB} size={42} /><b>{item.teamB.name}</b></div>
+      <div className="pcard__result">
+        <div className="stacked-teams">
+          <div><TeamFlag team={item.teamA} /><span>{item.teamA.name}</span></div>
+          <div><TeamFlag team={item.teamB} /><span>{item.teamB.name}</span></div>
+        </div>
+        <button className="see-link" onClick={onOpen}>
+          See Predictions
+          <img src="/assets/figma-arrow-sm.svg" alt="" />
+        </button>
       </div>
-      <div className="history-match-card__footer">
-        <span>{item.ranking.models.length} model{item.ranking.models.length === 1 ? "" : "s"}</span>
-        <span className={`match-result match-result--${item.result}`}>
-          <small>Match Result</small><b>{resultLabel}</b>
-        </span>
-        <AssetIcon src="/assets/row-arrow.svg" size={10} />
-      </div>
-    </button>
+    </article>
   );
 }
 
@@ -640,67 +1081,126 @@ function Profile({ navigate, access, historyGroups, session, onOpenPrediction, o
   onOpenPrediction: (item: HistoryMatch) => void;
   onSignOut: () => Promise<void>;
 }) {
-  const plan = access.billing?.active ? "AI Pass" : access.billing?.freePredictionUsed ? "Trial Used" : "Free Trial";
+  const [menuOpen, setMenuOpen] = useState(false);
   const identity = accountIdentity(session?.user || {});
-  const [activeDate, setActiveDate] = useState(historyGroups[0]?.date || "");
+  const activePlan = Boolean(access.billing?.active);
+  const planName = activePlan
+    ? access.plans?.find((plan) => plan.id === access.billing?.planId)?.name || "AI Pass"
+    : "Free Trial";
+  const planDesc = activePlan
+    ? "All available AI models are unlocked for eligible matches."
+    : "One Qwen prediction is included before a pass is required.";
+  const validUntil = access.billing?.validUntil
+    ? ` Access through ${new Date(access.billing.validUntil).toLocaleDateString()}.`
+    : "";
+  const historyItems = historyGroups.flatMap((group) => group.matches);
+
   useEffect(() => {
-    if (!historyGroups.some((group) => group.date === activeDate)) setActiveDate(historyGroups[0]?.date || "");
-  }, [activeDate, historyGroups]);
-  const activeGroup = historyGroups.find((group) => group.date === activeDate) || historyGroups[0];
+    if (!menuOpen) return;
+    const onDocumentClick = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest(".plan-menu")) setMenuOpen(false);
+    };
+    document.addEventListener("click", onDocumentClick);
+    return () => document.removeEventListener("click", onDocumentClick);
+  }, [menuOpen]);
+
   return (
-    <div className="app-with-nav">
-      <SideNavigation screen="profile" navigate={navigate} access={access} session={session} onSignOut={onSignOut} />
-      <main className="profile-page">
-        <header className="simple-header"><BackButton onClick={() => navigate("dashboard")} /><h1>Profile</h1></header>
-        <div className="profile-layout">
-          <section className="current-plan">
-            <AccountAvatar session={session} size={48} />
-            <div><span>{session ? `${identity.name} · ${identity.provider}` : "Guest account"}</span><h2>{plan}</h2><p>{access.billing?.active ? "All available AI models are unlocked." : "One Qwen prediction is included before a pass is required."}</p></div>
-            <button onClick={() => navigate("plans")} aria-label="Manage plan"><AssetIcon src="/assets/more-middle.svg" size={22} /></button>
-          </section>
-          <section className="history">
-            <div className="history__heading"><div><span>Account archive</span><h2>My Predictions</h2></div><b>{historyGroups.reduce((sum, group) => sum + group.matches.length, 0)}</b></div>
-            {historyGroups.length ? (
-              <>
-                <div className="history-date-tabs" role="tablist" aria-label="Prediction dates">
-                  {historyGroups.map((group) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={group.date === activeGroup?.date}
-                      onClick={() => setActiveDate(group.date)}
-                      key={group.date}
-                    >
-                      <span>{group.label}</span><b>{group.matches.length}</b>
-                    </button>
-                  ))}
+    <section className="screen screen--profile">
+      <div className="profile-wrap">
+        <header className="profile-head">
+          <button className="icon-btn back-btn" onClick={() => navigate("dashboard")} aria-label="Go back">
+            <img src="/assets/figma-icon-back.svg" alt="" />
+          </button>
+          <h1 className="profile-title">Profile</h1>
+        </header>
+
+        <article className="plan-card">
+          <div className="plan-card__head">
+            <div className="plan-card__titles">
+              <p className="plan-card__eyebrow">Current Plan</p>
+              <p className="plan-card__name">{planName}</p>
+            </div>
+            {activePlan && (
+              <div className={`plan-menu ${menuOpen ? "is-open" : ""}`}>
+                <button className="plan-card__menu" aria-label="Plan options" onClick={() => setMenuOpen((value) => !value)}>
+                  <span className="menu-dots">
+                    <img src="/assets/more-left.svg" alt="" />
+                    <img src="/assets/more-middle.svg" alt="" />
+                    <img src="/assets/more-right.svg" alt="" />
+                  </span>
+                </button>
+                <div className="dd-panel plan-menu-panel">
+                  <button className="dd-item" onClick={() => { setMenuOpen(false); navigate("plans"); }}>Update Your Plan</button>
                 </div>
-                <div className="history-match-grid">
-                  {activeGroup?.matches.map((item) => (
-                    <HistoryMatchCard item={item} onOpenPrediction={onOpenPrediction} key={item.id} />
-                  ))}
-                </div>
-              </>
-            ) : <div className="empty-state"><b>No saved predictions yet.</b><p>Your account history will appear here.</p></div>}
-          </section>
+              </div>
+            )}
+          </div>
+          <p className="plan-card__desc">{planDesc}{validUntil}</p>
+          {!activePlan && (
+            <button className="glow-btn plan-card__cta" onClick={() => navigate("plans")}>
+              <img src="/assets/figma-sparkle-black.svg" alt="" />
+              Choose Your Plan
+            </button>
+          )}
+        </article>
+
+        <div className="account-card">
+          <div className="account-card__id">
+            {session ? <AccountAvatar session={session} size={21.5} /> : <img src="/assets/figma-icon-user.svg" alt="" />}
+            <span>{session ? `${identity.name} · ${identity.provider}` : "Guest account"}</span>
+          </div>
+          {session ? (
+            <button className="logout-btn" onClick={() => void onSignOut()}>Log Out</button>
+          ) : (
+            <button className="login-btn" onClick={() => navigate("login")}>Log In</button>
+          )}
         </div>
-      </main>
-    </div>
+
+        <div className="predictions profile-predictions">
+          <h2>My Predictions</h2>
+          {historyItems.length ? (
+            <div className="pcards pcards--profile">
+              {historyItems.map((item) => (
+                <HistoryCard item={item} key={`${item.id}-${item.ranking.createdAt}`} onOpen={() => onOpenPrediction(item)} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-note">
+              <b>No saved predictions yet.</b>
+              <p>Your prediction history will appear here.</p>
+            </div>
+          )}
+        </div>
+
+        <a className="console-link" href="/backend">Data Console</a>
+      </div>
+    </section>
   );
 }
 
-function Plans({ navigate, access, session, checkout, onSignOut }: {
+/* ============ PLANS (Figma 1:617) ============ */
+
+function durationText(hours: number) {
+  if (hours < 48) return `${hours} hours`;
+  const days = Math.round(hours / 24);
+  return `${days} days`;
+}
+
+function Plans({ navigate, access, checkout }: {
   navigate: (screen: Screen) => void;
   access: Access;
-  session: Session | null;
   checkout: (planId: string) => Promise<void>;
-  onSignOut: () => Promise<void>;
 }) {
   const plans = access.plans || [];
-  const [selected, setSelected] = useState(plans.find((plan) => plan.recommended)?.id || plans[0]?.id || "");
+  const currentId = access.billing?.active ? access.billing?.planId || "" : "free";
+  const selectable = plans.filter((plan) => plan.id !== currentId);
+  const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const effectiveSelected = selected || plans.find((plan) => plan.recommended)?.id || plans[0]?.id || "";
+  const effectiveSelected = selected
+    || selectable.find((plan) => plan.recommended)?.id
+    || selectable[0]?.id
+    || "";
   const active = plans.find((plan) => plan.id === effectiveSelected);
   const pay = async () => {
     if (!active) return;
@@ -710,31 +1210,90 @@ function Plans({ navigate, access, session, checkout, onSignOut }: {
       setBusy(false);
     }
   };
+
   return (
-    <div className="app-with-nav">
-      <SideNavigation screen="plans" navigate={navigate} access={access} session={session} onSignOut={onSignOut} />
-      <main className="plans-page">
-        <header className="simple-header"><BackButton onClick={() => navigate("profile")} /><div><span>Choose your access</span><h1>Plans</h1></div></header>
-        {!plans.length && <div className="empty-state"><b>Plans are unavailable.</b><p>Try refreshing in a moment.</p></div>}
-        <div className="plan-grid">
-          {plans.map((plan) => (
-            <button className={`plan-card ${effectiveSelected === plan.id ? "is-selected" : ""}`} key={plan.id} onClick={() => setSelected(plan.id)}>
-              {plan.recommended && <span className="recommended">Recommended</span>}
-              <div className="plan-card__heading">
-                <div><span>{plan.name}</span><b>{plan.price} {plan.currency}</b></div>
-                <small><AssetIcon src={effectiveSelected === plan.id ? "/assets/time-active.svg" : "/assets/time-muted.svg"} size={13} />{durationLabel(plan.durationHours)}</small>
+    <section
+      className="screen screen--plans"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && window.innerWidth >= 1024) navigate("profile");
+      }}
+    >
+      <div className="plans-wrap">
+        <header className="plans-head">
+          <button className="icon-btn back-btn" onClick={() => navigate("profile")} aria-label="Go back">
+            <img src="/assets/figma-icon-back.svg" alt="" />
+          </button>
+        </header>
+
+        <div className="plan-options">
+          <div className="plan-option" data-plan="free">
+            <div className="plan-option__head">
+              <div className="plan-option__titles">
+                <p className="plan-option__label">Free Trail</p>
+                <p className="plan-option__price">Free</p>
               </div>
-              <p>Unlock AI analysis for eligible matches during this access window.</p>
-            </button>
-          ))}
+              {currentId === "free" && <span className="current-pill">Current Plan</span>}
+            </div>
+            <p className="plan-option__desc">
+              One free AI prediction with the Qwen model before a pass is required.
+            </p>
+          </div>
+
+          {plans.map((plan) => {
+            const isCurrent = plan.id === currentId;
+            return (
+              <button
+                className={`plan-option ${plan.recommended ? "plan-option--tall" : ""} ${effectiveSelected === plan.id && !isCurrent ? "is-selected" : ""}`}
+                key={plan.id}
+                disabled={isCurrent}
+                onClick={() => setSelected(plan.id)}
+              >
+                <div className="plan-option__head">
+                  <div className="plan-option__titles">
+                    {plan.recommended && <p className="plan-option__flag">Recommended</p>}
+                    <p className="plan-option__label">{plan.name}</p>
+                    <p className="plan-option__price">{plan.price} {plan.currency}</p>
+                  </div>
+                  {isCurrent && <span className="current-pill">Current Plan</span>}
+                  <span className={`duration-pill ${plan.recommended ? "duration-pill--light" : ""}`}>
+                    <img src={plan.recommended ? "/assets/time-active.svg" : "/assets/time-muted.svg"} alt="" />
+                    {durationLabel(plan.durationHours)}
+                  </span>
+                </div>
+                <p className="plan-option__desc">
+                  AI expert analysis for all matches in the next {durationText(plan.durationHours)}
+                </p>
+              </button>
+            );
+          })}
+          {!plans.length && (
+            <div className="empty-note">
+              <b>Plans are unavailable.</b>
+              <p>Try refreshing in a moment.</p>
+            </div>
+          )}
         </div>
-        <div className="plan-checkout">
-          <button className="primary-button" onClick={() => void pay()} disabled={!active || busy}>{busy ? "Opening secure checkout..." : active ? `Pay now (${active.price} ${active.currency})` : "Select a plan"}</button>
-          <p>One-time access pass. No automatic renewal.</p>
-          {message && <p className="error-text" role="alert">{message}</p>}
+
+        <div className="plans-footer">
+          <button className="pay-btn" onClick={() => void pay()} disabled={!active || busy}>
+            {busy ? "Opening secure checkout..." : active ? `Pay now (${active.price} ${active.currency})` : "Select a plan"}
+          </button>
+          <p className="pay-note">One-time access pass. No automatic renewal.</p>
+          {message && <p className="pay-note error-text" role="alert">{message}</p>}
         </div>
-      </main>
-    </div>
+      </div>
+    </section>
+  );
+}
+
+/* ============ TOAST ============ */
+
+function PredictionToast({ visible, onOpen }: { visible: boolean; onOpen: () => void }) {
+  return (
+    <button className={`toast ${visible ? "is-visible" : ""}`} onClick={onOpen}>
+      <img src="/assets/figma-sparkle-white.svg" alt="" />
+      <span>Prediction ready</span>
+    </button>
   );
 }
 
@@ -751,7 +1310,8 @@ function todayShanghai() {
 }
 
 export default function FutBotsApp() {
-  const [screen, setScreen] = useState<Screen>("splash");
+  const [screen, setScreen] = useState<Screen>(() =>
+    location.pathname === "/login" || location.pathname.startsWith("/auth/") ? "auth" : "dashboard");
   const [client, setClient] = useState<SupabaseClient | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [config, setConfig] = useState<AuthConfig | null>(null);
@@ -767,6 +1327,7 @@ export default function FutBotsApp() {
   const [selectedDate, setSelectedDate] = useState(todayShanghai);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
 
   const finishAuthSession = useCallback(() => {
     sessionStorage.removeItem("futbots.authNext");
@@ -801,7 +1362,7 @@ export default function FutBotsApp() {
           latestSession = nextSession;
           setSession(nextSession);
           if (event === "SIGNED_OUT") {
-            setScreen("auth");
+            setScreen("dashboard");
           } else if (nextSession && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
             finishAuthSession();
           }
@@ -814,11 +1375,10 @@ export default function FutBotsApp() {
         setConfig(nextConfig);
         setClient(authClient);
         setSession(latestSession);
-        window.setTimeout(() => latestSession ? finishAuthSession() : setScreen("auth"), 900);
+        if (latestSession) finishAuthSession();
       } catch (bootError) {
         if (!active) return;
         setError(bootError instanceof Error ? bootError.message : "Unable to start FutBots.");
-        window.setTimeout(() => setScreen("auth"), 900);
       }
     };
     void boot();
@@ -859,9 +1419,8 @@ export default function FutBotsApp() {
   }, [api]);
 
   useEffect(() => {
-    if (screen === "splash") return;
     void loadAccount();
-  }, [loadAccount, screen]);
+  }, [loadAccount]);
 
   useEffect(() => {
     if (!["dashboard", "details"].includes(screen)) return;
@@ -885,6 +1444,12 @@ export default function FutBotsApp() {
   }, [api, screen, session]);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: "auto" }); }, [screen]);
+
+  useEffect(() => {
+    if (!toastVisible) return;
+    const timer = window.setTimeout(() => setToastVisible(false), 6000);
+    return () => window.clearTimeout(timer);
+  }, [toastVisible]);
 
   const historyGroups = useMemo(
     () => predictionHistory(rankings, historyContexts) as HistoryGroup[],
@@ -976,6 +1541,7 @@ export default function FutBotsApp() {
       setSelectedRanking(view);
       setRankings((current) => [view, ...current.filter((item) => item.createdAt !== view.createdAt)]);
       setAccess((current) => ({ ...current, billing: result.billing || current.billing }));
+      setToastVisible(true);
     } catch (analysisError) {
       const message = userFacingError(analysisError, "Analysis failed. Try again shortly.");
       setError(message);
@@ -1013,7 +1579,7 @@ export default function FutBotsApp() {
     setSelectedMatch(null);
     setSelectedRanking(null);
     setShowSelectedResult(false);
-    setScreen("auth");
+    setScreen("dashboard");
   };
 
   const navigate = (next: Screen) => {
@@ -1021,12 +1587,32 @@ export default function FutBotsApp() {
     setScreen(next);
   };
 
-  if (screen === "splash") return <BrandSplash />;
-  if (screen === "auth") return <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={() => setScreen("dashboard")} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} />;
-  if (screen === "login") return <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} />;
-  if (screen === "signup") return <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} />;
-  if (screen === "dashboard") return <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} onOpenMatch={openMatch} onOpenResult={openResult} onSignOut={signOut} />;
-  if (screen === "details") return <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} session={session} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} onSignOut={signOut} />;
-  if (screen === "profile") return <Profile navigate={navigate} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />;
-  return <Plans navigate={navigate} access={access} session={session} checkout={checkout} onSignOut={signOut} />;
+  const openToastResult = () => {
+    setToastVisible(false);
+    setShowSelectedResult(true);
+    setScreen("details");
+  };
+
+  const screenNode = screen === "auth" ? (
+    <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={() => setScreen("dashboard")} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} />
+  ) : screen === "login" ? (
+    <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} />
+  ) : screen === "signup" ? (
+    <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} />
+  ) : screen === "dashboard" ? (
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
+  ) : screen === "details" ? (
+    <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
+  ) : screen === "profile" ? (
+    <Profile navigate={navigate} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
+  ) : (
+    <Plans navigate={navigate} access={access} checkout={checkout} />
+  );
+
+  return (
+    <>
+      {screenNode}
+      <PredictionToast visible={toastVisible} onOpen={openToastResult} />
+    </>
+  );
 }
