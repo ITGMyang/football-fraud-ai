@@ -126,14 +126,27 @@ function AccountAvatar({ session, size = 32 }: { session: Session | null; size?:
 
 /* ============ AUTH SCREENS (Figma 1:664 / 1:849 / 1:549) ============ */
 
-function AuthDialog({ plain = false, brandFooter = false, children }: {
+function AuthDialog({ plain = false, brandFooter = false, onClose, children }: {
   plain?: boolean;
   brandFooter?: boolean;
+  onClose: () => void;
   children: React.ReactNode;
 }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <section className={`screen ${plain ? "screen--plain" : "screen--flags"}`}>
-      <div className="auth-dialog">
+    <section
+      className={`screen ${plain ? "screen--plain" : "screen--flags"}`}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && window.innerWidth >= 1024) onClose();
+      }}
+    >
+      <div className="auth-dialog" role="dialog" aria-modal="true" aria-label="Sign in">
         <aside className="auth-side" aria-hidden="true">
           <img className="auth-side__ball" src="/assets/figma-logo-ball.svg" alt="" />
           <img className="auth-side__wordmark" src="/assets/figma-wordmark.svg" alt="" />
@@ -161,15 +174,16 @@ function AuthDialog({ plain = false, brandFooter = false, children }: {
   );
 }
 
-function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled, error }: {
+function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled, error, onClose }: {
   navigate: (screen: Screen) => void;
   signInProvider: (provider: "google" | "custom:telegram") => Promise<void>;
   continueGuest: () => void;
   telegramEnabled: boolean;
   error: string;
+  onClose: () => void;
 }) {
   return (
-    <AuthDialog>
+    <AuthDialog onClose={onClose}>
       <div className="auth-content">
         <div className="auth-hero">
           <img className="auth-hero__ball" src="/assets/figma-logo-ball.svg" alt="" />
@@ -202,10 +216,11 @@ function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled,
   );
 }
 
-function AccountForm({ mode, navigate, submitAuth }: {
+function AccountForm({ mode, navigate, submitAuth, onClose }: {
   mode: "login" | "signup";
   navigate: (screen: Screen) => void;
   submitAuth: (mode: "login" | "signup", email: string, password: string) => Promise<string>;
+  onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -230,7 +245,7 @@ function AccountForm({ mode, navigate, submitAuth }: {
   };
 
   return (
-    <AuthDialog plain={signup} brandFooter={signup}>
+    <AuthDialog plain={signup} brandFooter={signup} onClose={onClose}>
       <form className="auth-content" onSubmit={(event) => void submit(event)}>
         <div className="auth-hero">
           {signup ? (
@@ -1361,8 +1376,9 @@ function todayShanghai() {
 }
 
 export default function FutBotsApp() {
-  const [screen, setScreen] = useState<Screen>(() =>
-    location.pathname === "/login" || location.pathname.startsWith("/auth/") ? "auth" : "dashboard");
+  const [screen, setScreen] = useState<Screen>("dashboard");
+  const [authScreen, setAuthScreen] = useState<"" | "auth" | "login" | "signup">(() =>
+    location.pathname === "/login" || location.pathname.startsWith("/auth/") ? "auth" : "");
   const [client, setClient] = useState<SupabaseClient | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [config, setConfig] = useState<AuthConfig | null>(null);
@@ -1387,12 +1403,13 @@ export default function FutBotsApp() {
       window.history.replaceState({}, "", "/");
     }
     setError("");
+    setAuthScreen("");
     setScreen("dashboard");
   }, []);
 
   const api = useMemo(() => createApiClient({
     getAccessToken: () => session?.access_token || "",
-    onUnauthorized: () => setScreen("auth")
+    onUnauthorized: () => setAuthScreen("auth")
   }), [session]);
 
   useEffect(() => {
@@ -1604,7 +1621,7 @@ export default function FutBotsApp() {
 
   const checkout = async (planId: string) => {
     if (!session) {
-      setScreen("login");
+      setAuthScreen("login");
       throw new Error("Sign in before purchasing a pass.");
     }
     const result = await api("/api/billing/checkout", {
@@ -1630,10 +1647,15 @@ export default function FutBotsApp() {
     setSelectedMatch(null);
     setSelectedRanking(null);
     setShowSelectedResult(false);
+    setAuthScreen("");
     setScreen("dashboard");
   };
 
   const navigate = (next: Screen) => {
+    if (next === "auth" || next === "login" || next === "signup") {
+      setAuthScreen(next);
+      return;
+    }
     if (next === "details" && !selectedRanking) setSelectedMatch(null);
     setScreen(next);
   };
@@ -1644,13 +1666,9 @@ export default function FutBotsApp() {
     setScreen("details");
   };
 
-  const screenNode = screen === "auth" ? (
-    <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={() => setScreen("dashboard")} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} />
-  ) : screen === "login" ? (
-    <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} />
-  ) : screen === "signup" ? (
-    <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} />
-  ) : screen === "dashboard" ? (
+  const closeAuth = () => setAuthScreen("");
+
+  const screenNode = screen === "dashboard" ? (
     <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
@@ -1663,6 +1681,11 @@ export default function FutBotsApp() {
   return (
     <>
       {screenNode}
+      {authScreen === "auth" && (
+        <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={closeAuth} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} onClose={closeAuth} />
+      )}
+      {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
+      {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
       <PredictionToast visible={toastVisible} onOpen={openToastResult} />
     </>
   );
