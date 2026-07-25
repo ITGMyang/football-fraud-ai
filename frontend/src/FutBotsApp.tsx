@@ -366,6 +366,7 @@ function CalendarSection({ selectedDate, onDate }: {
   const days = useMemo(() => calendarWindow(), []);
 
   useEffect(() => {
+    if (!firstCenter.current) return;
     const strip = stripRef.current;
     if (!strip) return;
     const active = strip.querySelector<HTMLElement>(`[data-iso="${selectedDate}"]`);
@@ -373,7 +374,7 @@ function CalendarSection({ selectedDate, onDate }: {
     const left = active.getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft;
     strip.scrollTo({
       left: left - strip.clientWidth / 2 + active.offsetWidth / 2,
-      behavior: firstCenter.current ? "auto" : "smooth"
+      behavior: "auto"
     });
     firstCenter.current = false;
   }, [selectedDate]);
@@ -414,7 +415,7 @@ function CalendarSection({ selectedDate, onDate }: {
         <button className="cal-nav cal-nav--prev" onClick={() => scrollByPage(-1)} aria-label="Previous week">
           <img src="/assets/figma-chevron-a.svg" alt="" />
         </button>
-        <span>{monthLabel(selectedDate)}</span>
+        <span key={monthLabel(selectedDate)}>{monthLabel(selectedDate)}</span>
         <button className="cal-nav" onClick={() => scrollByPage(1)} aria-label="Next week">
           <img src="/assets/figma-chevron-b.svg" alt="" />
         </button>
@@ -719,7 +720,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
         </div>
         <div className="home-body">
           {error && <p className="app-note app-note--error" role="alert">{error}</p>}
-          {featured && <FreeScoreDay match={featured} onTry={() => onOpenMatch(featured)} />}
+          {featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onOpenMatch(featured)} />}
           <div className="predictions">
             <h2>Predictions</h2>
             {loading ? (
@@ -728,7 +729,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                 <span>Loading matches...</span>
               </div>
             ) : visible.length ? (
-              <div className="pcards">
+              <div className="pcards" key={`${selectedDate}-${competition}`}>
                 {visible.map((match) => (
                   <MatchCard
                     key={match.id}
@@ -1252,10 +1253,10 @@ function durationText(hours: number) {
   return `${days} days`;
 }
 
-function Plans({ navigate, access, checkout }: {
-  navigate: (screen: Screen) => void;
+function Plans({ access, checkout, onClose }: {
   access: Access;
   checkout: (planId: string) => Promise<void>;
+  onClose: () => void;
 }) {
   const plans = access.plans || [];
   const currentId = access.billing?.active ? access.billing?.planId || "" : "free";
@@ -1277,16 +1278,27 @@ function Plans({ navigate, access, checkout }: {
     }
   };
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <section
       className="screen screen--plans"
       onClick={(event) => {
-        if (event.target === event.currentTarget && window.innerWidth >= 1024) navigate("profile");
+        if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="plans-wrap">
+      <div className="plans-wrap" role="dialog" aria-modal="true" aria-label="Choose your plan">
+        <button className="icon-btn plans-close" onClick={onClose} aria-label="Close">
+          <span>✕</span>
+        </button>
         <header className="plans-head">
-          <button className="icon-btn back-btn" onClick={() => navigate("profile")} aria-label="Go back">
+          <button className="icon-btn back-btn" onClick={onClose} aria-label="Go back">
             <img src="/assets/figma-icon-back.svg" alt="" />
           </button>
         </header>
@@ -1395,6 +1407,7 @@ export default function FutBotsApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  const [plansOpen, setPlansOpen] = useState(false);
 
   const finishAuthSession = useCallback(() => {
     sessionStorage.removeItem("futbots.authNext");
@@ -1621,7 +1634,12 @@ export default function FutBotsApp() {
 
   const checkout = async (planId: string) => {
     if (!session) {
+<<<<<<< Updated upstream
       setAuthScreen("login");
+=======
+      setPlansOpen(false);
+      setScreen("login");
+>>>>>>> Stashed changes
       throw new Error("Sign in before purchasing a pass.");
     }
     const result = await api("/api/billing/checkout", {
@@ -1652,8 +1670,13 @@ export default function FutBotsApp() {
   };
 
   const navigate = (next: Screen) => {
+<<<<<<< Updated upstream
     if (next === "auth" || next === "login" || next === "signup") {
       setAuthScreen(next);
+=======
+    if (next === "plans") {
+      setPlansOpen(true);
+>>>>>>> Stashed changes
       return;
     }
     if (next === "details" && !selectedRanking) setSelectedMatch(null);
@@ -1672,20 +1695,22 @@ export default function FutBotsApp() {
     <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
-  ) : screen === "profile" ? (
-    <Profile navigate={navigate} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
   ) : (
-    <Plans navigate={navigate} access={access} checkout={checkout} />
+    <Profile navigate={navigate} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
   );
 
   return (
     <>
       {screenNode}
+<<<<<<< Updated upstream
       {authScreen === "auth" && (
         <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={closeAuth} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} onClose={closeAuth} />
       )}
       {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
       {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
+=======
+      {plansOpen && <Plans access={access} checkout={checkout} onClose={() => setPlansOpen(false)} />}
+>>>>>>> Stashed changes
       <PredictionToast visible={toastVisible} onOpen={openToastResult} />
     </>
   );

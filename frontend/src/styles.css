@@ -306,6 +306,7 @@ input:focus-visible {
   gap: 6px;
   background: rgba(255, 255, 255, 0.07);
   color: #fff;
+  animation: day-pill-in 0.35s var(--ease-out);
 }
 
 .day--active b {
@@ -317,6 +318,44 @@ input:focus-visible {
   background: #fff;
   border-radius: 40px;
   color: #190646;
+  animation: day-circle-in 0.35s var(--ease-out);
+}
+
+@keyframes day-pill-in {
+  from {
+    background-color: rgba(255, 255, 255, 0);
+  }
+  to {
+    background-color: rgba(255, 255, 255, 0.07);
+  }
+}
+
+@keyframes day-circle-in {
+  from {
+    background-color: rgba(255, 255, 255, 0);
+    color: #fff;
+    transform: scale(0.7);
+  }
+  to {
+    background-color: #fff;
+    color: #190646;
+    transform: scale(1);
+  }
+}
+
+.calendar__month span {
+  animation: month-fade 0.3s var(--ease-out);
+}
+
+@keyframes month-fade {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .filters {
@@ -617,6 +656,11 @@ input:focus-visible {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+  animation: card-swap 0.5s var(--ease-out);
+}
+
+.fsd {
+  animation: card-swap 0.5s var(--ease-out);
 }
 
 .pcard {
@@ -1170,6 +1214,21 @@ input:focus-visible {
   display: flex;
   align-items: center;
   margin-bottom: 12px;
+}
+
+/* dialog close button — pinned to the top-right corner */
+.plans-close {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: -42px;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .plans-head .back-btn {
@@ -2505,17 +2564,13 @@ button.plan-option:disabled:hover {
     font-size: 28px;
   }
 
-  /* --- plans: floating dialog --- */
+  /* --- plans: floating dialog over a plain 25% black scrim --- */
   .screen--plans {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 48px;
-    background:
-      linear-gradient(rgba(1, 4, 2, 0.7), rgba(1, 4, 2, 0.7)),
-      linear-gradient(180deg, #08562e 0%, #021e0f 16.967%, #000000 36.382%);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.25);
   }
 
   .screen--plans .plans-wrap {
@@ -2531,6 +2586,11 @@ button.plan-option:disabled:hover {
 
   .plans-head {
     display: none;
+  }
+
+  .plans-close {
+    top: 12px;
+    margin-bottom: 12px;
   }
 
   .plans-footer {
