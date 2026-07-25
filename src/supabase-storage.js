@@ -12,7 +12,11 @@ const TABLES = {
   billingOrders: 'billing_orders',
   billingEntitlements: 'billing_entitlements',
   sharedPredictionResults: 'shared_prediction_results',
-  predictionRequests: 'prediction_requests'
+  predictionRequests: 'prediction_requests',
+  predictionSnapshots: 'prediction_snapshots',
+  predictionConsensus: 'prediction_consensus',
+  modelWeeklyPerformance: 'model_weekly_performance',
+  predictionSettings: 'prediction_settings'
 };
 
 export function createSupabaseStorage(env, fetchImpl = fetch) {
@@ -124,6 +128,122 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       return results;
     },
 
+    async readPredictionSettings() {
+      const rows = await client.selectRows(TABLES.predictionSettings, '*', {
+        key: 'eq.default',
+        limit: '1'
+      });
+      const row = rows[0] || {};
+      return {
+        championModelKey: row.champion_model_key || 'qwen',
+        liveModelKeys: Array.isArray(row.live_model_keys) ? row.live_model_keys : ['gpt', 'claude', 'gemini'],
+        modelWeights: row.model_weights && typeof row.model_weights === 'object' ? row.model_weights : {}
+      };
+    },
+
+    async readCurrentPredictionConsensus(fixtureId) {
+      const rows = await client.selectRows(TABLES.predictionConsensus, '*', {
+        fixture_id: `eq.${fixtureId}`,
+        is_current: 'eq.true',
+        limit: '1'
+      });
+      const row = rows[0];
+      return row ? {
+        id: row.id,
+        fixtureId: row.fixture_id,
+        phase: row.phase,
+        ranking: row.payload,
+        sourceSnapshotIds: row.source_snapshot_ids || [],
+        isCurrent: Boolean(row.is_current),
+        generatedAt: row.generated_at
+      } : null;
+    },
+
+    async appendPredictionSnapshots(snapshots = []) {
+      if (!snapshots.length) return [];
+      await client.insert(TABLES.predictionSnapshots, snapshots.map((snapshot) => ({
+        id: snapshot.id || crypto.randomUUID(),
+        fixture_id: String(snapshot.fixtureId),
+        phase: snapshot.phase,
+        model_key: snapshot.modelKey || predictionModelKey(snapshot.result?.modelName || snapshot.modelId),
+        model_id: snapshot.modelId || null,
+        payload: snapshot.result,
+        generated_at: snapshot.generatedAt || new Date().toISOString()
+      })));
+      return snapshots;
+    },
+
+    async publishPredictionConsensus(consensus) {
+      const row = await client.rpc('publish_prediction_consensus', {
+        p_id: consensus.id || crypto.randomUUID(),
+        p_fixture_id: String(consensus.fixtureId),
+        p_phase: consensus.phase,
+        p_payload: consensus.ranking,
+        p_source_snapshot_ids: consensus.sourceSnapshotIds || [],
+        p_generated_at: consensus.generatedAt || new Date().toISOString()
+      });
+      return Array.isArray(row) ? row[0] : row;
+    },
+
+    async reservePredictionGeneration({
+      fixtureId,
+      phase,
+      leaseId,
+      ttlSeconds = 120
+    }) {
+      const row = await client.rpc('reserve_prediction_generation', {
+        p_fixture_id: String(fixtureId),
+        p_phase: phase,
+        p_lease_id: leaseId,
+        p_ttl_seconds: ttlSeconds
+      });
+      return Array.isArray(row) ? row[0] : row;
+    },
+
+    async releasePredictionGeneration(leaseId) {
+      return client.rpc('release_prediction_generation', {
+        p_lease_id: leaseId
+      });
+    },
+
+    async saveWeeklyModelPerformance(settlement) {
+      if (!settlement?.rows?.length) return settlement;
+      await client.upsert(TABLES.modelWeeklyPerformance, settlement.rows.map((row) => ({
+        week_start: settlement.weekStart,
+        model_key: row.modelKey,
+        model_name: row.modelName,
+        samples: row.samples,
+        hits: row.hits,
+        accuracy: row.accuracy,
+        eligible: row.eligible,
+        is_champion: row.isChampion,
+        metrics: { categories: row.categories, minimumSamples: settlement.minimumSamples },
+        updated_at: new Date().toISOString()
+      })), 'week_start,model_key');
+      if (settlement.championModelKey) {
+        await client.updateRows(TABLES.predictionSettings, {
+          champion_model_key: settlement.championModelKey,
+          updated_at: new Date().toISOString()
+        }, { key: 'eq.default' });
+      }
+      return settlement;
+    },
+
+    async readWeeklyModelPerformance(weekStart) {
+      return client.selectRows(TABLES.modelWeeklyPerformance, '*', {
+        week_start: `eq.${weekStart}`,
+        order: 'accuracy.desc'
+      });
+    },
+
+    async readWeeklySettlementData() {
+      const [predictionSnapshots, contexts] = await Promise.all([
+        client.selectAllRows(TABLES.predictionSnapshots, '*', { order: 'generated_at.desc' }),
+        client.selectAllRows(TABLES.matchContexts, 'payload,updated_at', { order: 'updated_at.desc' })
+      ]);
+      return { predictionSnapshots, contexts };
+    },
+
     async upsertMatchContext(context, { ownerId = 'guest' } = {}) {
       await client.upsert(TABLES.matchContexts, [{
         id: context.id,
@@ -231,7 +351,7 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
     },
 
     async readAdminDashboardData() {
-      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests] = await Promise.all([
+      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests, predictionSnapshots, predictionConsensus, weeklyPerformance, predictionSettings] = await Promise.all([
         client.listAuthUsers(),
         client.selectAllRows(TABLES.aiUsageEvents, '*', { order: 'created_at.desc' }),
         client.selectRows(TABLES.systemEvents, '*', { order: 'created_at.desc', limit: '500' }),
@@ -241,9 +361,17 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         client.selectAllRows(TABLES.billingOrders, '*', { order: 'created_at.desc' }),
         client.selectRows(TABLES.billingEntitlements, '*', { limit: '1000' }),
         client.selectRows(TABLES.sharedPredictionResults, 'fixture_id,model_key,model_id,payload,created_at,updated_at', { order: 'updated_at.desc', limit: '5000' }),
-        client.selectAllRows(TABLES.predictionRequests, '*', { order: 'created_at.desc' })
+        client.selectAllRows(TABLES.predictionRequests, '*', { order: 'created_at.desc' }),
+        client.selectAllRows(TABLES.predictionSnapshots, '*', { order: 'generated_at.desc' }),
+        client.selectAllRows(TABLES.predictionConsensus, '*', { order: 'generated_at.desc' }),
+        client.selectAllRows(TABLES.modelWeeklyPerformance, '*', { order: 'week_start.desc' }),
+        client.selectRows(TABLES.predictionSettings, '*', { limit: '10' })
       ]);
-      return { users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests };
+      return {
+        users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements,
+        sharedPredictions, predictionRequests, predictionSnapshots, predictionConsensus,
+        weeklyPerformance, predictionSettings
+      };
     },
 
     async createBillingOrder(order) {
@@ -398,6 +526,14 @@ class SupabaseRestClient {
     return this.request(`${table}?on_conflict=${conflict}`, {
       method: 'POST',
       headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(rows)
+    });
+  }
+
+  async insert(table, rows) {
+    return this.request(table, {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
       body: JSON.stringify(rows)
     });
   }

@@ -400,6 +400,7 @@ function renderAdminDashboard(dashboard) {
   const poolSummary = $('#adminSharedPoolSummary');
   if (poolSummary) poolSummary.textContent = `${formatNumber(dashboard.sharedPool?.totalMatches)} 场比赛，共 ${formatNumber(dashboard.sharedPool?.totalResults)} 个可复用模型结果。`;
   renderAdminSharedPool();
+  renderAdminPredictionArchitecture(dashboard.predictionArchitecture || {});
   adminAccuracyData = dashboard.accuracy || null;
   renderAdminAccuracy();
   const leagueAudit = dashboard.leagueAudit || {};
@@ -474,8 +475,39 @@ function adminModelCost(row = {}) {
   return `${money(row.costUsd)}${row.costEstimatedCalls ? '（估算）' : ''}`;
 }
 
+function renderAdminPredictionArchitecture(data = {}) {
+  const summary = $('#adminArchitectureSummary');
+  const matches = $('#adminArchitectureMatches');
+  const weekly = $('#adminArchitectureWeekly');
+  if (!summary || !matches || !weekly) return;
+  summary.innerHTML = [
+    `早盘周冠军 <strong>${escapeHtml(data.championModelKey || 'qwen')}</strong>`,
+    `临场模型 <strong>${escapeHtml((data.liveModelKeys || []).join(' / '))}</strong>`,
+    `原始快照 <strong>${formatNumber(data.snapshotCount)}</strong>`,
+    `当前公开结果 <strong>${formatNumber(data.currentConsensusCount)}</strong>`
+  ].map((item) => `<span>${item}</span>`).join('');
+  matches.innerHTML = adminTable(
+    ['比赛', 'Fixture ID', '阶段', '公开结果', '原始模型', '快照', '来源', '生成时间'],
+    (data.matches || []).map((row) => [
+      row.matchName, row.fixtureId, row.phase === 'live' ? '临场' : '早盘',
+      row.publicModel || '待生成', (row.rawModels || []).join(' / ') || '无',
+      formatNumber(row.snapshotCount), formatNumber(row.sourceSnapshotCount), formatAdminDate(row.generatedAt)
+    ]),
+    '共享池还没有新架构预测。'
+  );
+  weekly.innerHTML = adminTable(
+    ['周开始', '模型', '样本', '命中', '准确率', '资格', '结果'],
+    (data.latestWeek?.rows || []).map((row) => [
+      data.latestWeek.weekStart, row.modelName || row.modelKey, formatNumber(row.samples),
+      formatNumber(row.hits), percent(row.accuracy), row.eligible ? '有效' : '样本不足',
+      row.isChampion ? '周冠军' : ''
+    ]),
+    '尚未完成每周模型结算。'
+  );
+}
+
 function activateAdminTab(tabName = 'overview') {
-  const selected = ['overview', 'models', 'shared-pool', 'accuracy', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
+  const selected = ['overview', 'models', 'shared-pool', 'architecture', 'accuracy', 'leagues', 'users', 'orders'].includes(tabName) ? tabName : 'overview';
   document.querySelectorAll('[data-admin-tab]').forEach((tab) => {
     const active = tab.dataset.adminTab === selected;
     tab.classList.toggle('active', active);

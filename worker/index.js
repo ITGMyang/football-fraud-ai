@@ -17,7 +17,10 @@ import {
 } from '../src/api-football-cache.js';
 import { parseStakeText, sampleMarkets } from '../src/parser.js';
 import { predictMarket, rankMarkets } from '../src/openrouter.js';
-import { resolveSharedRanking } from '../src/prediction-cache.js';
+import {
+  buildWeeklySettlementFromSnapshots,
+  resolveOptimizedPrediction
+} from '../src/prediction-strategy.js';
 import { createSupabaseStorage } from '../src/supabase-storage.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from '../src/context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
@@ -136,7 +139,12 @@ export default {
       }).catch((error) => {
         console.error(JSON.stringify({ event: 'billing_reconciliation_failed', error: error.message }));
       });
-      await Promise.all([refreshTask, billingTask]);
+      const weeklySettlementTask = settlePreviousWeekIfDue(storage).then((result) => {
+        if (result) console.log(JSON.stringify({ event: 'weekly_model_settlement', ...result }));
+      }).catch((error) => {
+        console.error(JSON.stringify({ event: 'weekly_model_settlement_failed', error: error.message }));
+      });
+      await Promise.all([refreshTask, billingTask, weeklySettlementTask]);
     })());
   }
 };
@@ -580,24 +588,23 @@ async function routeApi(request, env, access) {
         }, status);
       }
     }
-    const requestedModel = predictionAccess.free ? 'Qwen' : (body.model || 'all');
     try {
       const fixtureId = String(context?.matchId || '');
       const shared = fixtureId
-        ? await resolveSharedRanking({
+        ? await resolveOptimizedPrediction({
           fixtureId,
           contextName: context?.matchName || '',
           markets: db.markets,
-          requestedModel,
           env: rankingEnv(env, body),
           fetchImpl: workerFetch,
           storage,
+          rankFn: rankMarkets,
           matchContext: context
         })
         : {
           cacheHit: false,
           freshResults: null,
-          ranking: await rankMarkets(db.markets, requestedModel, rankingEnv(env, body), workerFetch, context)
+          ranking: await rankMarkets(db.markets, body.model || 'all', rankingEnv(env, body), workerFetch, context)
         };
       const ranking = shared.ranking;
       ranking.contextId = context ? contextKey(context) : '';
@@ -606,7 +613,7 @@ async function routeApi(request, env, access) {
         ownerId, requestKind: 'ranking', contextId: ranking.contextId
       });
       const savedRanking = await storage.saveRanking(ranking, {
-        mergeLatest: requestedModel !== 'all',
+        mergeLatest: false,
         ownerId
       });
       if (queuedRequest?.requestId) {
@@ -618,7 +625,9 @@ async function routeApi(request, env, access) {
       return json({
         ranking: savedRanking,
         billing: predictionAccess.billing,
-        model: requestedModel,
+        model: ranking.results?.[0]?.modelName || '',
+        predictionPhase: shared.phase || ranking.predictionPhase || 'early',
+        predictionSource: shared.source || 'direct',
         cached: shared.cacheHit,
         usage: queuedRequest ? { usedToday: queuedRequest.usedToday, dailyLimit: queuedRequest.dailyLimit } : null
       }, 200, headers);
@@ -632,6 +641,54 @@ async function routeApi(request, env, access) {
   }
 
   return json({ error: 'Not found' }, 404);
+}
+
+async function settlePreviousWeekIfDue(storage, now = new Date()) {
+  const parts = shanghaiDateParts(now);
+  if (parts.weekday !== 'Mon' || parts.hour !== 0) return null;
+  const currentWeekStart = parts.date;
+  const previousWeekStart = addDateDays(currentWeekStart, -7);
+  if ((await storage.readWeeklyModelPerformance(previousWeekStart)).length) return null;
+  const data = await storage.readWeeklySettlementData();
+  const settlement = buildWeeklySettlementFromSnapshots({
+    snapshots: data.predictionSnapshots,
+    contexts: data.contexts,
+    weekStart: previousWeekStart,
+    weekEnd: currentWeekStart,
+    minimumSamples: 20
+  });
+  await storage.saveWeeklyModelPerformance(settlement);
+  await storage.recordSystemEvent('weekly_model_settlement', {
+    weekStart: previousWeekStart,
+    championModelKey: settlement.championModelKey,
+    models: settlement.rows.length,
+    samples: settlement.rows.reduce((sum, row) => sum + row.samples, 0)
+  });
+  return settlement;
+}
+
+function shanghaiDateParts(value) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(value).map((part) => [part.type, part.value]));
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    weekday: parts.weekday,
+    hour: Number(parts.hour)
+  };
+}
+
+function addDateDays(date, days) {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
 }
 
 async function refreshScheduleAndRecord(env, storage, fetchImpl) {

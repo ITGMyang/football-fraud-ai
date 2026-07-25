@@ -10,7 +10,15 @@ const initialState = {
   reports: [],
   rankings: [],
   matchContexts: [],
-  sharedPredictionResults: []
+  sharedPredictionResults: [],
+  predictionSnapshots: [],
+  predictionConsensus: [],
+  predictionSettings: {
+    championModelKey: 'qwen',
+    liveModelKeys: ['gpt', 'claude', 'gemini'],
+    modelWeights: {}
+  },
+  predictionGenerationLeases: []
 };
 
 export function readDb({ ownerId = 'legacy' } = {}) {
@@ -113,6 +121,65 @@ export function saveSharedPredictionResults(fixtureId, results = []) {
   }
   writeDb(db);
   return results;
+}
+
+export function readPredictionSettings() {
+  return readAllDb().predictionSettings || initialState.predictionSettings;
+}
+
+export function readCurrentPredictionConsensus(fixtureId) {
+  const db = readAllDb();
+  return [...(db.predictionConsensus || [])]
+    .reverse()
+    .find((row) => row.fixtureId === String(fixtureId) && row.isCurrent) || null;
+}
+
+export function appendPredictionSnapshots(snapshots = []) {
+  if (!snapshots.length) return [];
+  const db = readAllDb();
+  if (!Array.isArray(db.predictionSnapshots)) db.predictionSnapshots = [];
+  db.predictionSnapshots.push(...snapshots);
+  writeDb(db);
+  return snapshots;
+}
+
+export function publishPredictionConsensus(consensus) {
+  const db = readAllDb();
+  if (!Array.isArray(db.predictionConsensus)) db.predictionConsensus = [];
+  for (const row of db.predictionConsensus) {
+    if (row.fixtureId === String(consensus.fixtureId)) row.isCurrent = false;
+  }
+  const saved = { ...consensus, fixtureId: String(consensus.fixtureId), isCurrent: true };
+  db.predictionConsensus.push(saved);
+  writeDb(db);
+  return saved;
+}
+
+export function reservePredictionGeneration({ fixtureId, phase, leaseId, ttlSeconds = 120 }) {
+  const db = readAllDb();
+  const now = Date.now();
+  if (!Array.isArray(db.predictionGenerationLeases)) db.predictionGenerationLeases = [];
+  db.predictionGenerationLeases = db.predictionGenerationLeases.filter((row) => Date.parse(row.expiresAt) > now);
+  const existing = db.predictionGenerationLeases.find((row) => row.fixtureId === String(fixtureId) && row.phase === phase);
+  if (existing) {
+    writeDb(db);
+    return { acquired: false, leaseId: existing.leaseId };
+  }
+  db.predictionGenerationLeases.push({
+    fixtureId: String(fixtureId),
+    phase,
+    leaseId,
+    expiresAt: new Date(now + ttlSeconds * 1000).toISOString()
+  });
+  writeDb(db);
+  return { acquired: true, leaseId };
+}
+
+export function releasePredictionGeneration(leaseId) {
+  const db = readAllDb();
+  db.predictionGenerationLeases = (db.predictionGenerationLeases || []).filter((row) => row.leaseId !== leaseId);
+  writeDb(db);
+  return true;
 }
 
 const resultModelKey = predictionModelKey;

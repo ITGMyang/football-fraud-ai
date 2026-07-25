@@ -152,6 +152,7 @@
           <button class="active" type="button" role="tab" aria-selected="true" data-admin-tab="overview">数据总览</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="models">模型用量</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="shared-pool">共享预测池</button>
+          <button type="button" role="tab" aria-selected="false" data-admin-tab="architecture">预测架构</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="accuracy">全站准确率</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="leagues">赛事数据</button>
           <button type="button" role="tab" aria-selected="false" data-admin-tab="users">用户权限</button>
@@ -180,6 +181,18 @@
             <input id="adminSharedPoolSearch" type="search" placeholder="输入球队、赛事或 Fixture ID">
           </div>
           <div id="adminSharedPool" class="admin-table-wrap"></div>
+        </section>
+
+        <section class="admin-module admin-tab-panel" role="tabpanel" data-admin-panel="architecture" aria-labelledby="adminArchitectureTitle" hidden>
+          <div class="admin-module-head">
+            <div><span>两阶段共享</span><h3 id="adminArchitectureTitle">预测架构与模型快照</h3></div>
+            <small>用户只看到当前公开结果，原始模型输出作为不可变快照保留。</small>
+          </div>
+          <div id="adminArchitectureSummary" class="admin-usage-summary"></div>
+          <div class="admin-subsection-head"><div><span>当前共享池</span><h3>比赛生成状态</h3></div></div>
+          <div id="adminArchitectureMatches" class="admin-table-wrap"></div>
+          <div class="admin-subsection-head"><div><span>每周结算</span><h3>模型表现与周冠军</h3></div></div>
+          <div id="adminArchitectureWeekly" class="admin-table-wrap"></div>
         </section>
 
         <section class="admin-module admin-tab-panel admin-accuracy-panel" role="tabpanel" data-admin-panel="accuracy" aria-labelledby="adminAccuracyTitle" hidden>

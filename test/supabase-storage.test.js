@@ -67,6 +67,56 @@ test('Supabase shared prediction cache is keyed by fixture and model without an 
   assert.match(write.options.body, /"model_key":"qwen"/);
 });
 
+test('Supabase stores immutable prediction snapshots and publishes one current consensus', async () => {
+  const requests = [];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async (url, options = {}) => {
+    const requestUrl = String(url);
+    requests.push({ url: requestUrl, options });
+    if (requestUrl.includes('/prediction_settings?')) {
+      return new Response(JSON.stringify([{ key: 'default', champion_model_key: 'claude', live_model_keys: ['gpt', 'claude', 'gemini'], model_weights: { claude: 1.2 } }]));
+    }
+    if (requestUrl.includes('/prediction_consensus?') && (!options.method || options.method === 'GET')) {
+      return new Response(JSON.stringify([{ id: 'consensus-1', fixture_id: '123', phase: 'live', payload: { results: [] }, is_current: true }]));
+    }
+    return new Response('[]');
+  });
+
+  const settings = await storage.readPredictionSettings();
+  const current = await storage.readCurrentPredictionConsensus('123');
+  await storage.appendPredictionSnapshots([{
+    fixtureId: '123',
+    phase: 'live',
+    modelKey: 'claude',
+    modelId: 'claude-test',
+    result: { modelName: 'Claude' }
+  }]);
+  await storage.publishPredictionConsensus({
+    fixtureId: '123',
+    phase: 'live',
+    ranking: { results: [] },
+    sourceSnapshotIds: ['snapshot-1']
+  });
+  await storage.reservePredictionGeneration({
+    fixtureId: '123',
+    phase: 'live',
+    leaseId: '11111111-1111-4111-8111-111111111111'
+  });
+  await storage.releasePredictionGeneration('11111111-1111-4111-8111-111111111111');
+
+  assert.equal(settings.championModelKey, 'claude');
+  assert.deepEqual(settings.liveModelKeys, ['gpt', 'claude', 'gemini']);
+  assert.equal(current.fixtureId, '123');
+  const snapshotInsert = requests.find(({ url, options }) => url.includes('/prediction_snapshots') && options.method === 'POST');
+  assert.ok(snapshotInsert);
+  assert.equal(JSON.parse(snapshotInsert.options.body)[0].fixture_id, '123');
+  assert.ok(requests.some(({ url, options }) => url.includes('/rpc/publish_prediction_consensus') && options.method === 'POST'));
+  assert.ok(requests.some(({ url }) => url.includes('/rpc/reserve_prediction_generation')));
+  assert.ok(requests.some(({ url }) => url.includes('/rpc/release_prediction_generation')));
+});
+
 test('Supabase schedule cache upserts by competition id', async () => {
   const requests = [];
   const storage = createSupabaseStorage({

@@ -83,6 +83,33 @@ test('counts four correct-score candidates as one match-level prediction', () =>
   assert.equal(analytics.evaluations.filter((row) => row.category === 'score').length, 2);
 });
 
+test('evaluates both-teams-to-score as one independent market', () => {
+  const analytics = buildAnalytics({
+    contexts: [{
+      matchId: 'btts-1',
+      matchName: 'Alpha v Beta',
+      kickoff: '2026-07-24 20:00',
+      actualScore: '2:1'
+    }],
+    rankings: [{
+      id: 'btts-ranking',
+      contextId: 'btts-1',
+      createdAt: '2026-07-24T10:00:00.000Z',
+      results: [{
+        modelName: 'Claude',
+        picks: [],
+        scorePicks: [],
+        bttsPick: { selection: 'Yes', estimatedProbability: 0.66 }
+      }]
+    }]
+  });
+
+  const evaluation = analytics.evaluations.find((row) => row.category === 'btts');
+  assert.equal(evaluation.hit, true);
+  assert.equal(evaluation.selection, 'Yes');
+  assert.equal(analytics.categories.find((row) => row.key === 'btts').accuracy, 1);
+});
+
 test('ignores unfinished contexts without actual score', () => {
   const analytics = buildAnalytics({
     contexts: [{ matchId: 'm2', matchName: 'A v B' }],

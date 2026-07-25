@@ -17,6 +17,10 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
   const schedules = input.schedules || [];
   const sharedPredictions = input.sharedPredictions || [];
   const predictionRequests = input.predictionRequests || [];
+  const predictionSnapshots = input.predictionSnapshots || [];
+  const predictionConsensus = input.predictionConsensus || [];
+  const weeklyPerformance = input.weeklyPerformance || [];
+  const predictionSettings = input.predictionSettings || [];
   const todayUsage = aiUsage.filter((row) => dateKey(row.created_at) === today);
   const availableUsageDates = [...new Set(aiUsage.map((row) => dateKey(row.created_at)).filter(Boolean))].sort().reverse();
   const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(String(options.selectedDate || ''))
@@ -65,6 +69,12 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
     },
     accuracy,
     sharedPool: summarizeSharedPool(sharedPredictions, aiUsage, contexts, schedules),
+    predictionArchitecture: summarizePredictionArchitecture({
+      predictionSnapshots,
+      predictionConsensus,
+      weeklyPerformance,
+      predictionSettings
+    }),
     leagues: leagueSummary.rows,
     leagueAudit: leagueSummary.audit,
     users: {
@@ -84,6 +94,67 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
       planId,
       orderSummaryRows(orders.filter((row) => row.plan_id === planId), users).slice(0, 20)
     ]))
+  };
+}
+
+function summarizePredictionArchitecture({
+  predictionSnapshots,
+  predictionConsensus,
+  weeklyPerformance,
+  predictionSettings
+}) {
+  const settings = predictionSettings.find((row) => row.key === 'default') || predictionSettings[0] || {};
+  const currentConsensus = predictionConsensus.filter((row) => row.is_current ?? row.isCurrent);
+  const fixtureIds = new Set([
+    ...predictionSnapshots.map((row) => String(row.fixture_id || row.fixtureId || '')),
+    ...predictionConsensus.map((row) => String(row.fixture_id || row.fixtureId || ''))
+  ].filter(Boolean));
+  const matches = [...fixtureIds].map((fixtureId) => {
+    const snapshots = predictionSnapshots.filter((row) => String(row.fixture_id || row.fixtureId) === fixtureId);
+    const consensusRows = predictionConsensus
+      .filter((row) => String(row.fixture_id || row.fixtureId) === fixtureId)
+      .sort((a, b) => timestamp(b.generated_at || b.generatedAt) - timestamp(a.generated_at || a.generatedAt));
+    const current = consensusRows.find((row) => row.is_current ?? row.isCurrent) || consensusRows[0] || {};
+    const payload = current.payload || current.ranking || {};
+    return {
+      fixtureId,
+      matchName: payload.contextName || fixtureId,
+      phase: current.phase || '',
+      publicModel: payload.results?.[0]?.modelName || '',
+      rawModels: [...new Set(snapshots.map((row) => row.model_key || row.modelKey).filter(Boolean))],
+      snapshotCount: snapshots.length,
+      consensusCount: consensusRows.length,
+      sourceSnapshotCount: (current.source_snapshot_ids || current.sourceSnapshotIds || []).length,
+      generatedAt: current.generated_at || current.generatedAt || ''
+    };
+  }).sort((a, b) => timestamp(b.generatedAt) - timestamp(a.generatedAt));
+  const weekStarts = [...new Set(weeklyPerformance.map((row) => row.week_start || row.weekStart).filter(Boolean))].sort().reverse();
+  const latestWeekStart = weekStarts[0] || '';
+  const latestRows = weeklyPerformance
+    .filter((row) => (row.week_start || row.weekStart) === latestWeekStart)
+    .map((row) => ({
+      modelKey: row.model_key || row.modelKey,
+      modelName: row.model_name || row.modelName,
+      samples: Number(row.samples) || 0,
+      hits: Number(row.hits) || 0,
+      accuracy: Number(row.accuracy) || 0,
+      eligible: Boolean(row.eligible),
+      isChampion: Boolean(row.is_champion ?? row.isChampion)
+    }))
+    .sort((a, b) => b.accuracy - a.accuracy);
+
+  return {
+    championModelKey: settings.champion_model_key || settings.championModelKey || 'qwen',
+    liveModelKeys: settings.live_model_keys || settings.liveModelKeys || ['gpt', 'claude', 'gemini'],
+    modelWeights: settings.model_weights || settings.modelWeights || {},
+    snapshotCount: predictionSnapshots.length,
+    consensusCount: predictionConsensus.length,
+    currentConsensusCount: currentConsensus.length,
+    matches,
+    latestWeek: {
+      weekStart: latestWeekStart,
+      rows: latestRows
+    }
   };
 }
 

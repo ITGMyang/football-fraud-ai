@@ -20,6 +20,8 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
       }
       const scoreEvaluation = evaluateScorePicks(result.scorePicks, actual, context, ranking, modelName);
       if (scoreEvaluation) evaluations.push(scoreEvaluation);
+      const bttsEvaluation = evaluateBttsPick(result.bttsPick, actual, context, ranking, modelName);
+      if (bttsEvaluation) evaluations.push(bttsEvaluation);
     }
   }
 
@@ -37,6 +39,28 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
       .sort((a, b) => String(b.matchDate).localeCompare(String(a.matchDate)) || String(a.contextName).localeCompare(String(b.contextName)))
       .slice(0, 5000)
   };
+}
+
+function evaluateBttsPick(pick, actual, context, ranking, modelName) {
+  if (!pick) return null;
+  const selection = String(pick.selection || pick.market?.selection || '').trim();
+  const predictsYes = /^(yes|是|双方进球|both teams.*yes)/i.test(selection);
+  const predictsNo = /^(no|否|双方不进球|both teams.*no)/i.test(selection);
+  if (!predictsYes && !predictsNo) return null;
+  const actualYes = actual.homeScore > 0 && actual.awayScore > 0;
+  const hit = predictsYes ? actualYes : !actualYes;
+  return buildEvaluation({
+    context,
+    ranking,
+    modelName,
+    category: 'btts',
+    selection,
+    probability: pick.estimatedProbability,
+    actual,
+    hit,
+    counted: true,
+    outcome: hit ? 'hit' : 'miss'
+  });
 }
 
 export function shouldRefreshForAnalytics(context = {}) {

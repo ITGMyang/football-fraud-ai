@@ -7,7 +7,7 @@ import { fetchApiFootballContext, fetchApiFootballMatches } from './api-football
 import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
 import { predictMarket, rankMarkets } from './openrouter.js';
-import { resolveSharedRanking } from './prediction-cache.js';
+import { resolveOptimizedPrediction } from './prediction-strategy.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from './context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from './evaluation.js';
 import { authConfig } from './auth.js';
@@ -16,11 +16,15 @@ import { shouldHydratePredictionContext } from './prediction-policy.js';
 import { resolvePublicAsset } from './static-assets.js';
 import {
   clearMarkets,
+  appendPredictionSnapshots,
+  publishPredictionConsensus,
   readDb,
-  readSharedPredictionResults,
+  readCurrentPredictionConsensus,
+  readPredictionSettings,
+  releasePredictionGeneration,
+  reservePredictionGeneration,
   saveRanking,
   saveReport,
-  saveSharedPredictionResults,
   upsertMarkets,
   upsertMatchContext
 } from './storage.js';
@@ -236,14 +240,21 @@ async function route(req, res) {
     const requestedModel = body.model || 'all';
     const fixtureId = String(context?.matchId || '');
     const shared = fixtureId
-      ? await resolveSharedRanking({
+      ? await resolveOptimizedPrediction({
         fixtureId,
         contextName: context?.matchName || '',
         markets: db.markets,
-        requestedModel,
         env: rankingEnv(process.env, body),
         fetchImpl: openRouterFetch,
-        storage: { readSharedPredictionResults, saveSharedPredictionResults },
+        storage: {
+          appendPredictionSnapshots,
+          publishPredictionConsensus,
+          readCurrentPredictionConsensus,
+          readPredictionSettings,
+          releasePredictionGeneration,
+          reservePredictionGeneration
+        },
+        rankFn: rankMarkets,
         matchContext: context
       })
       : {
@@ -254,13 +265,18 @@ async function route(req, res) {
     ranking.contextId = context ? contextKey(context) : '';
     ranking.contextName = context?.matchName || '';
     const savedRanking = saveRanking(ranking, {
-      mergeLatest: requestedModel !== 'all',
+      mergeLatest: false,
       ownerId
     });
     const headers = access.consumeGuestPrediction
       ? { 'Set-Cookie': await guestPredictionCookie(process.env, req) }
       : {};
-    return json(res, 200, { ranking: savedRanking, cached: shared.cacheHit }, headers);
+    return json(res, 200, {
+      ranking: savedRanking,
+      cached: shared.cacheHit,
+      predictionPhase: shared.phase || '',
+      predictionSource: shared.source || ''
+    }, headers);
   }
 
   return json(res, 404, { error: 'Not found' });

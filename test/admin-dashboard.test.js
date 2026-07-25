@@ -268,6 +268,7 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(markup, /data-admin-tab="overview"/);
   assert.match(markup, /data-admin-tab="models"/);
   assert.match(markup, /data-admin-tab="shared-pool"/);
+  assert.match(markup, /data-admin-tab="architecture"/);
   assert.match(markup, /data-admin-tab="accuracy"/);
   assert.match(markup, /id="adminAccuracy"/);
   assert.match(markup, /id="adminSharedPool"/);
@@ -295,4 +296,60 @@ test('admin route and dashboard API are wired into the app shell', async () => {
   assert.match(worker, /isAdminUser/);
   assert.doesNotMatch(worker, /access\.role === 'user' && predictionAccess\.billing\.active/);
   assert.match(worker, /planId: predictionAccess\.billing\.planId \|\| 'free'/);
+});
+
+test('admin dashboard summarizes optimized prediction architecture records', () => {
+  const dashboard = buildAdminDashboard({
+    predictionSettings: [{
+      key: 'default',
+      champion_model_key: 'claude',
+      live_model_keys: ['gpt', 'claude', 'gemini'],
+      model_weights: { claude: 1.2 }
+    }],
+    predictionSnapshots: [
+      {
+        id: 'snapshot-1',
+        fixture_id: '123',
+        phase: 'early',
+        model_key: 'claude',
+        payload: { modelName: 'Claude 4.8' },
+        generated_at: '2026-07-25T02:00:00Z'
+      },
+      {
+        id: 'snapshot-2',
+        fixture_id: '123',
+        phase: 'live',
+        model_key: 'gpt',
+        payload: { modelName: 'GPT 5.5' },
+        generated_at: '2026-07-25T10:00:00Z'
+      }
+    ],
+    predictionConsensus: [{
+      id: 'consensus-1',
+      fixture_id: '123',
+      phase: 'live',
+      payload: { contextName: 'Alpha v Beta', results: [{ modelName: 'FutBots Consensus' }] },
+      source_snapshot_ids: ['snapshot-2'],
+      is_current: true,
+      generated_at: '2026-07-25T10:01:00Z'
+    }],
+    weeklyPerformance: [{
+      week_start: '2026-07-20',
+      model_key: 'claude',
+      model_name: 'Claude 4.8',
+      samples: 24,
+      hits: 16,
+      accuracy: 2 / 3,
+      eligible: true,
+      is_champion: true
+    }]
+  }, Date.parse('2026-07-25T12:00:00Z'));
+
+  assert.equal(dashboard.predictionArchitecture.championModelKey, 'claude');
+  assert.deepEqual(dashboard.predictionArchitecture.liveModelKeys, ['gpt', 'claude', 'gemini']);
+  assert.equal(dashboard.predictionArchitecture.snapshotCount, 2);
+  assert.equal(dashboard.predictionArchitecture.currentConsensusCount, 1);
+  assert.equal(dashboard.predictionArchitecture.matches[0].fixtureId, '123');
+  assert.deepEqual(dashboard.predictionArchitecture.matches[0].rawModels, ['claude', 'gpt']);
+  assert.equal(dashboard.predictionArchitecture.latestWeek.rows[0].isChampion, true);
 });
