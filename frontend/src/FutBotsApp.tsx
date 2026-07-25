@@ -1634,12 +1634,8 @@ export default function FutBotsApp() {
 
   const checkout = async (planId: string) => {
     if (!session) {
-<<<<<<< Updated upstream
-      setAuthScreen("login");
-=======
       setPlansOpen(false);
-      setScreen("login");
->>>>>>> Stashed changes
+      setAuthScreen("login");
       throw new Error("Sign in before purchasing a pass.");
     }
     const result = await api("/api/billing/checkout", {
@@ -1670,13 +1666,12 @@ export default function FutBotsApp() {
   };
 
   const navigate = (next: Screen) => {
-<<<<<<< Updated upstream
     if (next === "auth" || next === "login" || next === "signup") {
       setAuthScreen(next);
-=======
+      return;
+    }
     if (next === "plans") {
       setPlansOpen(true);
->>>>>>> Stashed changes
       return;
     }
     if (next === "details" && !selectedRanking) setSelectedMatch(null);
@@ -1702,15 +1697,12 @@ export default function FutBotsApp() {
   return (
     <>
       {screenNode}
-<<<<<<< Updated upstream
       {authScreen === "auth" && (
         <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={closeAuth} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} onClose={closeAuth} />
       )}
       {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
       {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
-=======
       {plansOpen && <Plans access={access} checkout={checkout} onClose={() => setPlansOpen(false)} />}
->>>>>>> Stashed changes
       <PredictionToast visible={toastVisible} onOpen={openToastResult} />
     </>
   );
