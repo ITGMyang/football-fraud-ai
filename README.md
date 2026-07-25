@@ -71,6 +71,17 @@ npm run cf:dry-run
 npm run cf:deploy
 ```
 
+## GitHub 自动部署
+
+`.github/workflows/deploy-cloudflare.yml` 会在每次 push 到 `main` 后自动执行测试、lint、类型检查、生产依赖审计和前端构建。所有检查通过后，才会部署 Cloudflare Worker。
+
+在 GitHub 仓库的 `Settings` -> `Secrets and variables` -> `Actions` 中添加：
+
+- `CLOUDFLARE_ACCOUNT_ID`：Cloudflare Account ID。
+- `CLOUDFLARE_API_TOKEN`：从 Cloudflare 的 `Edit Cloudflare Workers` 模板单独创建，并将账户和域名范围限制到本项目。不要上传本机 Wrangler OAuth 凭证。
+
+配置完成后，可以 push 到 `main` 触发部署，也可以在 GitHub 的 `Actions` -> `Deploy to Cloudflare` 中手动运行。
+
 ## 测试
 
 ```powershell
