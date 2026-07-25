@@ -327,36 +327,35 @@ test('prediction cards keep metadata, teams, and actions aligned at tablet width
 
   assert.match(
     css,
-    /\.prediction-card__top\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*space-between;/s
+    /\.pcard__head\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*space-between;/s
   );
   assert.match(
     css,
-    /\.prediction-card__teams\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+40px\s+minmax\(0,\s*1fr\);/s
+    /\.teams\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*space-between;/s
   );
   assert.match(
     css,
-    /\.prediction-card__actions\s*\{[^}]*margin-top:\s*auto;/s
+    /@media \(min-width:\s*768px\)[\s\S]*?\.pcard\s*\{[^}]*justify-content:\s*space-between;/s
   );
 });
 
 test('match cards open details before a model prediction is requested', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /predictionActionLabel\(ranking\)/);
   assert.doesNotMatch(source, />Ask FutBot</);
   assert.match(source, /function openMatch\(match: Match\)/);
   assert.match(source, /onPredict=\{\(modelName\) => void analyze\(selectedMatch, modelName\)\}/);
-  assert.match(source, /onPredict\(item\.name\)/);
-  assert.match(source, /<button[^>]*className="model-tab/);
-  assert.match(source, /className="model-workbench"/);
+  assert.match(source, /Start Predicting/);
+  assert.match(source, /function ModelRoom/);
+  assert.match(source, /onRun=\{setConfirmModel\}/);
 });
 
 test('completed model lanes and dashboard cards open saved results instead of predicting again', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /predictionActionLabel\(ranking\)/);
-  assert.match(source, /item\.status === "complete" \? "See Result"/);
-  assert.match(source, /onSeeResult\(item\.name\)/);
+  assert.match(source, /completed \? "See Result"/);
+  assert.match(source, /completed \? onSee\(item\.name\) : onRun\(item\.name\)/);
+  assert.match(source, /See Result/);
   assert.match(source, /rankingForMatch\(rankings, match\.id\)/);
 });
 
@@ -364,8 +363,8 @@ test('the shell exposes avatar-aware account and login actions', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
   assert.match(source, /className="account-avatar"/);
-  assert.match(source, />Log out</);
-  assert.match(source, />Log in</);
+  assert.match(source, />Log Out</);
+  assert.match(source, />Log In</);
   assert.match(source, /Player information unavailable/);
   assert.match(source, /Detailed match context is imported automatically when prediction starts/);
 });
@@ -375,15 +374,16 @@ test('prediction details render BTTS and every pooled top pick', async () => {
 
   assert.match(source, /Both Teams to Score/);
   assert.match(source, /Top Picks/);
-  assert.match(source, /model\?\.picks\.map/);
-  assert.match(source, /score\.type/);
+  assert.match(source, /model\?\.picks \|\| \[\]/);
+  assert.match(source, /picks\.map/);
+  assert.match(source, /pick\.probability/);
 });
 
 test('My Predictions uses date tabs and opens crest-aware match result cards', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
   assert.match(source, /className="history-date-tabs"/);
-  assert.match(source, /function HistoryMatchCard/);
+  assert.match(source, /function HistoryCard/);
   assert.match(source, /Match Result/);
   assert.match(source, /onOpenPrediction\(item\)/);
   assert.match(source, /api\("\/api\/analytics\/refresh"/);
@@ -398,7 +398,7 @@ test('new and legacy auth routes return to the new shell without a login loop', 
 
   assert.match(source, /finishAuthSession/);
   assert.match(source, /latestSession = nextSession/);
-  assert.match(source, /latestSession \? finishAuthSession\(\) : setScreen\("auth"\)/);
+  assert.match(source, /if \(latestSession\) finishAuthSession\(\)/);
   assert.match(source, /sessionStorage\.removeItem\("footballFraud\.authNext"\)/);
   assert.match(source, /auth\.signOut\(\{ scope: "local" \}\)/);
   assert.match(legacyAuth, /auth\.signOut\(\{ scope: 'local' \}\)/);

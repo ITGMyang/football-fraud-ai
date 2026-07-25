@@ -994,6 +994,59 @@ input:focus-visible {
   padding: 10px;
 }
 
+.history-date-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.history-date-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.history-date-tabs button {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 108px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
+  background: rgba(13, 53, 33, 0.15);
+  color: #6a927c;
+  text-align: left;
+  transition: background var(--hover), border-color var(--hover), color var(--hover);
+}
+
+.history-date-tabs button[aria-selected="true"] {
+  background: #fff;
+  border-color: #fff;
+  color: #07170e;
+}
+
+.history-date-tabs button span {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-date-tabs button small {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.history-result {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #6a927c;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .pcards--profile {
   padding: 0;
 }
@@ -1573,6 +1626,66 @@ button.plan-option:disabled:hover {
   font-weight: 500;
   color: #6a927c;
   white-space: nowrap;
+}
+
+.d-card--top-picks {
+  height: auto;
+  min-height: 150px;
+  padding: 76px 20px 20px;
+}
+
+.d-card--top-picks .top-picks-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.top-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+.top-pick__head,
+.top-pick__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.top-pick__head span,
+.top-pick__meta,
+.top-pick__risks {
+  color: #6a927c;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.top-pick__head strong {
+  color: #1eb978;
+  font-size: 13px;
+}
+
+.top-pick__label {
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.top-pick__reason {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.top-pick__risks {
+  color: #b58d50;
 }
 
 /* ============ AUTH SCREENS ============ */

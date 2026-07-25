@@ -639,7 +639,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
             <div><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
           </div>
           <button className="see-link" onClick={onSee}>
-            See Predictions
+            See Result
             <img src="/assets/figma-arrow-sm.svg" alt="" />
           </button>
         </div>
@@ -660,7 +660,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
       ) : (
         <button className="glow-btn" onClick={onStart}>
           <img src="/assets/figma-sparkle-black.svg" alt="" />
-          Start Free Analyze
+          Start Predicting
         </button>
       )}
     </article>
@@ -817,6 +817,34 @@ function PicksCard({ match, title, picks, badge, handicap = false }: {
   );
 }
 
+function AllPicksCard({ picks, badge }: { picks: PredictionPick[]; badge: string }) {
+  if (!picks.length) return null;
+  return (
+    <div className="d-card d-card--top-picks g-stroke">
+      <CardChrome title="Top Picks" badge={badge} />
+      <div className="top-picks-list">
+        {picks.map((pick, index) => (
+          <article className="top-pick" key={`${pick.type}-${pick.label}-${index}`}>
+            <div className="top-pick__head">
+              <span>#{index + 1} · {pick.type || "Prediction"}</span>
+              <strong>{pick.probability}%</strong>
+            </div>
+            <p className="top-pick__label">{pick.label}</p>
+            {pick.reason && <p className="top-pick__reason">{pick.reason}</p>}
+            <div className="top-pick__meta">
+              <span>AI Probability {pick.probability}%</span>
+              <span>Confidence {pick.confidence}%</span>
+            </div>
+            {pick.risks?.length > 0 && (
+              <p className="top-pick__risks">Risks: {pick.risks.join(" · ")}</p>
+            )}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PredictModal({ open, match, modelName, freeUser, onClose, onConfirm }: {
   open: boolean;
   match: Match;
@@ -909,7 +937,9 @@ function ModelRoom({ match, ranking, access, analyzing, pendingModel, error, onR
           </div>
         </div>
         <p className="m-card__meta">
-          {match.date}{match.playerInfoAvailable ? " · Player information available" : " · Match context loads when prediction starts"}
+          {match.date}{match.playerInfoAvailable
+            ? " · Player information available"
+            : " · Player information unavailable · Detailed match context is imported automatically when prediction starts"}
         </p>
         {rail.map((item, index) => {
           const completed = item.status === "complete";
@@ -1023,6 +1053,7 @@ function Details({ navigate, match, ranking, showResult, access, analyzing, pend
               {model?.handicap && <PicksCard match={match} title="Asian handicap" picks={[model.handicap]} badge={badge} handicap />}
               {model?.btts && <PicksCard match={match} title="Both Teams to Score" picks={[model.btts]} badge={badge} />}
               {model?.moneyline && <PicksCard match={match} title="Moneyline" picks={[model.moneyline]} badge={badge} />}
+              <AllPicksCard picks={model?.picks || []} badge={badge} />
             </div>
           </>
         )}
@@ -1056,8 +1087,8 @@ function HistoryCard({ item, onOpen }: { item: HistoryMatch; onOpen: () => void 
   return (
     <article className="pcard pcard--done">
       <div className="pcard__head">
-        <span className="pcard__date">{item.date}{item.score ? ` · FT ${item.score}` : ""}</span>
-        {resultBadge}
+        <span className="pcard__date">{item.countryFlag} {item.date}{item.score ? ` · FT ${item.score}` : ""}</span>
+        <span className="history-result"><span>Match Result:</span>{resultBadge}</span>
       </div>
       <div className="pcard__result">
         <div className="stacked-teams">
@@ -1093,7 +1124,11 @@ function Profile({ navigate, access, historyGroups, session, onOpenPrediction, o
   const validUntil = access.billing?.validUntil
     ? ` Access through ${new Date(access.billing.validUntil).toLocaleDateString()}.`
     : "";
-  const historyItems = historyGroups.flatMap((group) => group.matches);
+  const [activeHistoryDate, setActiveHistoryDate] = useState("");
+  const activeHistoryGroup = historyGroups.find((group) => group.date === activeHistoryDate)
+    || historyGroups[0]
+    || null;
+  const historyItems = activeHistoryGroup?.matches || [];
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1158,12 +1193,28 @@ function Profile({ navigate, access, historyGroups, session, onOpenPrediction, o
 
         <div className="predictions profile-predictions">
           <h2>My Predictions</h2>
-          {historyItems.length ? (
-            <div className="pcards pcards--profile">
-              {historyItems.map((item) => (
-                <HistoryCard item={item} key={`${item.id}-${item.ranking.createdAt}`} onOpen={() => onOpenPrediction(item)} />
-              ))}
-            </div>
+          {historyGroups.length ? (
+            <>
+              <div className="history-date-tabs" role="tablist" aria-label="Prediction dates">
+                {historyGroups.map((group) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={group.date === activeHistoryGroup?.date}
+                    key={group.date}
+                    onClick={() => setActiveHistoryDate(group.date)}
+                  >
+                    <span>{group.label}</span>
+                    <small>{group.matches.length} {group.matches.length === 1 ? "match" : "matches"}</small>
+                  </button>
+                ))}
+              </div>
+              <div className="pcards pcards--profile">
+                {historyItems.map((item) => (
+                  <HistoryCard item={item} key={`${item.id}-${item.ranking.createdAt}`} onOpen={() => onOpenPrediction(item)} />
+                ))}
+              </div>
+            </>
           ) : (
             <div className="empty-note">
               <b>No saved predictions yet.</b>
