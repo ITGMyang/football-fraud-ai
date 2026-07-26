@@ -277,6 +277,7 @@ input:focus-visible {
 }
 
 .day {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -287,6 +288,22 @@ input:focus-visible {
   color: rgba(255, 255, 255, 0.4);
   border-radius: 50px;
   transition: color var(--hover);
+}
+
+/* match-available marker under the date number */
+.day__dot {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: #1eb978;
+}
+
+.day--active .day__dot {
+  display: none;
 }
 
 .day:hover {
@@ -540,6 +557,7 @@ input:focus-visible {
 }
 
 .dp-day {
+  position: relative;
   height: 32px;
   border-radius: 50%;
   display: flex;
@@ -549,6 +567,21 @@ input:focus-visible {
   font-weight: 500;
   color: #6a927c;
   transition: background var(--hover), color var(--hover);
+}
+
+.dp-day__dot {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: #1eb978;
+}
+
+.dp-day.is-selected .dp-day__dot {
+  display: none;
 }
 
 .dp-day:hover {

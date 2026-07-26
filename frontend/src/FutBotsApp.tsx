@@ -356,9 +356,10 @@ function HomeHeader({ session, access, navigate }: {
   );
 }
 
-function CalendarSection({ selectedDate, onDate }: {
+function CalendarSection({ selectedDate, onDate, matchDays }: {
   selectedDate: string;
   onDate: (date: string) => void;
+  matchDays: Set<string>;
 }) {
   const stripRef = useRef<HTMLDivElement | null>(null);
   const firstCenter = useRef(true);
@@ -440,6 +441,7 @@ function CalendarSection({ selectedDate, onDate }: {
             }}
           >
             <span>{day.letter}</span><b>{day.num}</b>
+            {matchDays.has(day.iso) && <i className="day__dot" aria-hidden="true" />}
           </button>
         ))}
       </div>
@@ -447,12 +449,13 @@ function CalendarSection({ selectedDate, onDate }: {
   );
 }
 
-function Filters({ selectedDate, onDate, competitions, competition, onCompetition }: {
+function Filters({ selectedDate, onDate, competitions, competition, onCompetition, matchDays }: {
   selectedDate: string;
   onDate: (date: string) => void;
   competitions: string[];
   competition: string;
   onCompetition: (value: string) => void;
+  matchDays: Set<string>;
 }) {
   const [openPanel, setOpenPanel] = useState<"" | "date" | "type">("");
   const [pickerMonth, setPickerMonth] = useState(() => {
@@ -532,6 +535,7 @@ function Filters({ selectedDate, onDate, competitions, competition, onCompetitio
                   }}
                 >
                   {index + 1}
+                  {matchDays.has(iso) && <i className="dp-day__dot" aria-hidden="true" />}
                 </button>
               );
             })}
@@ -683,7 +687,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, pendingMatchId, onOpenMatch, onOpenResult }: {
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, pendingMatchId, onOpenMatch, onOpenResult }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -693,6 +697,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   session: Session | null;
   selectedDate: string;
   onDate: (date: string) => void;
+  matchDays: Set<string>;
   pendingMatchId: string;
   onOpenMatch: (match: Match) => void;
   onOpenResult: (match: Match) => void;
@@ -709,13 +714,14 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
       <div className="home-wrap">
         <div className="home-top">
           <HomeHeader session={session} access={access} navigate={navigate} />
-          <CalendarSection selectedDate={selectedDate} onDate={onDate} />
+          <CalendarSection selectedDate={selectedDate} onDate={onDate} matchDays={matchDays} />
           <Filters
             selectedDate={selectedDate}
             onDate={onDate}
             competitions={competitions}
             competition={competition}
             onCompetition={setCompetition}
+            matchDays={matchDays}
           />
         </div>
         <div className="home-body">
@@ -1408,6 +1414,7 @@ export default function FutBotsApp() {
   const [error, setError] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [matchDays, setMatchDays] = useState<Set<string>>(() => new Set());
 
   const finishAuthSession = useCallback(() => {
     sessionStorage.removeItem("futbots.authNext");
@@ -1490,13 +1497,51 @@ export default function FutBotsApp() {
     setLoading(true); setError("");
     try {
       const schedule = await api(`/api/football/matches?competitionId=all&date=${encodeURIComponent(date)}`);
-      setMatches(normalizeMatches(schedule) as Match[]);
+      const nextMatches = normalizeMatches(schedule) as Match[];
+      setMatches(nextMatches);
+      setMatchDays((current) => {
+        const next = new Set(current);
+        if (nextMatches.length) next.add(date); else next.delete(date);
+        return next;
+      });
     } catch (matchError) {
       setMatches([]);
       setError(userFacingError(matchError, "Match data is unavailable in this environment."));
     } finally {
       setLoading(false);
     }
+  }, [api]);
+
+  /* Probe the schedule-cache window (today -7 … +3) so the calendar can dot
+     dates that have matches. Uses the same read-only matches endpoint. */
+  useEffect(() => {
+    let active = true;
+    const probe = async () => {
+      const base = shanghaiNoon(todayShanghai());
+      const dates = Array.from({ length: 11 }, (_, index) => {
+        const date = new Date(base);
+        date.setDate(base.getDate() + index - 7);
+        return isoInShanghai(date);
+      });
+      const results = await Promise.all(dates.map(async (date) => {
+        try {
+          const schedule = await api(`/api/football/matches?competitionId=all&date=${encodeURIComponent(date)}`);
+          return [date, (normalizeMatches(schedule) as Match[]).length > 0] as const;
+        } catch {
+          return [date, false] as const;
+        }
+      }));
+      if (!active) return;
+      setMatchDays((current) => {
+        const next = new Set(current);
+        for (const [date, hasMatches] of results) {
+          if (hasMatches) next.add(date); else next.delete(date);
+        }
+        return next;
+      });
+    };
+    void probe();
+    return () => { active = false; };
   }, [api]);
 
   useEffect(() => {
@@ -1687,7 +1732,7 @@ export default function FutBotsApp() {
   const closeAuth = () => setAuthScreen("");
 
   const screenNode = screen === "dashboard" ? (
-    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
