@@ -948,34 +948,6 @@ function PicksCard({ match, title, picks, badge, handicap = false }: {
   );
 }
 
-function AllPicksCard({ picks, badge }: { picks: PredictionPick[]; badge: string }) {
-  if (!picks.length) return null;
-  return (
-    <div className="d-card d-card--top-picks g-stroke">
-      <CardChrome title="Top Picks" badge={badge} />
-      <div className="top-picks-list">
-        {picks.map((pick, index) => (
-          <article className="top-pick" key={`${pick.type}-${pick.label}-${index}`}>
-            <div className="top-pick__head">
-              <span>#{index + 1} · {pick.type || "Prediction"}</span>
-              <strong>{pick.probability}%</strong>
-            </div>
-            <p className="top-pick__label">{pick.label}</p>
-            {pick.reason && <p className="top-pick__reason">{pick.reason}</p>}
-            <div className="top-pick__meta">
-              <span>AI Probability {pick.probability}%</span>
-              <span>Confidence {pick.confidence}%</span>
-            </div>
-            {pick.risks?.length > 0 && (
-              <p className="top-pick__risks">Risks: {pick.risks.join(" · ")}</p>
-            )}
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function PredictModal({ open, match, modelName, freeUser, onClose, onConfirm }: {
   open: boolean;
   match: Match;
@@ -1184,7 +1156,6 @@ function Details({ navigate, match, ranking, showResult, access, analyzing, pend
               {model?.handicap && <PicksCard match={match} title="Asian handicap" picks={[model.handicap]} badge={badge} handicap />}
               {model?.btts && <PicksCard match={match} title="Both Teams to Score" picks={[model.btts]} badge={badge} />}
               {model?.moneyline && <PicksCard match={match} title="Moneyline" picks={[model.moneyline]} badge={badge} />}
-              <AllPicksCard picks={model?.picks || []} badge={badge} />
             </div>
           </>
         )}

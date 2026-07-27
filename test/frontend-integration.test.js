@@ -369,14 +369,15 @@ test('the shell exposes avatar-aware account and login actions', async () => {
   assert.match(source, /Detailed match context is imported automatically when prediction starts/);
 });
 
-test('prediction details render BTTS and every pooled top pick', async () => {
+test('prediction details render the market cards without the Top Picks board', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
+  assert.match(source, /title="Total"/);
+  assert.match(source, /title="Asian handicap"/);
   assert.match(source, /Both Teams to Score/);
-  assert.match(source, /Top Picks/);
-  assert.match(source, /model\?\.picks \|\| \[\]/);
-  assert.match(source, /picks\.map/);
-  assert.match(source, /pick\.probability/);
+  assert.match(source, /title="Moneyline"/);
+  assert.match(source, /model\.picks\.filter/);
+  assert.doesNotMatch(source, /Top Picks/);
 });
 
 test('My Predictions uses date tabs and opens crest-aware match result cards', async () => {

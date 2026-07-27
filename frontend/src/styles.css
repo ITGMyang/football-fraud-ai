@@ -1975,66 +1975,6 @@ button.plan-option:disabled:hover {
   white-space: nowrap;
 }
 
-.d-card--top-picks {
-  height: auto;
-  min-height: 150px;
-  padding: 76px 20px 20px;
-}
-
-.d-card--top-picks .top-picks-list {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.top-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-}
-
-.top-pick__head,
-.top-pick__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.top-pick__head span,
-.top-pick__meta,
-.top-pick__risks {
-  color: #6a927c;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.top-pick__head strong {
-  color: #1eb978;
-  font-size: 13px;
-}
-
-.top-pick__label {
-  color: #fff;
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.top-pick__reason {
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.top-pick__risks {
-  color: #b58d50;
-}
-
 /* ============ AUTH SCREENS ============ */
 
 .screen--flags {
