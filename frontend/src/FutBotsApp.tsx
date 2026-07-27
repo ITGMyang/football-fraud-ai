@@ -411,7 +411,7 @@ function CalendarSection({ selectedDate, onDate, matchDays }: {
   matchDays: Set<string>;
 }) {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(selectedDate));
-  const [direction, setDirection] = useState(0);
+  const [anim, setAnim] = useState<"" | "out-fwd" | "out-back" | "in-fwd" | "in-back">("");
   const swipe = useRef({ x: 0, y: 0, down: false, paged: false });
   const window_ = useMemo(() => calendarWindow(), []);
   const windowStart = window_[0].iso;
@@ -428,8 +428,13 @@ function CalendarSection({ selectedDate, onDate, matchDays }: {
 
   const page = (dir: number) => {
     if (dir < 0 ? prevDisabled : nextDisabled) return;
-    setDirection(dir);
-    setWeekStart(offsetIso(weekStart, dir * 7));
+    if (anim.startsWith("out")) return;
+    setAnim(dir > 0 ? "out-fwd" : "out-back");
+    window.setTimeout(() => {
+      setWeekStart((current) => offsetIso(current, dir * 7));
+      setAnim(dir > 0 ? "in-fwd" : "in-back");
+      window.setTimeout(() => setAnim(""), 500);
+    }, 240);
   };
 
   return (
@@ -444,8 +449,7 @@ function CalendarSection({ selectedDate, onDate, matchDays }: {
         </button>
       </div>
       <div
-        className={`calendar__days ${direction > 0 ? "calendar__days--fwd" : direction < 0 ? "calendar__days--back" : ""}`}
-        key={weekStart}
+        className={`calendar__days ${anim ? `calendar__days--${anim}` : ""}`}
         onPointerDown={(event) => {
           swipe.current = { x: event.clientX, y: event.clientY, down: true, paged: false };
         }}

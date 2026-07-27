@@ -242,11 +242,12 @@ input:focus-visible {
 }
 
 .calendar__month span {
-  width: 92px;
+  min-width: 92px;
   font-size: 20px;
   font-weight: 500;
   color: #fff;
   text-align: center;
+  white-space: nowrap;
 }
 
 .cal-nav {
@@ -293,18 +294,42 @@ input:focus-visible {
   -webkit-user-select: none;
 }
 
-.calendar__days--fwd {
-  animation: week-fwd 0.3s var(--ease-out);
+/* two-phase week transition: the old week fades out and slides away,
+   then the new week fades in from the opposite side */
+.calendar__days--out-fwd {
+  animation: week-out-fwd 0.25s ease forwards;
 }
 
-.calendar__days--back {
-  animation: week-back 0.3s var(--ease-out);
+.calendar__days--out-back {
+  animation: week-out-back 0.25s ease forwards;
 }
 
-@keyframes week-fwd {
+.calendar__days--in-fwd {
+  animation: week-in-fwd 0.45s var(--ease-out);
+}
+
+.calendar__days--in-back {
+  animation: week-in-back 0.45s var(--ease-out);
+}
+
+@keyframes week-out-fwd {
+  to {
+    opacity: 0;
+    transform: translateX(-32px);
+  }
+}
+
+@keyframes week-out-back {
+  to {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+}
+
+@keyframes week-in-fwd {
   from {
     opacity: 0;
-    transform: translateX(28px);
+    transform: translateX(32px);
   }
   to {
     opacity: 1;
@@ -312,10 +337,10 @@ input:focus-visible {
   }
 }
 
-@keyframes week-back {
+@keyframes week-in-back {
   from {
     opacity: 0;
-    transform: translateX(-28px);
+    transform: translateX(-32px);
   }
   to {
     opacity: 1;
@@ -350,8 +375,10 @@ input:focus-visible {
   background: #1eb978;
 }
 
+/* the active pill is taller, so pull its dot up to sit on the same
+   baseline as the other days' dots */
 .day--active .day__dot {
-  display: none;
+  bottom: -8px;
 }
 
 .day:hover {
