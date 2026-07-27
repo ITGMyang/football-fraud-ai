@@ -1458,7 +1458,9 @@ function Plans({ access, checkout, onClose }: {
           </button>
           <h2 className="plans-title">Choose Your Plan</h2>
           <button className="icon-btn plans-close" onClick={onClose} aria-label="Close">
-            <span>✕</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </button>
         </header>
 

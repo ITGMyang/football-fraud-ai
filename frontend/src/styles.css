@@ -1677,8 +1677,10 @@ input:focus-visible {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 15px;
-  line-height: 1;
+}
+
+.plans-close svg {
+  display: block;
 }
 
 .plans-titlebar .back-btn {
