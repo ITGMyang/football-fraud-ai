@@ -380,6 +380,23 @@ test('prediction details render the market cards without the Top Picks board', a
   assert.doesNotMatch(source, /Top Picks/);
 });
 
+test('screen changes push browser history so back returns one level', async () => {
+  const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
+
+  assert.match(source, /window\.addEventListener\("popstate", onPopState\)/);
+  assert.match(source, /window\.history\.pushState\(\{ futbots: \{ \.\.\.view, depth: historyDepth\.current \} \}/);
+  assert.match(source, /\}, \[screen, authScreen, plansOpen\]\)/);
+  assert.match(source, /const goBack = useCallback\(/);
+  assert.match(source, /onClick=\{onBack\}/);
+  assert.doesNotMatch(source, /back-btn" onClick=\{\(\) => navigate\("dashboard"\)\}/);
+  // Closing an overlay must pop the entry it pushed, never stack a new one.
+  assert.match(source, /const closeAuth = \(\) => \{\s*if \(historyDepth\.current > 0\) \{\s*window\.history\.back\(\);/);
+  assert.match(source, /const closePlans = \(\) => \{\s*if \(historyDepth\.current > 0\) \{\s*window\.history\.back\(\);/);
+  // Sign-in and sign-out replace the current entry instead of pushing one.
+  assert.match(source, /replaceNextView\.current = true;/);
+  assert.match(source, /window\.history\.replaceState\(window\.history\.state, "", "\/"\)/);
+});
+
 test('My Predictions uses date tabs and opens crest-aware match result cards', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 

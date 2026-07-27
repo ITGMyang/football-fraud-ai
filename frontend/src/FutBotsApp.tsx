@@ -1073,8 +1073,9 @@ function ModelRoom({ match, ranking, access, analyzing, pendingModel, error, onR
   );
 }
 
-function Details({ navigate, match, ranking, showResult, access, analyzing, pendingModel, error, onPredict, onSeeResult }: {
+function Details({ navigate, onBack, match, ranking, showResult, access, analyzing, pendingModel, error, onPredict, onSeeResult }: {
   navigate: (screen: Screen) => void;
+  onBack: () => void;
   match: Match | null;
   ranking: RankingView | null;
   showResult: boolean;
@@ -1099,7 +1100,7 @@ function Details({ navigate, match, ranking, showResult, access, analyzing, pend
     <section className="screen screen--details">
       <div className="details-wrap">
         <header className="details-head">
-          <button className="icon-btn back-btn" onClick={() => navigate("dashboard")} aria-label="Go back">
+          <button className="icon-btn back-btn" onClick={onBack} aria-label="Go back">
             <img src="/assets/figma-icon-back.svg" alt="" />
           </button>
           <h1 className="details-title">
@@ -1206,8 +1207,9 @@ function HistoryCard({ item, onOpen }: { item: HistoryMatch; onOpen: () => void 
   );
 }
 
-function Profile({ navigate, access, historyGroups, session, onOpenPrediction, onSignOut }: {
+function Profile({ navigate, onBack, access, historyGroups, session, onOpenPrediction, onSignOut }: {
   navigate: (screen: Screen) => void;
+  onBack: () => void;
   access: Access;
   historyGroups: HistoryGroup[];
   session: Session | null;
@@ -1245,7 +1247,7 @@ function Profile({ navigate, access, historyGroups, session, onOpenPrediction, o
     <section className="screen screen--profile">
       <div className="profile-wrap">
         <header className="profile-head">
-          <button className="icon-btn back-btn" onClick={() => navigate("dashboard")} aria-label="Go back">
+          <button className="icon-btn back-btn" onClick={onBack} aria-label="Go back">
             <img src="/assets/figma-icon-back.svg" alt="" />
           </button>
           <h1 className="profile-title">Profile</h1>
@@ -1474,6 +1476,21 @@ function todayShanghai() {
   }).format(new Date());
 }
 
+type HistoryView = {
+  screen: Screen;
+  authScreen: "" | "auth" | "login" | "signup";
+  plansOpen: boolean;
+  depth: number;
+};
+
+function viewKey(view: Omit<HistoryView, "depth">) {
+  return `${view.screen}|${view.authScreen}|${view.plansOpen ? "plans" : ""}`;
+}
+
+function readHistoryView(state: unknown) {
+  return (state as { futbots?: HistoryView } | null)?.futbots || null;
+}
+
 export default function FutBotsApp() {
   const [screen, setScreen] = useState<Screen>("dashboard");
   const [authScreen, setAuthScreen] = useState<"" | "auth" | "login" | "signup">(() =>
@@ -1498,16 +1515,72 @@ export default function FutBotsApp() {
   const [matchDays, setMatchDays] = useState<Set<string>>(() => new Set());
   const [nextDays, setNextDays] = useState<{ date: string; matches: Match[] }[]>([]);
 
+  const historyDepth = useRef(0);
+  const historyReady = useRef(false);
+  const restoringView = useRef(false);
+  const replaceNextView = useRef(false);
+  const currentViewKey = useRef("");
+
+  const goBack = useCallback(() => {
+    if (historyDepth.current > 0) {
+      window.history.back();
+      return;
+    }
+    setScreen("dashboard");
+  }, []);
+
   const finishAuthSession = useCallback(() => {
     sessionStorage.removeItem("futbots.authNext");
     sessionStorage.removeItem("footballFraud.authNext");
     if (location.pathname === "/login" || location.pathname.startsWith("/auth/")) {
-      window.history.replaceState({}, "", "/");
+      window.history.replaceState(window.history.state, "", "/");
     }
+    replaceNextView.current = true;
     setError("");
     setAuthScreen("");
     setScreen("dashboard");
   }, []);
+
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      const view = readHistoryView(event.state);
+      const next = {
+        screen: view?.screen || "dashboard",
+        authScreen: view?.authScreen || "" as HistoryView["authScreen"],
+        plansOpen: Boolean(view?.plansOpen)
+      };
+      historyDepth.current = view?.depth || 0;
+      if (viewKey(next) === currentViewKey.current) return;
+      restoringView.current = true;
+      setScreen(next.screen);
+      setAuthScreen(next.authScreen);
+      setPlansOpen(next.plansOpen);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    const key = viewKey({ screen, authScreen, plansOpen });
+    const view: HistoryView = { screen, authScreen, plansOpen, depth: historyDepth.current };
+    currentViewKey.current = key;
+    if (!historyReady.current) {
+      historyReady.current = true;
+      window.history.replaceState({ futbots: view }, "");
+      return;
+    }
+    if (restoringView.current) {
+      restoringView.current = false;
+      return;
+    }
+    if (replaceNextView.current) {
+      replaceNextView.current = false;
+      window.history.replaceState({ futbots: view }, "");
+      return;
+    }
+    historyDepth.current += 1;
+    window.history.pushState({ futbots: { ...view, depth: historyDepth.current } }, "");
+  }, [screen, authScreen, plansOpen]);
 
   const api = useMemo(() => createApiClient({
     getAccessToken: () => session?.access_token || "",
@@ -1805,7 +1878,8 @@ export default function FutBotsApp() {
     }
     sessionStorage.removeItem("futbots.authNext");
     sessionStorage.removeItem("footballFraud.authNext");
-    if (location.pathname !== "/") window.history.replaceState({}, "", "/");
+    if (location.pathname !== "/") window.history.replaceState(window.history.state, "", "/");
+    replaceNextView.current = true;
     setSession(null);
     setAccess({});
     setRankings([]);
@@ -1836,14 +1910,28 @@ export default function FutBotsApp() {
     setScreen("details");
   };
 
-  const closeAuth = () => setAuthScreen("");
+  const closeAuth = () => {
+    if (historyDepth.current > 0) {
+      window.history.back();
+      return;
+    }
+    setAuthScreen("");
+  };
+
+  const closePlans = () => {
+    if (historyDepth.current > 0) {
+      window.history.back();
+      return;
+    }
+    setPlansOpen(false);
+  };
 
   const screenNode = screen === "dashboard" ? (
     <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
   ) : screen === "details" ? (
-    <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
+    <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
-    <Profile navigate={navigate} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
+    <Profile navigate={navigate} onBack={goBack} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
   );
 
   return (
@@ -1854,7 +1942,7 @@ export default function FutBotsApp() {
       )}
       {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
       {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
-      {plansOpen && <Plans access={access} checkout={checkout} onClose={() => setPlansOpen(false)} />}
+      {plansOpen && <Plans access={access} checkout={checkout} onClose={closePlans} />}
       <PredictionToast visible={toastVisible} onOpen={openToastResult} />
     </>
   );
