@@ -376,87 +376,91 @@ function HomeHeader({ session, access, navigate }: {
   );
 }
 
+function offsetIso(iso: string, days: number) {
+  const date = shanghaiNoon(iso);
+  date.setDate(date.getDate() + days);
+  return isoInShanghai(date);
+}
+
+function weekStartOf(iso: string) {
+  return offsetIso(iso, -shanghaiWeekday(shanghaiNoon(iso)));
+}
+
+function weekDays(startIso: string): CalendarDay[] {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = shanghaiNoon(offsetIso(startIso, index));
+    return {
+      iso: isoInShanghai(date),
+      letter: DAY_LETTERS[shanghaiWeekday(date)],
+      num: Number(date.toLocaleDateString("en-US", { day: "numeric", timeZone: "Asia/Shanghai" }))
+    };
+  });
+}
+
+/* week pager: always shows Sunday → Saturday; swiping or the arrows flip a
+   whole week at a time — no free scrolling */
 function CalendarSection({ selectedDate, onDate, matchDays }: {
   selectedDate: string;
   onDate: (date: string) => void;
   matchDays: Set<string>;
 }) {
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const firstCenter = useRef(true);
-  const drag = useRef({ down: false, startX: 0, startScroll: 0, dragged: false });
-  const days = useMemo(() => calendarWindow(), []);
+  const [weekStart, setWeekStart] = useState(() => weekStartOf(selectedDate));
+  const [direction, setDirection] = useState(0);
+  const swipe = useRef({ x: 0, y: 0, down: false, paged: false });
+  const window_ = useMemo(() => calendarWindow(), []);
+  const windowStart = window_[0].iso;
+  const windowEnd = window_[window_.length - 1].iso;
 
   useEffect(() => {
-    if (!firstCenter.current) return;
-    const strip = stripRef.current;
-    if (!strip) return;
-    const active = strip.querySelector<HTMLElement>(`[data-iso="${selectedDate}"]`);
-    if (!active) return;
-    const left = active.getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft;
-    strip.scrollTo({
-      left: left - strip.clientWidth / 2 + active.offsetWidth / 2,
-      behavior: "auto"
-    });
-    firstCenter.current = false;
+    setWeekStart(weekStartOf(selectedDate));
   }, [selectedDate]);
 
-  useEffect(() => {
-    const strip = stripRef.current;
-    if (!strip) return;
-    const onMove = (event: PointerEvent) => {
-      if (!drag.current.down) return;
-      const dx = event.clientX - drag.current.startX;
-      if (Math.abs(dx) > 5) {
-        drag.current.dragged = true;
-        strip.classList.add("is-dragging");
-        strip.scrollLeft = drag.current.startScroll - dx;
-      }
-    };
-    const onUp = () => {
-      drag.current.down = false;
-      strip.classList.remove("is-dragging");
-      window.setTimeout(() => { drag.current.dragged = false; }, 0);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, []);
+  const days = useMemo(() => weekDays(weekStart), [weekStart]);
+  const label = monthLabel(offsetIso(weekStart, 3));
+  const prevDisabled = weekStart <= windowStart;
+  const nextDisabled = offsetIso(weekStart, 6) >= windowEnd;
 
-  const scrollByPage = (direction: number) => {
-    const strip = stripRef.current;
-    if (strip) strip.scrollBy({ left: direction * strip.clientWidth, behavior: "smooth" });
+  const page = (dir: number) => {
+    if (dir < 0 ? prevDisabled : nextDisabled) return;
+    setDirection(dir);
+    setWeekStart(offsetIso(weekStart, dir * 7));
   };
 
   return (
     <div className="calendar">
       <div className="calendar__month">
-        <button className="cal-nav cal-nav--prev" onClick={() => scrollByPage(-1)} aria-label="Previous week">
+        <button className="cal-nav cal-nav--prev" onClick={() => page(-1)} disabled={prevDisabled} aria-label="Previous week">
           <img src="/assets/figma-chevron-a.svg" alt="" />
         </button>
-        <span key={monthLabel(selectedDate)}>{monthLabel(selectedDate)}</span>
-        <button className="cal-nav" onClick={() => scrollByPage(1)} aria-label="Next week">
+        <span key={label}>{label}</span>
+        <button className="cal-nav" onClick={() => page(1)} disabled={nextDisabled} aria-label="Next week">
           <img src="/assets/figma-chevron-b.svg" alt="" />
         </button>
       </div>
       <div
-        className="calendar__days"
-        ref={stripRef}
+        className={`calendar__days ${direction > 0 ? "calendar__days--fwd" : direction < 0 ? "calendar__days--back" : ""}`}
+        key={weekStart}
         onPointerDown={(event) => {
-          const strip = stripRef.current;
-          if (!strip) return;
-          drag.current = { down: true, startX: event.clientX, startScroll: strip.scrollLeft, dragged: false };
+          swipe.current = { x: event.clientX, y: event.clientY, down: true, paged: false };
+        }}
+        onPointerUp={(event) => {
+          if (!swipe.current.down) return;
+          const dx = event.clientX - swipe.current.x;
+          const dy = event.clientY - swipe.current.y;
+          swipe.current.down = false;
+          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+            swipe.current.paged = true;
+            page(dx < 0 ? 1 : -1);
+            window.setTimeout(() => { swipe.current.paged = false; }, 0);
+          }
         }}
       >
         {days.map((day) => (
           <button
             className={`day ${day.iso === selectedDate ? "day--active" : ""}`}
             key={day.iso}
-            data-iso={day.iso}
             onClick={() => {
-              if (drag.current.dragged) return;
+              if (swipe.current.paged) return;
               onDate(day.iso);
             }}
           >
