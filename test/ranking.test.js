@@ -357,9 +357,9 @@ test('ranking parser tolerates fenced JSON and trailing commas', async () => {
     })
   });
 
-  const ranking = await rankMarkets(markets, 'DeepSeek', {
+  const ranking = await rankMarkets(markets, 'Qwen', {
     OPENROUTER_API_KEY: 'test',
-    MODEL_DEEPSEEK: 'deepseek/test'
+    MODEL_QWEN: 'qwen/test'
   }, fakeFetch);
 
   assert.equal(ranking.results[0].error, undefined);

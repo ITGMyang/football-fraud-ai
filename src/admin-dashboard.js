@@ -3,7 +3,7 @@ import { contextKey } from './context-utils.js';
 import { actualResultFromContext, buildAnalytics } from './evaluation.js';
 
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
-const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'deepseek', 'qwen'];
+const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'qwen'];
 
 export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) {
   const today = dateKey(now);

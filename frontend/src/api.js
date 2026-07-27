@@ -12,7 +12,7 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
   hour12: false
 });
 
-const FUTBOT_MODEL_NAMES = ['GPT 5.5', 'Claude 4.8', 'Gemini', 'DeepSeek', 'Qwen 3.7 Max'];
+const FUTBOT_MODEL_NAMES = ['GPT 5.5', 'Claude 4.8', 'Gemini', 'Qwen 3.7 Max'];
 const HISTORY_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Shanghai',
   year: 'numeric',

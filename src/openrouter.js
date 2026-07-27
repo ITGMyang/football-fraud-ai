@@ -9,7 +9,6 @@ export function configuredModels(env = process.env) {
     [cleanEnvValue(env.MODEL_GPT_LABEL) || 'GPT', cleanEnvValue(env.MODEL_GPT), 'GPT', gptProvider(env)],
     [cleanEnvValue(env.MODEL_CLAUDE_LABEL) || 'Claude', cleanEnvValue(env.MODEL_CLAUDE), 'Claude', modelProvider(env, 'CLAUDE', 'apimart')],
     [cleanEnvValue(env.MODEL_GEMINI_LABEL) || 'Gemini', cleanEnvValue(env.MODEL_GEMINI), 'Gemini', modelProvider(env, 'GEMINI', 'openrouter')],
-    [cleanEnvValue(env.MODEL_DEEPSEEK_LABEL) || 'DeepSeek', cleanEnvValue(env.MODEL_DEEPSEEK), 'DeepSeek', modelProvider(env, 'DEEPSEEK', 'openrouter')],
     [cleanEnvValue(env.MODEL_QWEN_LABEL) || 'Qwen', cleanEnvValue(env.MODEL_QWEN), 'Qwen', modelProvider(env, 'QWEN', 'openrouter')]
   ].filter(([, model]) => model);
 }
@@ -30,7 +29,7 @@ export async function predictMarket(market, env = process.env, fetchImpl = fetch
   }
 
   const models = configuredModels(env);
-  if (models.length === 0) throw new Error('没有配置模型，请设置 MODEL_GPT/MODEL_GEMINI/MODEL_DEEPSEEK/MODEL_QWEN');
+  if (models.length === 0) throw new Error('没有配置模型，请设置 MODEL_GPT/MODEL_CLAUDE/MODEL_GEMINI/MODEL_QWEN');
 
   const predictions = [];
   for (const [label, model,, provider] of models) {

@@ -13,7 +13,6 @@ const DEFAULT_ALIASES = Object.freeze({
   gpt: 'GPT',
   claude: 'Claude',
   gemini: 'Gemini',
-  deepseek: 'DeepSeek',
   qwen: 'Qwen'
 });
 

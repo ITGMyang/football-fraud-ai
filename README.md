@@ -57,7 +57,6 @@ npx wrangler secret put SUPABASE_PUBLISHABLE_KEY
 npx wrangler secret put SUPABASE_SECRET_KEY
 npx wrangler secret put MODEL_GPT
 npx wrangler secret put MODEL_GEMINI
-npx wrangler secret put MODEL_DEEPSEEK
 npx wrangler secret put MODEL_QWEN
 ```
 

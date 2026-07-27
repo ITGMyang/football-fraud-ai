@@ -38,7 +38,7 @@ const AI_CONTEXT_DATE_STORAGE_KEY = 'footballFraud.aiContextDate';
 const AI_CONTEXT_RANGE_STORAGE_KEY = 'footballFraud.aiContextRange';
 const AI_CONTEXT_SORT_STORAGE_KEY = 'footballFraud.aiContextSort';
 const BILLING_ORDER_STORAGE_KEY = 'footballFraud.billingOrderId';
-const RANK_MODELS = ['GPT', 'Claude', 'Gemini', 'DeepSeek', 'Qwen'];
+const RANK_MODELS = ['GPT', 'Claude', 'Gemini', 'Qwen'];
 let activeRankingModel = 'all';
 let activeContextId = readStoredActiveContextId();
 let activeAiContextDate = readStoredValue(AI_CONTEXT_DATE_STORAGE_KEY);
@@ -739,7 +739,7 @@ function renderAdminSharedPool() {
     container.innerHTML = `<div class="admin-empty">${escapeHtml(query ? '没有找到匹配的比赛。' : '共享预测池暂时为空。')}</div>`;
     return;
   }
-  const models = [['gpt', 'GPT'], ['claude', 'Claude'], ['gemini', 'Gemini'], ['deepseek', 'DeepSeek'], ['qwen', 'Qwen']];
+  const models = [['gpt', 'GPT'], ['claude', 'Claude'], ['gemini', 'Gemini'], ['qwen', 'Qwen']];
   container.innerHTML = `<table class="admin-table admin-pool-table"><thead><tr><th>比赛</th><th>Fixture ID</th><th>开赛时间</th>${models.map(([, label]) => `<th>${label}</th>`).join('')}<th>最近入池</th></tr></thead><tbody>${rows.map((match) => `<tr><td><strong>${escapeHtml(match.matchName)}</strong><small>${escapeHtml(match.competition || '赛事未知')}</small></td><td>${escapeHtml(match.fixtureId)}</td><td>${escapeHtml(formatAdminDate(match.kickoff))}</td>${models.map(([key]) => `<td>${adminPoolStatus(match.models?.[key])}</td>`).join('')}<td>${escapeHtml(formatAdminDate(match.latestUpdatedAt))}</td></tr>`).join('')}</tbody></table>`;
 }
 
@@ -3129,7 +3129,7 @@ function formatModelError(error) {
     return 'APIMart 401: The API key is invalid or unavailable to the Worker. Update the key and rerun the model.';
   }
   if (/more credits|credits|402|can only afford/i.test(message)) {
-    return 'OpenRouter has insufficient credits or the request is too large. Rerun Qwen or DeepSeek individually, or add credits.';
+    return 'OpenRouter has insufficient credits or the request is too large. Rerun Qwen individually, or add credits.';
   }
   if (/JSON|property value|Unexpected/i.test(message)) {
     return 'The model returned an invalid format. Automatic repair was attempted; rerun the model if the error continues.';

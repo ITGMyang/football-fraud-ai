@@ -131,7 +131,6 @@ test('the model prediction rail exposes every FutBot model while analysis is run
       { name: 'GPT 5.5', status: 'analyzing' },
       { name: 'Claude 4.8', status: 'analyzing' },
       { name: 'Gemini', status: 'analyzing' },
-      { name: 'DeepSeek', status: 'analyzing' },
       { name: 'Qwen 3.7 Max', status: 'analyzing' }
     ]
   );

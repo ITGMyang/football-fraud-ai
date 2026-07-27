@@ -138,7 +138,7 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
   assert.equal(dashboard.sharedPool.totalMatches, 1);
   assert.equal(dashboard.sharedPool.totalResults, 2);
   assert.deepEqual(dashboard.sharedPool.matches[0].models, {
-    gpt: 'early', claude: 'live', gemini: 'failed', deepseek: 'not_requested', qwen: 'not_requested'
+    gpt: 'early', claude: 'live', gemini: 'failed', qwen: 'not_requested'
   });
   assert.equal(dashboard.sharedPool.matches[0].matchName, 'match-1');
 });
@@ -160,7 +160,7 @@ test('shared prediction pool uses schedule match details when a private context 
     kickoff: '2026-07-22T19:00:00Z',
     cachedCount: 1,
     latestUpdatedAt: '2026-07-21T10:00:00Z',
-    models: { gpt: 'not_requested', claude: 'not_requested', gemini: 'not_requested', deepseek: 'not_requested', qwen: 'cached' }
+    models: { gpt: 'not_requested', claude: 'not_requested', gemini: 'not_requested', qwen: 'cached' }
   });
 });
 
