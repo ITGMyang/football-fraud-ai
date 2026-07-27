@@ -258,7 +258,9 @@ input:focus-visible {
   justify-content: flex-start;
   gap: 31px;
   width: 100%;
-  height: 76px;
+  /* 85px leaves exactly an 11px gap (same as the letter→number gap)
+     between the date number and the match-day dot below it */
+  height: 85px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -293,7 +295,8 @@ input:focus-visible {
 /* match-available marker under the date number */
 .day__dot {
   position: absolute;
-  bottom: 0;
+  /* 11px below the date number — the same spacing as letter → number */
+  bottom: -15px;
   left: 50%;
   width: 4px;
   height: 4px;
@@ -829,6 +832,65 @@ input:focus-visible {
   font-weight: 500;
   color: #575f59;
   text-align: center;
+}
+
+/* skeleton loading — placeholders shaped like the real cards */
+.sk {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.09),
+    transparent
+  );
+  animation: sk-shimmer 1.4s var(--ease-out) infinite;
+}
+
+@keyframes sk-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.sk--text {
+  height: 12px;
+}
+
+.sk--circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.sk--btn {
+  width: 100%;
+  height: 56px;
+  border-radius: 31px;
+}
+
+.sk-hero {
+  width: 100%;
+  height: 132px;
+  border-radius: 16px;
+}
+
+.pcard--skeleton {
+  pointer-events: none;
+}
+
+.pcard--skeleton .team {
+  gap: 10px;
 }
 
 /* prediction cards: larger crests and team names */

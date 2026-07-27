@@ -594,6 +594,29 @@ function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
   );
 }
 
+function SkeletonCard() {
+  return (
+    <article className="pcard pcard--skeleton" aria-hidden="true">
+      <div className="pcard__head">
+        <span className="sk sk--text" style={{ width: 118 }} />
+        <span className="sk sk--text" style={{ width: 96 }} />
+      </div>
+      <div className="teams">
+        <div className="team">
+          <span className="sk sk--circle" />
+          <span className="sk sk--text" style={{ width: 72 }} />
+        </div>
+        <span className="sk sk--text" style={{ width: 20 }} />
+        <div className="team">
+          <span className="sk sk--circle" />
+          <span className="sk sk--text" style={{ width: 72 }} />
+        </div>
+      </div>
+      <span className="sk sk--btn" />
+    </article>
+  );
+}
+
 function startingIn(kickoff: string) {
   const time = new Date(kickoff || "").getTime();
   if (!Number.isFinite(time)) return "";
@@ -726,13 +749,16 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
         </div>
         <div className="home-body">
           {error && <p className="app-note app-note--error" role="alert">{error}</p>}
-          {featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onOpenMatch(featured)} />}
+          {loading ? (
+            <span className="sk sk-hero" aria-hidden="true" />
+          ) : (
+            featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onOpenMatch(featured)} />
+          )}
           <div className="predictions">
             <h2>Predictions</h2>
             {loading ? (
-              <div className="analyzing">
-                <img src="/assets/figma-spinner.svg" alt="" />
-                <span>Loading matches...</span>
+              <div className="pcards" aria-hidden="true">
+                {Array.from({ length: 6 }, (_, index) => <SkeletonCard key={index} />)}
               </div>
             ) : visible.length ? (
               <div className="pcards" key={`${selectedDate}-${competition}`}>
