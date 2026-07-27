@@ -258,7 +258,7 @@ input:focus-visible {
   justify-content: flex-start;
   gap: 31px;
   width: 100%;
-  height: 69px;
+  height: 76px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -293,7 +293,7 @@ input:focus-visible {
 /* match-available marker under the date number */
 .day__dot {
   position: absolute;
-  bottom: 1px;
+  bottom: 0;
   left: 50%;
   width: 4px;
   height: 4px;
@@ -571,7 +571,7 @@ input:focus-visible {
 
 .dp-day__dot {
   position: absolute;
-  bottom: 3px;
+  bottom: 1px;
   left: 50%;
   width: 3px;
   height: 3px;
@@ -831,6 +831,22 @@ input:focus-visible {
   text-align: center;
 }
 
+/* prediction cards: larger crests and team names */
+.pcard .team img,
+.pcard .team .team-flag--fallback {
+  width: 44px;
+  height: 44px;
+}
+
+.pcard .team span {
+  font-size: 14px;
+  max-width: 132px;
+}
+
+.pcard .team {
+  width: 132px;
+}
+
 .teams--light > b {
   color: #fff;
 }
@@ -1084,35 +1100,47 @@ input:focus-visible {
   display: none;
 }
 
+/* date tabs — same language as the home calendar strip:
+   dim text by default, soft translucent pill + white text when active */
 .history-date-tabs button {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 2px;
-  min-width: 108px;
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 14px;
-  background: rgba(13, 53, 33, 0.15);
-  color: #6a927c;
-  text-align: left;
-  transition: background var(--hover), border-color var(--hover), color var(--hover);
+  align-items: center;
+  gap: 4px;
+  min-width: 104px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 40px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  transition: background var(--hover), color var(--hover);
+}
+
+.history-date-tabs button:hover {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .history-date-tabs button[aria-selected="true"] {
-  background: #fff;
-  border-color: #fff;
-  color: #07170e;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  animation: day-pill-in 0.35s var(--ease-out);
 }
 
 .history-date-tabs button span {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .history-date-tabs button small {
-  font-size: 10px;
-  opacity: 0.7;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6a927c;
+}
+
+.history-date-tabs button[aria-selected="true"] small {
+  color: #1eb978;
 }
 
 .history-result {
@@ -1243,28 +1271,37 @@ input:focus-visible {
   padding: 16px 30px 0;
 }
 
-.plans-head {
+/* dialog title bar: [back (mobile)] [title] [close] with even spacing */
+.plans-titlebar {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 16px;
 }
 
-/* dialog close button — pinned to the top-right corner */
+.plans-title {
+  flex: 1;
+  min-width: 0;
+  font-family: "Red Hat Display", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .plans-close {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  align-self: flex-end;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: -42px;
   color: #fff;
   font-size: 15px;
   line-height: 1;
 }
 
-.plans-head .back-btn {
+.plans-titlebar .back-btn {
   position: relative;
   left: auto;
   top: auto;
@@ -1813,7 +1850,8 @@ button.plan-option:disabled:hover {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  width: 252px;
+  width: 320px;
+  max-width: 100%;
 }
 
 .auth-hero__ball {
@@ -1824,11 +1862,12 @@ button.plan-option:disabled:hover {
 .auth-hero h1,
 .auth-title {
   font-size: 36px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -1.44px;
   color: #fff;
   text-align: center;
   width: 100%;
+  white-space: nowrap;
 }
 
 .auth-actions {
@@ -1844,16 +1883,16 @@ button.plan-option:disabled:hover {
 .social-button {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   width: 100%;
-  max-width: 300px;
+  max-width: 340px;
   height: 64px;
-  padding: 18px 20px;
+  padding: 18px 22px;
   border: 1px solid #616161;
   border-radius: 48px;
   color: #fff;
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.36px;
   white-space: nowrap;
   text-align: left;
@@ -1903,16 +1942,16 @@ button.plan-option:disabled:hover {
 .field {
   display: block;
   width: 100%;
-  max-width: 300px;
+  max-width: 340px;
   height: 64px;
-  padding: 18px 20px;
+  padding: 18px 22px;
   border: 1px solid #616161;
   border-radius: 48px;
   background: transparent;
   color: #fff;
   font-family: inherit;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.72px;
   outline: none;
   transition: border-color var(--hover), background var(--hover);
@@ -1936,14 +1975,14 @@ button.plan-option:disabled:hover {
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 300px;
+  max-width: 340px;
   height: 64px;
   border: 1px solid #fff;
   border-radius: 48px;
   background: #fff;
   color: #010603;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.72px;
   white-space: nowrap;
   transition: box-shadow var(--hover), transform var(--hover);
@@ -1960,7 +1999,7 @@ button.plan-option:disabled:hover {
 
 .text-link {
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.72px;
   color: #fff;
   white-space: nowrap;
@@ -2597,47 +2636,59 @@ button.plan-option:disabled:hover {
     font-size: 28px;
   }
 
-  /* --- plans: floating dialog over a plain 25% black scrim --- */
+  /* --- plans: floating dialog over a dark scrim --- */
   .screen--plans {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 48px;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.6);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
   }
 
   .screen--plans .plans-wrap {
     min-height: 0;
     max-height: 100%;
-    overflow-y: auto;
-    padding: 28px 30px 0;
+    overflow: hidden;
+    padding: 24px 24px 0;
     border-radius: 28px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: linear-gradient(180deg, #020403 0%, #010603 83.41%);
     box-shadow: 0 40px 120px rgba(0, 0, 0, 0.65);
   }
 
-  .plans-head {
+  /* the plan list scrolls inside the dialog; title bar stays pinned */
+  .screen--plans .plan-options {
+    flex: 1;
+    min-height: 0;
+    margin-bottom: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .screen--plans .plan-options::-webkit-scrollbar {
     display: none;
   }
 
-  .plans-close {
-    top: 12px;
-    margin-bottom: 12px;
+  .plans-back {
+    display: none;
   }
 
   .plans-footer {
     padding: 16px 0 24px;
   }
 
-  /* --- auth: floating dialog over a translucent scrim (page stays visible) --- */
+  /* --- auth: floating dialog over a dark scrim --- */
   .screen--flags,
   .screen--plain {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 40px;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.6);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
   }
 
   .auth-dialog {

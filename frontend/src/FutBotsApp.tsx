@@ -630,9 +630,9 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
       <article className="pcard state-swap">
         {head}
         <div className="teams">
-          <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+          <div className="team"><TeamFlag team={match.teamA} size={44} /><span>{match.teamA.name}</span></div>
           <b>vs.</b>
-          <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+          <div className="team"><TeamFlag team={match.teamB} size={44} /><span>{match.teamB.name}</span></div>
         </div>
         <div className="analyzing">
           <img src="/assets/figma-spinner.svg" alt="" />
@@ -671,9 +671,9 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
     <article className="pcard">
       {head}
       <div className="teams">
-        <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
+        <div className="team"><TeamFlag team={match.teamA} size={44} /><span>{match.teamA.name}</span></div>
         <b>vs.</b>
-        <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+        <div className="team"><TeamFlag team={match.teamB} size={44} /><span>{match.teamB.name}</span></div>
       </div>
       {match.status === "complete" ? (
         <span className="see-link" role="presentation">Predictions closed</span>
@@ -1300,12 +1300,13 @@ function Plans({ access, checkout, onClose }: {
       }}
     >
       <div className="plans-wrap" role="dialog" aria-modal="true" aria-label="Choose your plan">
-        <button className="icon-btn plans-close" onClick={onClose} aria-label="Close">
-          <span>✕</span>
-        </button>
-        <header className="plans-head">
-          <button className="icon-btn back-btn" onClick={onClose} aria-label="Go back">
+        <header className="plans-titlebar">
+          <button className="icon-btn back-btn plans-back" onClick={onClose} aria-label="Go back">
             <img src="/assets/figma-icon-back.svg" alt="" />
+          </button>
+          <h2 className="plans-title">Choose Your Plan</h2>
+          <button className="icon-btn plans-close" onClick={onClose} aria-label="Close">
+            <span>✕</span>
           </button>
         </header>
 
