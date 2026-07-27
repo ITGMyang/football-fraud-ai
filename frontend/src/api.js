@@ -12,7 +12,6 @@ const TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
   hour12: false
 });
 
-const FUTBOT_MODEL_NAMES = ['GPT 5.5', 'Claude 4.8', 'Gemini', 'Qwen 3.7 Max'];
 const HISTORY_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Shanghai',
   year: 'numeric',
@@ -63,13 +62,6 @@ export function hasPlayerInformation(context = {}) {
   ));
 }
 
-export function predictionModelRail(models = [], analyzing = false) {
-  const completed = new Set(models.map((model) => String(model?.name || '')));
-  return FUTBOT_MODEL_NAMES.map((name) => ({
-    name,
-    status: completed.has(name) ? 'complete' : analyzing ? 'analyzing' : 'waiting'
-  }));
-}
 
 export function teamCrestUrl(source = '') {
   const value = String(source || '').trim();

@@ -2484,6 +2484,22 @@ button.plan-option:disabled:hover {
   color: #6a927c;
 }
 
+.m-card__body {
+  padding: 14px 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.m-card__note {
+  padding: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6a927c;
+  text-align: center;
+}
+
 .m-row {
   display: flex;
   align-items: center;
@@ -2558,6 +2574,15 @@ button.plan-option:disabled:hover {
   background: #fff;
   border-color: #fff;
   filter: drop-shadow(0px 0px 20px rgba(255, 255, 255, 0.6));
+}
+
+.m-run--single {
+  justify-content: center;
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .m-run img {

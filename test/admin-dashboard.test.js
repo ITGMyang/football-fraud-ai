@@ -275,6 +275,18 @@ test('the admin console is wired to the dashboard API through its own shell', as
   assert.match(app, /\/api\/backend\/fixtures\//);
   assert.match(app, /setAuthorized\(false\)/);
 
+  // Console copy ships in both languages behind a persisted toggle.
+  const copy = await readFile(new URL('../frontend/src/adminCopy.ts', import.meta.url), 'utf8');
+  assert.match(app, /createTranslator\(language\)/);
+  assert.match(app, /localStorage\.setItem\(LANGUAGE_STORAGE_KEY, language\)/);
+  assert.match(app, /className="a-lang"/);
+  // The toggle's own label is the only Han text allowed outside the copy table.
+  assert.deepEqual([...app.matchAll(/[\u4e00-\u9fff]+/g)].map((entry) => entry[0]), ['中文']);
+  assert.match(copy, /consoleTitle: \['Operations console', '运营后台'\]/);
+  for (const [, en, zh] of copy.matchAll(/^ {2}\w+: \['((?:[^'\\]|\\.)*)', '((?:[^'\\]|\\.)*)'\]/gm)) {
+    assert.ok(en.length > 0 && zh.length > 0, 'every console string needs both languages');
+  }
+
   // Both servers serve the console shell and redirect the retired pages to it.
   for (const source of [worker, server]) {
     assert.match(source, /admin\.html/);

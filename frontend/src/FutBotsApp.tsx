@@ -1,7 +1,7 @@
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
 
-import { accountIdentity, analysisRequestPlan, createApiClient, hasPlayerInformation, normalizeMatches, predictionHistory, predictionModelRail, rankingForMatch, rankingView, teamCrestUrl, userFacingError } from "./api.js";
+import { accountIdentity, analysisRequestPlan, createApiClient, hasPlayerInformation, normalizeMatches, predictionHistory, rankingForMatch, rankingView, teamCrestUrl, userFacingError } from "./api.js";
 
 type Screen = "auth" | "login" | "signup" | "dashboard" | "profile" | "plans" | "details";
 type Team = { name: string; flag: string };
@@ -82,7 +82,6 @@ type AuthConfig = {
   error?: string;
 };
 
-const FREE_MODEL_NAME = "Qwen 3.7 Max";
 
 /* keep Safari's status-bar / overscroll tint in sync with each screen
    (ported from the prototype's SCREEN_TINTS + applyScreenTint) */
@@ -948,10 +947,9 @@ function PicksCard({ match, title, picks, badge, handicap = false }: {
   );
 }
 
-function PredictModal({ open, match, modelName, freeUser, onClose, onConfirm }: {
+function PredictModal({ open, match, freeUser, onClose, onConfirm }: {
   open: boolean;
   match: Match;
-  modelName: string;
   freeUser: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -1008,7 +1006,7 @@ function PredictModal({ open, match, modelName, freeUser, onClose, onConfirm }: 
             <li>Over/Under</li>
             <li>Asian handicap</li>
           </ul>
-          <p>{freeUser ? "Your free prediction will reset tomorrow." : `Powered by ${modelName}.`}</p>
+          <p>{freeUser ? "Your free prediction will reset tomorrow." : "FutBot AI selects the models for this fixture."}</p>
         </div>
         <button className="glow-btn modal__cta" onClick={onConfirm}>Start Now</button>
       </section>
@@ -1016,24 +1014,25 @@ function PredictModal({ open, match, modelName, freeUser, onClose, onConfirm }: 
   );
 }
 
-function ModelRoom({ match, ranking, access, analyzing, pendingModel, error, onRun, onSee }: {
+// One action, not a model menu: the server picks the models itself — this week's
+// champion before kickoff, a three-model blend once lineups land — so offering a
+// per-model button here would only ever have been decorative.
+function ModelRoom({ match, ranking, analyzing, error, onRun, onSee }: {
   match: Match;
   ranking: RankingView | null;
-  access: Access;
   analyzing: boolean;
-  pendingModel: string;
   error: string;
-  onRun: (modelName: string) => void;
-  onSee: (modelName: string) => void;
+  onRun: () => void;
+  onSee: () => void;
 }) {
-  const rail = predictionModelRail(ranking?.models || [], analyzing) as { name: string; status: string }[];
-  const allUnlocked = Boolean(access.billing?.active);
+  const ready = Boolean(ranking?.models?.length);
+  const live = ranking?.models?.[0]?.phase === "live";
   return (
     <div className="d-cards">
       <div className="m-card g-stroke">
         <div className="m-card__head">
           <img className="d-ball" src="/assets/figma-ball-section.svg" alt="" />
-          <p className="d-section">Choose a prediction model</p>
+          <p className="d-section">Prediction</p>
           <div className="ai-badge">
             <img src="/assets/figma-sparkle-badge.svg" alt="" />
             <span>By FutBot AI</span>
@@ -1044,36 +1043,33 @@ function ModelRoom({ match, ranking, access, analyzing, pendingModel, error, onR
             ? " · Player information available"
             : " · Player information unavailable · Detailed match context is imported automatically when prediction starts"}
         </p>
-        {rail.map((item, index) => {
-          const completed = item.status === "complete";
-          const locked = !completed && !allUnlocked && item.name !== FREE_MODEL_NAME;
-          const working = analyzing && item.name === pendingModel;
-          return (
-            <div className="m-row" key={item.name}>
-              <span className="m-row__index">{String(index + 1).padStart(2, "0")}</span>
-              <div className="m-row__name">
-                <b>{item.name}</b>
-                <small>{locked ? "Unlock with an AI Pass" : completed ? "Prediction available" : "Ready for this fixture"}</small>
-              </div>
-              <button
-                className={`m-run ${completed ? "m-run--done" : ""}`}
-                type="button"
-                disabled={analyzing || locked}
-                onClick={() => completed ? onSee(item.name) : onRun(item.name)}
-              >
-                {working && <img src="/assets/figma-spinner.svg" alt="" />}
-                {completed ? "See Result" : working ? "Analyzing" : locked ? "Pass required" : "Predict"}
-              </button>
-            </div>
-          );
-        })}
+        <p className="m-card__body">
+          FutBot AI selects the models for you. Before kickoff the week&rsquo;s most accurate model runs on its
+          own; once confirmed lineups are published within an hour of kickoff, several models run and their
+          probabilities are blended. Every read starts from a statistical model of the two sides&rsquo; scoring
+          records, so the numbers are grounded before any model reasons about them.
+        </p>
+        <button
+          className={`m-run m-run--single ${ready ? "m-run--done" : ""}`}
+          type="button"
+          disabled={analyzing}
+          onClick={() => ready ? onSee() : onRun()}
+        >
+          {analyzing && <img src="/assets/figma-spinner.svg" alt="" />}
+          {ready ? "See Result" : analyzing ? "Analyzing" : "Start Prediction"}
+        </button>
+        {ready && (
+          <p className="m-card__note">
+            {live ? "Blended from several models on confirmed lineups." : "Produced by this week's most accurate model."}
+          </p>
+        )}
       </div>
       {error && <p className="app-note app-note--error" role="alert">{error}</p>}
     </div>
   );
 }
 
-function Details({ navigate, onBack, match, ranking, showResult, access, analyzing, pendingModel, error, onPredict, onSeeResult }: {
+function Details({ navigate, onBack, match, ranking, showResult, access, analyzing, error, onPredict, onSeeResult }: {
   navigate: (screen: Screen) => void;
   onBack: () => void;
   match: Match | null;
@@ -1081,13 +1077,12 @@ function Details({ navigate, onBack, match, ranking, showResult, access, analyzi
   showResult: boolean;
   access: Access;
   analyzing: boolean;
-  pendingModel: string;
   error: string;
-  onPredict: (modelName: string) => void;
+  onPredict: () => void;
   onSeeResult: () => void;
 }) {
   const [activeModelName, setActiveModelName] = useState("");
-  const [confirmModel, setConfirmModel] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   useEffect(() => {
     setActiveModelName(ranking?.models?.[0]?.name || "");
   }, [ranking]);
@@ -1113,13 +1108,11 @@ function Details({ navigate, onBack, match, ranking, showResult, access, analyzi
           <ModelRoom
             match={match}
             ranking={ranking}
-            access={access}
             analyzing={analyzing}
-            pendingModel={pendingModel}
             error={error}
-            onRun={setConfirmModel}
-            onSee={(modelName) => {
-              setActiveModelName(modelName);
+            onRun={() => setConfirmOpen(true)}
+            onSee={() => {
+              setActiveModelName(ranking?.models?.[0]?.name || "");
               onSeeResult();
             }}
           />
@@ -1163,15 +1156,13 @@ function Details({ navigate, onBack, match, ranking, showResult, access, analyzi
       </div>
       {match && (
         <PredictModal
-          open={Boolean(confirmModel)}
+          open={confirmOpen}
           match={match}
-          modelName={confirmModel}
           freeUser={!access.billing?.active}
-          onClose={() => setConfirmModel("")}
+          onClose={() => setConfirmOpen(false)}
           onConfirm={() => {
-            const modelName = confirmModel;
-            setConfirmModel("");
-            onPredict(modelName);
+            setConfirmOpen(false);
+            onPredict();
           }}
         />
       )}
@@ -1506,7 +1497,6 @@ export default function FutBotsApp() {
   const [selectedRanking, setSelectedRanking] = useState<RankingView | null>(null);
   const [showSelectedResult, setShowSelectedResult] = useState(false);
   const [analysisPending, setAnalysisPending] = useState(false);
-  const [pendingModel, setPendingModel] = useState("");
   const [selectedDate, setSelectedDate] = useState(todayShanghai);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1797,7 +1787,6 @@ export default function FutBotsApp() {
     setSelectedRanking(existing);
     setShowSelectedResult(false);
     setAnalysisPending(false);
-    setPendingModel("");
     setScreen("details");
   }
 
@@ -1808,7 +1797,6 @@ export default function FutBotsApp() {
     setSelectedRanking(existing);
     setShowSelectedResult(Boolean(existing));
     setAnalysisPending(false);
-    setPendingModel("");
     setScreen("details");
   }
 
@@ -1818,17 +1806,15 @@ export default function FutBotsApp() {
     setSelectedRanking(item.ranking);
     setShowSelectedResult(true);
     setAnalysisPending(false);
-    setPendingModel("");
     setScreen("details");
   }
 
-  const analyze = async (match: Match | null, modelName: string) => {
+  const analyze = async (match: Match | null) => {
     if (!match) return;
     setError("");
     setAnalysisPending(true);
-    setPendingModel(modelName);
     try {
-      const plan = analysisRequestPlan(Boolean(session), match.id, modelName);
+      const plan = analysisRequestPlan(Boolean(session), match.id);
       let contextId = plan.rankingBody.contextId;
       if (plan.importContext) {
         const imported = await api("/api/import/api-football", {
@@ -1853,7 +1839,6 @@ export default function FutBotsApp() {
       setError(message);
     } finally {
       setAnalysisPending(false);
-      setPendingModel("");
     }
   };
 
@@ -1929,7 +1914,7 @@ export default function FutBotsApp() {
   const screenNode = screen === "dashboard" ? (
     <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
   ) : screen === "details" ? (
-    <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
+    <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} error={error} onPredict={() => void analyze(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
     <Profile navigate={navigate} onBack={goBack} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
   );

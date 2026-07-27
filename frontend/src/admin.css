@@ -328,6 +328,32 @@ code {
   border-color: #1eb978;
 }
 
+/* ---- language toggle ---- */
+
+.a-lang {
+  display: inline-flex;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.a-lang__btn {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #93a99d;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.a-lang__btn.is-active {
+  background: rgba(30, 185, 120, 0.16);
+  color: #4fd79c;
+}
+
+.a-lang__btn:not(.is-active):hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 /* ---- status chips ---- */
 
 .a-status {
@@ -420,6 +446,13 @@ code {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.a-gate__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .a-gate h1 {

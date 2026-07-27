@@ -123,21 +123,16 @@ test('API-Sports team crests use the same-origin production cache', () => {
   assert.equal(teamCrestUrl(''), '');
 });
 
-test('the model prediction rail exposes every FutBot model while analysis is running', () => {
-  assert.equal(typeof frontendApi.predictionModelRail, 'function');
-  assert.deepEqual(
-    frontendApi.predictionModelRail([], true),
-    [
-      { name: 'GPT 5.5', status: 'analyzing' },
-      { name: 'Claude 4.8', status: 'analyzing' },
-      { name: 'Gemini', status: 'analyzing' },
-      { name: 'Qwen 3.7 Max', status: 'analyzing' }
-    ]
-  );
-  assert.deepEqual(
-    frontendApi.predictionModelRail([{ name: 'Qwen 3.7 Max' }], false).at(-1),
-    { name: 'Qwen 3.7 Max', status: 'complete' }
-  );
+test('the match workspace offers one prediction action instead of a model menu', async () => {
+  const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
+
+  // The server picks the models itself, so a per-model button here could only mislead.
+  assert.match(source, /"Start Prediction"/);
+  assert.match(source, /m-run--single/);
+  assert.doesNotMatch(source, /Choose a prediction model/i);
+  assert.doesNotMatch(source, /predictionModelRail/);
+  assert.doesNotMatch(source, /FREE_MODEL_NAME/);
+  assert.equal(frontendApi.predictionModelRail, undefined);
 });
 
 test('account identity uses Google and Telegram profile metadata', () => {
@@ -207,14 +202,14 @@ test('createApiClient attaches the Supabase bearer token and surfaces API errors
   assert.equal(requests[0].options.headers['Content-Type'], 'application/json');
 });
 
-test('analysis targets the model selected in the match workspace', () => {
-  assert.deepEqual(analysisRequestPlan(false, '123', 'Qwen 3.7 Max'), {
+test('analysis asks the server to choose the models', () => {
+  assert.deepEqual(analysisRequestPlan(false, '123'), {
     importContext: false,
-    rankingBody: { matchId: '123', contextId: '123', model: 'Qwen 3.7 Max' }
+    rankingBody: { matchId: '123', contextId: '123', model: 'all' }
   });
-  assert.deepEqual(analysisRequestPlan(true, '123', 'GPT 5.5'), {
+  assert.deepEqual(analysisRequestPlan(true, '123'), {
     importContext: true,
-    rankingBody: { matchId: '123', contextId: '123', model: 'GPT 5.5' }
+    rankingBody: { matchId: '123', contextId: '123', model: 'all' }
   });
 });
 
@@ -346,18 +341,17 @@ test('match cards open details before a model prediction is requested', async ()
 
   assert.doesNotMatch(source, />Ask FutBot</);
   assert.match(source, /function openMatch\(match: Match\)/);
-  assert.match(source, /onPredict=\{\(modelName\) => void analyze\(selectedMatch, modelName\)\}/);
+  assert.match(source, /onPredict=\{\(\) => void analyze\(selectedMatch\)\}/);
   assert.match(source, /Start Predicting/);
   assert.match(source, /function ModelRoom/);
-  assert.match(source, /onRun=\{setConfirmModel\}/);
+  assert.match(source, /onRun=\{\(\) => setConfirmOpen\(true\)\}/);
 });
 
 test('completed model lanes and dashboard cards open saved results instead of predicting again', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
-  assert.match(source, /completed \? "See Result"/);
-  assert.match(source, /completed \? onSee\(item\.name\) : onRun\(item\.name\)/);
-  assert.match(source, /See Result/);
+  assert.match(source, /ready \? "See Result"/);
+  assert.match(source, /ready \? onSee\(\) : onRun\(\)/);
   assert.match(source, /rankingForMatch\(rankings, match\.id\)/);
 });
 
