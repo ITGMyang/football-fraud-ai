@@ -743,8 +743,8 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
       {match.status === "complete" ? (
         <span className="see-link" role="presentation">Predictions closed</span>
       ) : (
-        <button className="glow-btn" onClick={onStart}>
-          <img src="/assets/figma-sparkle-black.svg" alt="" />
+        <button className="glow-btn glow-btn--dark" onClick={onStart}>
+          <img src="/assets/figma-sparkle-white.svg" alt="" />
           Start Predicting
         </button>
       )}
