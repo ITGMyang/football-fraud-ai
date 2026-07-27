@@ -26,7 +26,7 @@ import { authConfig } from '../src/auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from '../src/guest-access.js';
 import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.js';
 import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
-import { buildAdminDashboard } from '../src/admin-dashboard.js';
+import { buildAdminDashboard, summarizeDayAccuracy } from '../src/admin-dashboard.js';
 import { checkModels } from '../src/model-check.js';
 import { isAdminUser } from '../src/auth.js';
 import {
@@ -295,6 +295,12 @@ async function routeApi(request, env, access) {
   if (request.method === 'GET' && url.pathname === '/api/analytics') {
     const db = await storage.readDb({ ownerId });
     return json({ analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/analytics/day') {
+    const date = url.searchParams.get('date') || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ error: 'A date query (YYYY-MM-DD) is required' }, 400);
+    const source = await storage.readAccuracySource();
+    return json({ day: summarizeDayAccuracy(source.rankings, source.contexts, date) });
   }
   if (request.method === 'GET' && url.pathname === '/api/backend/schedules') {
     if (access.role !== 'user') return json({ error: 'Sign in to view the data console' }, 401);

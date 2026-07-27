@@ -615,3 +615,26 @@ function sum(rows, valueFn) {
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 1000000) / 1000000;
 }
+
+/* Public read-only aggregate: the platform's prediction accuracy for one
+   match day (Shanghai time). Exposes only counts — no user or billing data. */
+export function summarizeDayAccuracy(rankingRows, contextRows, date) {
+  const site = summarizeSiteAccuracy(rankingRows, contextRows);
+  const dayRows = site.evaluations.filter((row) => (
+    row.counted && shanghaiDateOf(row.kickoff || row.matchDate) === date
+  ));
+  const hits = dayRows.filter((row) => row.hit).length;
+  return {
+    date,
+    hits,
+    total: dayRows.length,
+    accuracy: dayRows.length ? hits / dayRows.length : 0,
+    matches: new Set(dayRows.map((row) => String(row.contextId || ''))).size
+  };
+}
+
+function shanghaiDateOf(value) {
+  const parsed = new Date(value || '');
+  if (Number.isNaN(parsed.getTime())) return String(value || '').slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(parsed);
+}

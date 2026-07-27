@@ -9,6 +9,7 @@ import { resolveOptimizedPrediction } from './prediction-strategy.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from './context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from './evaluation.js';
 import { authConfig } from './auth.js';
+import { summarizeDayAccuracy } from './admin-dashboard.js';
 import { authorizeApiRequest, guestPredictionCookie } from './guest-access.js';
 import { shouldHydratePredictionContext } from './prediction-policy.js';
 import { resolvePublicAsset } from './static-assets.js';
@@ -100,6 +101,12 @@ async function route(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/analytics') {
     const db = readDb({ ownerId });
     return json(res, 200, { analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/analytics/day') {
+    const date = url.searchParams.get('date') || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json(res, 400, { error: 'A date query (YYYY-MM-DD) is required' });
+    const db = readDb({ ownerId });
+    return json(res, 200, { day: summarizeDayAccuracy(db.rankings || [], db.matchContexts || [], date) });
   }
   if (req.method === 'GET' && url.pathname === '/api/backend/schedules') {
     if (access.role !== 'user') return json(res, 401, { error: 'Sign in to view the data console' });

@@ -350,6 +350,16 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       }, { id: `eq.${requestId}` });
     },
 
+    /* Minimal read for the public day-accuracy aggregate: rankings and
+       match contexts only — no users, orders, or billing data. */
+    async readAccuracySource() {
+      const [rankings, contexts] = await Promise.all([
+        client.selectAllRows(TABLES.rankings, 'payload,created_at', { order: 'created_at.desc' }),
+        client.selectAllRows(TABLES.matchContexts, 'payload,created_at,updated_at', { order: 'updated_at.desc' })
+      ]);
+      return { rankings, contexts };
+    },
+
     async readAdminDashboardData() {
       const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests, predictionSnapshots, predictionConsensus, weeklyPerformance, predictionSettings] = await Promise.all([
         client.listAuthUsers(),

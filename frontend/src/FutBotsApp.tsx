@@ -81,6 +81,13 @@ type AuthConfig = {
   telegramEnabled?: boolean;
   error?: string;
 };
+type DayAccuracy = {
+  date: string;
+  hits: number;
+  total: number;
+  accuracy: number;
+  matches: number;
+};
 
 
 /* keep Safari's status-bar / overscroll tint in sync with each screen
@@ -762,7 +769,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDays, pendingMatchId, onStartPrediction, onOpenResult }: {
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDays, dayAccuracy, pendingMatchId, onStartPrediction, onOpenResult }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -774,6 +781,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   onDate: (date: string) => void;
   matchDays: Set<string>;
   nextDays: { date: string; matches: Match[] }[];
+  dayAccuracy: DayAccuracy | null;
   pendingMatchId: string;
   onStartPrediction: (match: Match) => void;
   onOpenResult: (match: Match) => void;
@@ -809,6 +817,24 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
           {error && <p className="app-note app-note--error" role="alert">{error}</p>}
           <div className="predictions">
             <h2>Predictions</h2>
+            {dayAccuracy && (
+              <section className="day-accuracy" aria-label="Prediction accuracy for this day">
+                <div
+                  className="day-accuracy__ring"
+                  style={{ "--pct": Math.round(dayAccuracy.accuracy * 100) } as React.CSSProperties}
+                >
+                  <b>{Math.round(dayAccuracy.accuracy * 100)}%</b>
+                </div>
+                <div className="day-accuracy__meta">
+                  <span className="day-accuracy__eyebrow">Day Accuracy</span>
+                  <h3>{nextDayLabel(dayAccuracy.date)} results are in</h3>
+                  <p>
+                    {dayAccuracy.hits} of {dayAccuracy.total} predictions hit
+                    {" · "}{dayAccuracy.matches} {dayAccuracy.matches === 1 ? "match" : "matches"}
+                  </p>
+                </div>
+              </section>
+            )}
             {loading ? (
               <div className="pcards" aria-hidden="true">
                 {Array.from({ length: 6 }, (_, index) => <SkeletonCard key={index} />)}
@@ -1495,6 +1521,7 @@ export default function FutBotsApp() {
   const [confirmMatch, setConfirmMatch] = useState<Match | null>(null);
   const [matchDays, setMatchDays] = useState<Set<string>>(() => new Set());
   const [nextDays, setNextDays] = useState<{ date: string; matches: Match[] }[]>([]);
+  const [dayAccuracy, setDayAccuracy] = useState<DayAccuracy | null>(null);
 
   const historyDepth = useRef(0);
   const historyReady = useRef(false);
@@ -1670,6 +1697,24 @@ export default function FutBotsApp() {
     void fetchNextDays();
     return () => { active = false; };
   }, [api, loading, matches, matchDays, selectedDate]);
+
+  /* Once a match day is over, load the platform's accuracy for that day so
+     the dashboard can show it above the results. */
+  useEffect(() => {
+    let active = true;
+    setDayAccuracy(null);
+    if (selectedDate >= todayShanghai()) return;
+    const loadDayAccuracy = async () => {
+      try {
+        const data = await api(`/api/analytics/day?date=${encodeURIComponent(selectedDate)}`);
+        if (active && data.day?.total) setDayAccuracy(data.day as DayAccuracy);
+      } catch {
+        /* informational only */
+      }
+    };
+    void loadDayAccuracy();
+    return () => { active = false; };
+  }, [api, selectedDate]);
 
   /* Probe the schedule-cache window (today -7 … +3) so the calendar can dot
      dates that have matches. Uses the same read-only matches endpoint. */
@@ -1907,7 +1952,7 @@ export default function FutBotsApp() {
   };
 
   const screenNode = screen === "dashboard" ? (
-    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} dayAccuracy={dayAccuracy} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} analyzing={analysisPending} error={error} onPredict={() => selectedMatch && startPrediction(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
