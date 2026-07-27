@@ -510,7 +510,7 @@ function Filters({ selectedDate, onDate, competitions, competition, onCompetitio
   return (
     <div className="filters">
       <div className={`filter ${openPanel === "date" ? "is-open" : ""}`}>
-        <span>Data</span>
+        <span>Date</span>
         <button
           className="filter__control g-stroke"
           onClick={() => setOpenPanel(openPanel === "date" ? "" : "date")}
