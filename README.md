@@ -81,6 +81,19 @@ npm run cf:deploy
 
 配置完成后，可以 push 到 `main` 触发部署，也可以在 GitHub 的 `Actions` -> `Deploy to Cloudflare` 中手动运行。
 
+## 运营后台
+
+登录后访问 `/admin`，管理员账号才能读取数据。旧的 `/analytics`、`/backend`、`/data`、`/history` 已经合并进 `/admin`，访问会 301 跳转过去。
+
+后台分成六个标签页：
+
+- **Overview**：当天 API-Football 配额、模型调用与花费、预测队列、定时任务状态、收入与用户概览。
+- **Data Console**：Supabase 里的 API-Football 赛程缓存，可按赛事、球队、赔率状态过滤。点 Inspect 会实时拉一次该场比赛的完整 context，并列出每个 API 端点到底抓到没有。
+- **Models**：按天和累计的 token 与花费，区分「服务商回传」和「本地估算」两种成本来源。
+- **Predictions**：共享预测池的命中情况、每场比赛的快照与共识、每周模型结算和冠军模型。
+- **Accuracy**：赛后结算的准确率，按模型和玩法拆分。
+- **Accounts**：用户、套餐权益和订单。
+
 ## 测试
 
 ```powershell

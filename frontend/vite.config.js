@@ -10,10 +10,16 @@ export default defineConfig({
     emptyOutDir: false,
     assetsDir: 'build',
     rollupOptions: {
+      // Two shells: the public app at / and the operations console at /admin.
+      // Shared dependencies are hoisted into a chunk both HTML files load.
+      input: {
+        app: fileURLToPath(new URL('./index.html', import.meta.url)),
+        admin: fileURLToPath(new URL('./admin.html', import.meta.url))
+      },
       output: {
-        entryFileNames: 'build/app-[hash].js',
+        entryFileNames: 'build/[name]-[hash].js',
         chunkFileNames: 'build/chunk-[name]-[hash].js',
-        assetFileNames: 'build/app-[hash].[ext]'
+        assetFileNames: 'build/[name]-[hash].[ext]'
       }
     }
   },

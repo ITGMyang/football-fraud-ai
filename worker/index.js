@@ -1,4 +1,3 @@
-import { buildMarket } from '../src/domain.js';
 import {
   fetchApiFootballContext,
   fetchApiFootballMatches,
@@ -15,8 +14,7 @@ import {
   mergeScheduleDate,
   refreshApiFootballScheduleCache
 } from '../src/api-football-cache.js';
-import { parseStakeText, sampleMarkets } from '../src/parser.js';
-import { predictMarket, rankMarkets } from '../src/openrouter.js';
+import { rankMarkets } from '../src/openrouter.js';
 import {
   buildWeeklySettlementFromSnapshots,
   resolveOptimizedPrediction
@@ -49,9 +47,9 @@ const APP_SHELL_ROUTES = new Set([
   '/login'
 ]);
 
-const LEGACY_SHELL_ROUTES = new Set([
+// The data console, analytics and history pages were folded into /admin.
+const RETIRED_CONSOLE_ROUTES = new Set([
   '/analytics',
-  '/admin',
   '/backend',
   '/data',
   '/history'
@@ -92,7 +90,6 @@ export default {
         await createSupabaseStorage(env, workerFetch).recordSystemEvent('api_football_refresh', result);
         return json(result);
       }
-      if (request.method === 'OPTIONS' && url.pathname === '/api/import/chrome') return corsJson({}, 204);
       let access = null;
       if (url.pathname.startsWith('/api/')) {
         access = await authorizeApiRequest(request, env, fetch);
@@ -100,8 +97,11 @@ export default {
       }
       const apiResponse = await routeApi(request, env, access);
       if (apiResponse) return apiResponse;
-      if (request.method === 'GET' && LEGACY_SHELL_ROUTES.has(url.pathname)) {
-        const shellResponse = await env.ASSETS.fetch(new Request(new URL('/legacy.html', url.origin), request));
+      if (request.method === 'GET' && RETIRED_CONSOLE_ROUTES.has(url.pathname)) {
+        return Response.redirect(new URL('/admin', url.origin).toString(), 301);
+      }
+      if (request.method === 'GET' && url.pathname === '/admin') {
+        const shellResponse = await env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
         const headers = new Headers(shellResponse.headers);
         headers.set('Cache-Control', 'no-cache');
         return new Response(shellResponse.body, { status: shellResponse.status, headers });
@@ -276,12 +276,6 @@ async function routeApi(request, env, access) {
       billing: billingAccess(await storage.readBillingEntitlement(ownerId))
     });
   }
-  if (request.method === 'GET' && url.pathname === '/api/markets') {
-    return json({ markets: (await storage.readDb({ ownerId })).markets });
-  }
-  if (request.method === 'GET' && url.pathname === '/api/reports') {
-    return json({ reports: (await storage.readDb({ ownerId })).reports });
-  }
   if (request.method === 'GET' && url.pathname === '/api/rankings') {
     return json({ rankings: (await storage.readDb({ ownerId })).rankings || [] });
   }
@@ -431,40 +425,6 @@ async function routeApi(request, env, access) {
     return json({ ...await visibleMatchResponse(cached, date, access, storage), cacheStatus: 'ready' });
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/markets/clear') {
-    await storage.clearMarkets({ ownerId });
-    return json({ ok: true });
-  }
-
-  const marketMatch = url.pathname.match(/^\/api\/markets\/([^/]+)$/);
-  if (request.method === 'GET' && marketMatch) {
-    const id = decodeURIComponent(marketMatch[1]);
-    const market = (await storage.readDb({ ownerId })).markets.find((item) => item.id === id);
-    if (!market) return json({ error: 'Market not found' }, 404);
-    return json({ market });
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/sample') {
-    const markets = await storage.upsertMarkets(sampleMarkets('sample://cloudflare'), { ownerId });
-    return json({ markets });
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/import/text') {
-    const body = await request.json();
-    const markets = await storage.upsertMarkets(parseStakeText(body.text, body.sourceUrl), { ownerId });
-    return json({ markets });
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/import/chrome') {
-    const body = await request.json();
-    const markets = await storage.upsertMarkets(parseStakeText(body.text, body.sourceUrl), { ownerId });
-    return corsJson({ imported: markets.length, markets });
-  }
-
-  if (request.method === 'OPTIONS' && url.pathname === '/api/import/chrome') {
-    return corsJson({}, 204);
-  }
-
   if (request.method === 'POST' && url.pathname === '/api/import/api-football') {
     const body = await request.json();
     const fixtureId = String(body.fixtureId || body.matchId || '').trim();
@@ -485,55 +445,6 @@ async function routeApi(request, env, access) {
     const body = await request.json();
     const context = await storage.upsertMatchContext(await fetchApiFootballContext(body.fixtureId || body.matchId || body.sourceUrl, apiFootballContextOptions(env, storage), workerFetch), { ownerId });
     return json({ context, refreshed: true });
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/markets') {
-    const market = buildMarket(await request.json());
-    await storage.upsertMarkets([market], { ownerId });
-    return json({ market });
-  }
-
-  const predictMatch = url.pathname.match(/^\/api\/predict\/([^/]+)$/);
-  if (request.method === 'POST' && predictMatch) {
-    const id = decodeURIComponent(predictMatch[1]);
-    const db = await storage.readDb({ ownerId });
-    const market = db.markets.find((item) => item.id === id);
-    if (!market) return json({ error: 'Market not found' }, 404);
-    const context = (db.matchContexts || []).find((item) => item.matchName === market.matchName) || null;
-    if (!context) return json({ error: 'Import the API-Football match before requesting a prediction.', code: 'MATCH_CONTEXT_REQUIRED' }, 400);
-    const predictionAccess = await reservePredictionAccess(access, storage, ownerId);
-    if (!predictionAccess.ok) return json({ error: predictionAccess.error, code: predictionAccess.code }, 402);
-    const fixtureValidation = validatePredictionFixture(context, predictionAccess.billing);
-    if (!fixtureValidation.ok) {
-      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
-      return json({ error: fixtureValidation.error, code: fixtureValidation.code }, 403);
-    }
-    const queuedRequest = access.role === 'user'
-      ? await storage.reservePredictionRequest({
-        ownerId,
-        fixtureId: String(context.matchId || contextKey(context)),
-        planId: predictionAccess.billing.planId || 'free',
-        dailyLimit: predictionDailyLimit(predictionAccess.billing.planId),
-        cooldownSeconds: 90
-      })
-      : null;
-    if (queuedRequest && !queuedRequest.ok) {
-      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
-      return json({ error: predictionQueueError(queuedRequest), code: queuedRequest.code, retryAfterSeconds: queuedRequest.retryAfterSeconds || 0 }, queuedRequest.code === 'DAILY_PREDICTION_LIMIT' ? 402 : 429);
-    }
-    try {
-      const report = await predictMarket(market, env, workerFetch);
-      await recordAiUsage(storage, report.predictions, {
-        ownerId, requestKind: 'market', contextId: market.id
-      });
-      await storage.saveReport(report, { ownerId });
-      if (queuedRequest?.requestId) await storage.completePredictionRequest(queuedRequest.requestId, { status: 'success' }).catch(() => null);
-      return json({ report, billing: predictionAccess.billing, usage: queuedRequest ? { usedToday: queuedRequest.usedToday, dailyLimit: queuedRequest.dailyLimit } : null });
-    } catch (error) {
-      if (queuedRequest?.requestId) await storage.completePredictionRequest(queuedRequest.requestId, { status: 'error', errorMessage: error.message }).catch(() => null);
-      if (predictionAccess.release) await storage.releaseFreePrediction(ownerId).catch(() => null);
-      throw error;
-    }
   }
 
   if (request.method === 'POST' && url.pathname === '/api/rankings') {
@@ -842,14 +753,3 @@ function json(body, status = 200, headers = {}) {
   });
 }
 
-function corsJson(body, status = 200) {
-  return new Response(status === 204 ? '' : JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    }
-  });
-}

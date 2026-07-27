@@ -306,19 +306,22 @@ test('completed account predictions resolve to a See Result action by fixture', 
   assert.equal(frontendApi.predictionActionLabel(null), 'Start Predicting');
 });
 
-test('new FutBots shell coexists with the legacy data and admin consoles', async () => {
-  await access(new URL('../public/legacy.html', import.meta.url));
+test('the app shell and the admin console are the only two served shells', async () => {
+  await access(new URL('../public/admin.html', import.meta.url));
+  await access(new URL('../public/index.html', import.meta.url));
   const [worker, server] = await Promise.all([
     readFile(new URL('../worker/index.js', import.meta.url), 'utf8'),
     readFile(new URL('../src/server.js', import.meta.url), 'utf8')
   ]);
 
-  assert.match(worker, /LEGACY_SHELL_ROUTES/);
-  assert.match(worker, /'\/legacy\.html'/);
-  assert.match(worker, /team-crests/);
-  assert.match(server, /LEGACY_SHELL_ROUTES/);
-  assert.match(server, /'legacy\.html'/);
-  assert.match(server, /team-crests/);
+  for (const source of [worker, server]) {
+    assert.match(source, /APP_SHELL_ROUTES/);
+    assert.match(source, /admin\.html/);
+    assert.match(source, /team-crests/);
+    // The retired consoles redirect rather than serving a second, stale shell.
+    assert.match(source, /RETIRED_CONSOLE_ROUTES/);
+    assert.doesNotMatch(source, /legacy/i);
+  }
 });
 
 test('prediction cards keep metadata, teams, and actions aligned at tablet widths', async () => {
@@ -407,24 +410,22 @@ test('My Predictions uses date tabs and opens crest-aware match result cards', a
   assert.match(source, /api\("\/api\/contexts"/);
 });
 
-test('new and legacy auth routes return to the new shell without a login loop', async () => {
-  const [source, legacyAuth] = await Promise.all([
-    readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8'),
-    readFile(new URL('../public/auth-client.js', import.meta.url), 'utf8')
-  ]);
+test('auth routes return to the new shell without a login loop', async () => {
+  const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
   assert.match(source, /finishAuthSession/);
   assert.match(source, /latestSession = nextSession/);
   assert.match(source, /if \(latestSession\) finishAuthSession\(\)/);
   assert.match(source, /sessionStorage\.removeItem\("footballFraud\.authNext"\)/);
   assert.match(source, /auth\.signOut\(\{ scope: "local" \}\)/);
-  assert.match(legacyAuth, /auth\.signOut\(\{ scope: 'local' \}\)/);
-  assert.match(legacyAuth, /window\.location\.assign\('\/'\)/);
 });
 
 test('production frontend assets use content hashes so releases cannot reuse stale UI', async () => {
   const config = await readFile(new URL('../frontend/vite.config.js', import.meta.url), 'utf8');
 
-  assert.match(config, /entryFileNames:\s*'build\/app-\[hash\]\.js'/);
-  assert.match(config, /assetFileNames:\s*'build\/app-\[hash\]\.\[ext\]'/);
+  assert.match(config, /entryFileNames:\s*'build\/\[name\]-\[hash\]\.js'/);
+  assert.match(config, /assetFileNames:\s*'build\/\[name\]-\[hash\]\.\[ext\]'/);
+  // Both shells are built from the same config, so neither can drift onto an unhashed name.
+  assert.match(config, /app: fileURLToPath/);
+  assert.match(config, /admin: fileURLToPath/);
 });

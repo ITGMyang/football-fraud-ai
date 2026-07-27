@@ -2,11 +2,9 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadEnv } from './env.js';
-import { buildMarket } from './domain.js';
 import { fetchApiFootballContext, fetchApiFootballMatches } from './api-football.js';
-import { parseStakeText, sampleMarkets } from './parser.js';
 import { createOpenRouterFetch } from './node-openrouter-fetch.js';
-import { predictMarket, rankMarkets } from './openrouter.js';
+import { rankMarkets } from './openrouter.js';
 import { resolveOptimizedPrediction } from './prediction-strategy.js';
 import { contextKey, findExistingContext, hasLineupPlayers } from './context-utils.js';
 import { buildAnalytics, shouldRefreshForAnalytics } from './evaluation.js';
@@ -15,7 +13,6 @@ import { authorizeApiRequest, guestPredictionCookie } from './guest-access.js';
 import { shouldHydratePredictionContext } from './prediction-policy.js';
 import { resolvePublicAsset } from './static-assets.js';
 import {
-  clearMarkets,
   appendPredictionSnapshots,
   publishPredictionConsensus,
   readDb,
@@ -24,8 +21,6 @@ import {
   releasePredictionGeneration,
   reservePredictionGeneration,
   saveRanking,
-  saveReport,
-  upsertMarkets,
   upsertMatchContext
 } from './storage.js';
 
@@ -35,7 +30,8 @@ const PORT = Number(process.env.PORT || 3888);
 const PUBLIC_DIR = path.resolve('public');
 const openRouterFetch = createOpenRouterFetch(process.env, fetch);
 const APP_SHELL_ROUTES = new Set(['/', '/login', '/auth/callback', '/auth/reset']);
-const LEGACY_SHELL_ROUTES = new Set(['/analytics', '/admin', '/backend', '/data', '/history']);
+// The data console, analytics and history pages were folded into /admin.
+const RETIRED_CONSOLE_ROUTES = new Set(['/analytics', '/backend', '/data', '/history']);
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -66,17 +62,16 @@ async function route(req, res) {
     return res.end(Buffer.from(await upstream.arrayBuffer()));
   }
 
-  if (req.method === 'GET' && LEGACY_SHELL_ROUTES.has(url.pathname)) {
-    return serveFile(res, 'legacy.html', 'text/html; charset=utf-8');
+  if (req.method === 'GET' && RETIRED_CONSOLE_ROUTES.has(url.pathname)) {
+    res.writeHead(301, { Location: '/admin' });
+    return res.end();
+  }
+  if (req.method === 'GET' && url.pathname === '/admin') {
+    return serveFile(res, 'admin.html', 'text/html; charset=utf-8');
   }
   if (req.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || /^\/match\/[^/]+$/.test(url.pathname))) {
     return serveFile(res, 'index.html', 'text/html; charset=utf-8');
   }
-  if (req.method === 'GET' && url.pathname === '/app.js') return serveFile(res, 'app.js', 'text/javascript; charset=utf-8');
-  if (req.method === 'GET' && url.pathname === '/auth-client.js') return serveFile(res, 'auth-client.js', 'text/javascript; charset=utf-8');
-  if (req.method === 'GET' && url.pathname === '/auth-utils.js') return serveFile(res, 'auth-utils.js', 'text/javascript; charset=utf-8');
-  if (req.method === 'GET' && url.pathname === '/vendor/supabase.js') return serveFile(res, 'vendor/supabase.js', 'text/javascript; charset=utf-8');
-  if (req.method === 'GET' && url.pathname === '/styles.css') return serveFile(res, 'styles.css', 'text/css; charset=utf-8');
 
   if (req.method === 'GET') {
     const asset = resolvePublicAsset(PUBLIC_DIR, url.pathname);
@@ -87,7 +82,6 @@ async function route(req, res) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/auth/config') return json(res, 200, authConfig(process.env));
-  if (req.method === 'OPTIONS' && url.pathname === '/api/import/chrome') return corsJson(res, 204, {});
   let access = null;
   if (url.pathname.startsWith('/api/')) {
     access = await authorizeApiRequest(req, process.env, fetch);
@@ -101,8 +95,6 @@ async function route(req, res) {
       guestPredictionUsed: access.role === 'guest' && access.guestPredictionUsed
     });
   }
-  if (req.method === 'GET' && url.pathname === '/api/markets') return json(res, 200, { markets: readDb({ ownerId }).markets });
-  if (req.method === 'GET' && url.pathname === '/api/reports') return json(res, 200, { reports: readDb({ ownerId }).reports });
   if (req.method === 'GET' && url.pathname === '/api/rankings') return json(res, 200, { rankings: readDb({ ownerId }).rankings || [] });
   if (req.method === 'GET' && url.pathname === '/api/contexts') return json(res, 200, { contexts: readDb({ ownerId }).matchContexts || [] });
   if (req.method === 'GET' && url.pathname === '/api/analytics') {
@@ -153,36 +145,6 @@ async function route(req, res) {
     return json(res, 200, result);
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/markets/clear') {
-    clearMarkets({ ownerId });
-    return json(res, 200, { ok: true });
-  }
-
-  const marketMatch = url.pathname.match(/^\/api\/markets\/([^/]+)$/);
-  if (req.method === 'GET' && marketMatch) {
-    const id = decodeURIComponent(marketMatch[1]);
-    const market = readDb({ ownerId }).markets.find((item) => item.id === id);
-    if (!market) return json(res, 404, { error: 'Market not found' });
-    return json(res, 200, { market });
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/sample') {
-    const markets = upsertMarkets(sampleMarkets('screenshot://provided'), { ownerId });
-    return json(res, 200, { markets });
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/import/text') {
-    const body = await readJson(req);
-    const markets = upsertMarkets(parseStakeText(body.text, body.sourceUrl), { ownerId });
-    return json(res, 200, { markets });
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/import/chrome') {
-    const body = await readJson(req);
-    const markets = upsertMarkets(parseStakeText(body.text, body.sourceUrl), { ownerId });
-    return corsJson(res, 200, { imported: markets.length, markets });
-  }
-
   if (req.method === 'POST' && url.pathname === '/api/import/api-football') {
     const body = await readJson(req);
     const fixtureId = String(body.fixtureId || body.matchId || '').trim();
@@ -204,23 +166,6 @@ async function route(req, res) {
     const fixtureId = body.fixtureId || body.matchId || body.sourceUrl;
     const context = upsertMatchContext(await fetchApiFootballContext(fixtureId, fullApiFootballOptions(process.env), fetch), { ownerId });
     return json(res, 200, { context, refreshed: true });
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/markets') {
-    const body = await readJson(req);
-    const market = buildMarket(body);
-    upsertMarkets([market], { ownerId });
-    return json(res, 200, { market });
-  }
-
-  const predictMatch = url.pathname.match(/^\/api\/predict\/([^/]+)$/);
-  if (req.method === 'POST' && predictMatch) {
-    const id = decodeURIComponent(predictMatch[1]);
-    const market = readDb({ ownerId }).markets.find((item) => item.id === id);
-    if (!market) return json(res, 404, { error: 'Market not found' });
-    const report = await predictMarket(market, process.env, openRouterFetch);
-    saveReport(report, { ownerId });
-    return json(res, 200, { report });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/rankings') {
@@ -327,12 +272,3 @@ function json(res, status, body, headers = {}) {
   res.end(JSON.stringify(body));
 }
 
-function corsJson(res, status, body) {
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-  });
-  res.end(status === 204 ? '' : JSON.stringify(body));
-}

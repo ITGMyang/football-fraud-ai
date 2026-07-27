@@ -255,46 +255,34 @@ test('admin dashboard audits revenue periods, plans, users, and duplicate compet
   assert.equal(dashboard.leagues[0].reviewRequired, true);
 });
 
-test('admin route and dashboard API are wired into the app shell', async () => {
-  const [markup, app, worker] = await Promise.all([
-    readFile(new URL('../public/legacy.html', import.meta.url), 'utf8'),
-    readFile(new URL('../public/app.js', import.meta.url), 'utf8'),
-    readFile(new URL('../worker/index.js', import.meta.url), 'utf8')
+test('the admin console is wired to the dashboard API through its own shell', async () => {
+  const [shell, app, worker, server] = await Promise.all([
+    readFile(new URL('../frontend/admin.html', import.meta.url), 'utf8'),
+    readFile(new URL('../frontend/src/AdminApp.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../worker/index.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/server.js', import.meta.url), 'utf8')
   ]);
 
-  assert.match(markup, /id="adminDashboard"/);
-  assert.match(markup, /运营管理后台/);
-  assert.match(markup, /role="tablist"/);
-  assert.match(markup, /data-admin-tab="overview"/);
-  assert.match(markup, /data-admin-tab="models"/);
-  assert.match(markup, /data-admin-tab="shared-pool"/);
-  assert.match(markup, /data-admin-tab="architecture"/);
-  assert.match(markup, /data-admin-tab="accuracy"/);
-  assert.match(markup, /id="adminAccuracy"/);
-  assert.match(markup, /id="adminSharedPool"/);
-  assert.match(markup, /id="adminRevenueSummary"/);
-  assert.match(markup, /id="adminLeagueAudit"/);
-  assert.match(markup, /id="adminUserSummary"/);
-  assert.match(markup, /id="adminOrderPlanTables"/);
-  assert.match(markup, /data-admin-panel="orders"/);
+  assert.match(shell, /src="\/src\/admin\.tsx"/);
+  assert.match(shell, /noindex/);
+
+  // Every tab the merged console must expose, including the folded-in data console.
+  for (const tab of ['overview', 'data', 'models', 'predictions', 'accuracy', 'accounts']) {
+    assert.match(app, new RegExp(`id: '${tab}'`));
+  }
   assert.match(app, /\/api\/admin\/dashboard/);
-  assert.match(app, /activateAdminTab/);
-  assert.match(app, /历史估算/);
-  assert.match(app, /renderAdminSharedPool/);
-  assert.match(app, /renderAdminAccuracy/);
-  assert.match(app, /groupAdminAccuracyMatches/);
-  assert.match(app, /renderAdminAccuracyMatch/);
-  assert.match(app, /renderAdminAccuracyModel/);
-  assert.doesNotMatch(app, /admin-accuracy-table/);
-  assert.match(app, /startAdminAutoRefresh/);
-  assert.match(app, /未配置单价/);
-  assert.match(app, /小样本高消耗/);
-  assert.match(app, /共享池返回/);
-  assert.match(app, /近 30 日收入/);
-  assert.match(worker, /'\/admin'/);
+  assert.match(app, /\/api\/backend\/schedules/);
+  assert.match(app, /\/api\/backend\/fixtures\//);
+  assert.match(app, /setAuthorized\(false\)/);
+
+  // Both servers serve the console shell and redirect the retired pages to it.
+  for (const source of [worker, server]) {
+    assert.match(source, /admin\.html/);
+    assert.match(source, /RETIRED_CONSOLE_ROUTES/);
+    assert.doesNotMatch(source, /legacy\.html/);
+  }
   assert.match(worker, /url\.pathname === '\/api\/admin\/dashboard'/);
   assert.match(worker, /isAdminUser/);
-  assert.doesNotMatch(worker, /access\.role === 'user' && predictionAccess\.billing\.active/);
   assert.match(worker, /planId: predictionAccess\.billing\.planId \|\| 'free'/);
 });
 
