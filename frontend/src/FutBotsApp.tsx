@@ -412,10 +412,28 @@ function weekDays(startIso: string): CalendarDay[] {
 
 /* week pager: always shows Sunday → Saturday; swiping or the arrows flip a
    whole week at a time — no free scrolling */
-function CalendarSection({ selectedDate, onDate, matchDays }: {
+function DayDots({ iso, matchDays, accuracyDays, prefix }: {
+  iso: string;
+  matchDays: Set<string>;
+  accuracyDays: Set<string>;
+  prefix: "day" | "dp-day";
+}) {
+  const hasMatch = matchDays.has(iso);
+  const hasAccuracy = accuracyDays.has(iso);
+  if (!hasMatch && !hasAccuracy) return null;
+  return (
+    <span className={`${prefix}__dots`} aria-hidden="true">
+      {hasMatch && <i className={`${prefix}__dot`} />}
+      {hasAccuracy && <i className={`${prefix}__dot ${prefix}__dot--accuracy`} />}
+    </span>
+  );
+}
+
+function CalendarSection({ selectedDate, onDate, matchDays, accuracyDays }: {
   selectedDate: string;
   onDate: (date: string) => void;
   matchDays: Set<string>;
+  accuracyDays: Set<string>;
 }) {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(selectedDate));
   const [anim, setAnim] = useState<"" | "out-fwd" | "out-back" | "in-fwd" | "in-back">("");
@@ -482,7 +500,7 @@ function CalendarSection({ selectedDate, onDate, matchDays }: {
             }}
           >
             <span>{day.letter}</span><b>{day.num}</b>
-            {matchDays.has(day.iso) && <i className="day__dot" aria-hidden="true" />}
+            <DayDots iso={day.iso} matchDays={matchDays} accuracyDays={accuracyDays} prefix="day" />
           </button>
         ))}
       </div>
@@ -490,13 +508,14 @@ function CalendarSection({ selectedDate, onDate, matchDays }: {
   );
 }
 
-function Filters({ selectedDate, onDate, competitions, competition, onCompetition, matchDays }: {
+function Filters({ selectedDate, onDate, competitions, competition, onCompetition, matchDays, accuracyDays }: {
   selectedDate: string;
   onDate: (date: string) => void;
   competitions: string[];
   competition: string;
   onCompetition: (value: string) => void;
   matchDays: Set<string>;
+  accuracyDays: Set<string>;
 }) {
   const [openPanel, setOpenPanel] = useState<"" | "date" | "type">("");
   const [pickerMonth, setPickerMonth] = useState(() => {
@@ -576,7 +595,7 @@ function Filters({ selectedDate, onDate, competitions, competition, onCompetitio
                   }}
                 >
                   {index + 1}
-                  {matchDays.has(iso) && <i className="dp-day__dot" aria-hidden="true" />}
+                  <DayDots iso={iso} matchDays={matchDays} accuracyDays={accuracyDays} prefix="dp-day" />
                 </button>
               );
             })}
@@ -769,7 +788,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDays, dayAccuracy, pendingMatchId, onStartPrediction, onOpenResult }: {
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, accuracyDays, nextDays, dayAccuracy, pendingMatchId, onStartPrediction, onOpenResult }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -780,6 +799,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   selectedDate: string;
   onDate: (date: string) => void;
   matchDays: Set<string>;
+  accuracyDays: Set<string>;
   nextDays: { date: string; matches: Match[] }[];
   dayAccuracy: DayAccuracy | null;
   pendingMatchId: string;
@@ -803,7 +823,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
           ) : (
             featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onStartPrediction(featured)} />
           )}
-          <CalendarSection selectedDate={selectedDate} onDate={onDate} matchDays={matchDays} />
+          <CalendarSection selectedDate={selectedDate} onDate={onDate} matchDays={matchDays} accuracyDays={accuracyDays} />
           <Filters
             selectedDate={selectedDate}
             onDate={onDate}
@@ -811,6 +831,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
             competition={competition}
             onCompetition={setCompetition}
             matchDays={matchDays}
+            accuracyDays={accuracyDays}
           />
         </div>
         <div className="home-body">
@@ -1522,6 +1543,7 @@ export default function FutBotsApp() {
   const [matchDays, setMatchDays] = useState<Set<string>>(() => new Set());
   const [nextDays, setNextDays] = useState<{ date: string; matches: Match[] }[]>([]);
   const [dayAccuracy, setDayAccuracy] = useState<DayAccuracy | null>(null);
+  const [accuracyDays, setAccuracyDays] = useState<Set<string>>(() => new Set());
 
   const historyDepth = useRef(0);
   const historyReady = useRef(false);
@@ -1715,6 +1737,37 @@ export default function FutBotsApp() {
     void loadDayAccuracy();
     return () => { active = false; };
   }, [api, selectedDate]);
+
+  /* Mark past days that have judged predictions (white calendar dot). */
+  useEffect(() => {
+    let active = true;
+    const probeAccuracy = async () => {
+      const base = shanghaiNoon(todayShanghai());
+      const dates = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(base);
+        date.setDate(base.getDate() - (index + 1));
+        return isoInShanghai(date);
+      });
+      const results = await Promise.all(dates.map(async (date) => {
+        try {
+          const data = await api(`/api/analytics/day?date=${encodeURIComponent(date)}`);
+          return [date, Boolean(data.day?.total)] as const;
+        } catch {
+          return [date, false] as const;
+        }
+      }));
+      if (!active) return;
+      setAccuracyDays((current) => {
+        const next = new Set(current);
+        for (const [date, hasData] of results) {
+          if (hasData) next.add(date); else next.delete(date);
+        }
+        return next;
+      });
+    };
+    void probeAccuracy();
+    return () => { active = false; };
+  }, [api]);
 
   /* Probe the schedule-cache window (today -7 … +3) so the calendar can dot
      dates that have matches. Uses the same read-only matches endpoint. */
@@ -1952,7 +2005,7 @@ export default function FutBotsApp() {
   };
 
   const screenNode = screen === "dashboard" ? (
-    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} dayAccuracy={dayAccuracy} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} accuracyDays={accuracyDays} nextDays={nextDays} dayAccuracy={dayAccuracy} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} analyzing={analysisPending} error={error} onPredict={() => selectedMatch && startPrediction(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (

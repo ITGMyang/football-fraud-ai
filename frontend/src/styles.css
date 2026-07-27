@@ -362,23 +362,32 @@ input:focus-visible {
   transition: color var(--hover);
 }
 
-/* match-available marker under the date number */
-.day__dot {
+/* markers under the date number — green: has matches, white: has judged
+   predictions. Sits 11px below the number (same spacing as letter → number) */
+.day__dots {
   position: absolute;
-  /* 11px below the date number — the same spacing as letter → number */
   bottom: -15px;
   left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+}
+
+/* the active pill is taller, so pull its dots up to sit on the same
+   baseline as the other days' dots */
+.day--active .day__dots {
+  bottom: -8px;
+}
+
+.day__dot {
   width: 4px;
   height: 4px;
-  margin-left: -2px;
   border-radius: 50%;
   background: #1eb978;
 }
 
-/* the active pill is taller, so pull its dot up to sit on the same
-   baseline as the other days' dots */
-.day--active .day__dot {
-  bottom: -8px;
+.day__dot--accuracy {
+  background: #fff;
 }
 
 .day:hover {
@@ -641,18 +650,27 @@ input:focus-visible {
   transition: background var(--hover), color var(--hover);
 }
 
-.dp-day__dot {
+.dp-day__dots {
   position: absolute;
   bottom: 1px;
   left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+.dp-day__dot {
   width: 3px;
   height: 3px;
-  margin-left: -1.5px;
   border-radius: 50%;
   background: #1eb978;
 }
 
-.dp-day.is-selected .dp-day__dot {
+.dp-day__dot--accuracy {
+  background: #fff;
+}
+
+.dp-day.is-selected .dp-day__dots {
   display: none;
 }
 
