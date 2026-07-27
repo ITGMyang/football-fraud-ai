@@ -362,19 +362,24 @@ function shanghaiWeekday(date: Date) {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
 }
 
+function useScrolled(threshold = 8) {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > threshold);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [threshold]);
+  return scrolled;
+}
+
 function HomeHeader({ session, access, navigate }: {
   session: Session | null;
   access: Access;
   navigate: (screen: Screen) => void;
 }) {
   const planLabel = access.billing?.active ? "AI Pass" : access.billing?.freePredictionUsed ? "Trial Used" : "Free Trial";
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  const scrolled = useScrolled();
   return (
     <header className={`home-header ${scrolled ? "home-header--scrolled" : ""}`}>
       <div className="home-brand" aria-hidden="true">
@@ -654,6 +659,47 @@ function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
   );
 }
 
+/* Apple Watch-style activity ring: rounded caps, sweeps in on mount while
+   the percentage counts up in sync */
+const RING_RADIUS = 33;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function AccuracyRing({ pct }: { pct: number }) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const duration = 1300;
+    const start = performance.now();
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      setProgress(easeOutCubic(t) * pct);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [pct]);
+
+  return (
+    <div className="day-accuracy__ring">
+      <svg viewBox="0 0 78 78" width="78" height="78" aria-hidden="true">
+        <circle className="day-accuracy__track" cx="39" cy="39" r={RING_RADIUS} />
+        <circle
+          className="day-accuracy__meter"
+          cx="39"
+          cy="39"
+          r={RING_RADIUS}
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={RING_CIRCUMFERENCE * (1 - progress / 100)}
+          transform="rotate(-90 39 39)"
+        />
+      </svg>
+      <b>{Math.round(progress)}%</b>
+    </div>
+  );
+}
+
 function SkeletonCard() {
   return (
     <article className="pcard pcard--skeleton" aria-hidden="true">
@@ -840,12 +886,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
             <h2>Predictions</h2>
             {dayAccuracy && (
               <section className="day-accuracy" aria-label="Prediction accuracy for this day">
-                <div
-                  className="day-accuracy__ring"
-                  style={{ "--pct": Math.round(dayAccuracy.accuracy * 100) } as React.CSSProperties}
-                >
-                  <b>{Math.round(dayAccuracy.accuracy * 100)}%</b>
-                </div>
+                <AccuracyRing key={dayAccuracy.date} pct={Math.round(dayAccuracy.accuracy * 100)} />
                 <div className="day-accuracy__meta">
                   <span className="day-accuracy__eyebrow">Day Accuracy</span>
                   <h3>{nextDayLabel(dayAccuracy.date)} results are in</h3>
@@ -1271,15 +1312,28 @@ function Profile({ navigate, onBack, access, historyGroups, session, onOpenPredi
     return () => document.removeEventListener("click", onDocumentClick);
   }, [menuOpen]);
 
+  const scrolled = useScrolled();
   return (
     <section className="screen screen--profile">
       <div className="profile-wrap">
-        <header className="profile-head">
+        <header className={`home-header page-header ${scrolled ? "home-header--scrolled" : ""}`}>
           <button className="icon-btn back-btn" onClick={onBack} aria-label="Go back">
             <img src="/assets/figma-icon-back.svg" alt="" />
           </button>
-          <h1 className="profile-title">Profile</h1>
+          <h1>Profile</h1>
         </header>
+
+        <div className="account-card">
+          <div className="account-card__id">
+            {session ? <AccountAvatar session={session} size={21.5} /> : <img src="/assets/figma-icon-user.svg" alt="" />}
+            <span>{session ? `${identity.name} · ${identity.provider}` : "Guest account"}</span>
+          </div>
+          {session ? (
+            <button className="logout-btn" onClick={() => void onSignOut()}>Log Out</button>
+          ) : (
+            <button className="login-btn" onClick={() => navigate("login")}>Log In</button>
+          )}
+        </div>
 
         <article className="plan-card">
           <div className="plan-card__head">
@@ -1310,18 +1364,6 @@ function Profile({ navigate, onBack, access, historyGroups, session, onOpenPredi
             </button>
           )}
         </article>
-
-        <div className="account-card">
-          <div className="account-card__id">
-            {session ? <AccountAvatar session={session} size={21.5} /> : <img src="/assets/figma-icon-user.svg" alt="" />}
-            <span>{session ? `${identity.name} · ${identity.provider}` : "Guest account"}</span>
-          </div>
-          {session ? (
-            <button className="logout-btn" onClick={() => void onSignOut()}>Log Out</button>
-          ) : (
-            <button className="login-btn" onClick={() => navigate("login")}>Log In</button>
-          )}
-        </div>
 
         <div className="predictions profile-predictions">
           <h2>My Predictions</h2>
