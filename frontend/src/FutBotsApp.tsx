@@ -758,7 +758,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDays, pendingMatchId, onOpenMatch, onOpenResult }: {
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDays, pendingMatchId, onStartPrediction, onOpenResult }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -771,7 +771,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   matchDays: Set<string>;
   nextDays: { date: string; matches: Match[] }[];
   pendingMatchId: string;
-  onOpenMatch: (match: Match) => void;
+  onStartPrediction: (match: Match) => void;
   onOpenResult: (match: Match) => void;
 }) {
   const [competition, setCompetition] = useState("All Competitions");
@@ -789,7 +789,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
           {loading ? (
             <span className="sk sk-hero" aria-hidden="true" />
           ) : (
-            featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onOpenMatch(featured)} />
+            featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onStartPrediction(featured)} />
           )}
           <CalendarSection selectedDate={selectedDate} onDate={onDate} matchDays={matchDays} />
           <Filters
@@ -817,7 +817,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                     match={match}
                     ranking={rankingForMatch(rankings, match.id) as RankingView | null}
                     analyzing={pendingMatchId === match.id}
-                    onStart={() => onOpenMatch(match)}
+                    onStart={() => onStartPrediction(match)}
                     onSee={() => onOpenResult(match)}
                   />
                 ))}
@@ -850,7 +850,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                               match={match}
                               ranking={rankingForMatch(rankings, match.id) as RankingView | null}
                               analyzing={pendingMatchId === match.id}
-                              onStart={() => onOpenMatch(match)}
+                              onStart={() => onStartPrediction(match)}
                               onSee={() => onOpenResult(match)}
                             />
                           ))}
@@ -1780,16 +1780,6 @@ export default function FutBotsApp() {
     return "Signed in.";
   };
 
-  function openMatch(match: Match) {
-    const existing = rankingForMatch(rankings, match.id) as RankingView | null;
-    setError("");
-    setSelectedMatch(match);
-    setSelectedRanking(existing);
-    setShowSelectedResult(false);
-    setAnalysisPending(false);
-    setScreen("details");
-  }
-
   function openResult(match: Match) {
     const existing = rankingForMatch(rankings, match.id) as RankingView | null;
     setError("");
@@ -1807,6 +1797,16 @@ export default function FutBotsApp() {
     setShowSelectedResult(true);
     setAnalysisPending(false);
     setScreen("details");
+  }
+
+  // Starting from a match card runs the prediction in place: the card swaps to its
+  // spinner, the user keeps browsing, and the toast brings them to the result.
+  function startPrediction(match: Match) {
+    setError("");
+    setSelectedMatch(match);
+    setSelectedRanking(rankingForMatch(rankings, match.id) as RankingView | null);
+    setShowSelectedResult(false);
+    void analyze(match);
   }
 
   const analyze = async (match: Match | null) => {
@@ -1912,7 +1912,7 @@ export default function FutBotsApp() {
   };
 
   const screenNode = screen === "dashboard" ? (
-    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} error={error} onPredict={() => void analyze(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (

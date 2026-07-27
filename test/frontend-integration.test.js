@@ -336,15 +336,21 @@ test('prediction cards keep metadata, teams, and actions aligned at tablet width
   );
 });
 
-test('match cards open details before a model prediction is requested', async () => {
+test('a match card starts the prediction in place instead of opening a setup screen', async () => {
   const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
 
   assert.doesNotMatch(source, />Ask FutBot</);
-  assert.match(source, /function openMatch\(match: Match\)/);
-  assert.match(source, /onPredict=\{\(\) => void analyze\(selectedMatch\)\}/);
+  assert.match(source, /function startPrediction\(match: Match\)/);
+  assert.match(source, /onStart=\{\(\) => onStartPrediction\(match\)\}/);
+  assert.match(source, /onTry=\{\(\) => onStartPrediction\(featured\)\}/);
   assert.match(source, /Start Predicting/);
+  // The card carries its own spinner, so the run is visible without leaving the list.
+  assert.match(source, /analyzing=\{pendingMatchId === match\.id\}/);
+  assert.match(source, /<span>Analyzing\.\.\.<\/span>/);
+  // ModelRoom stays as the entry point for a fixture opened without a prediction.
   assert.match(source, /function ModelRoom/);
   assert.match(source, /onRun=\{\(\) => setConfirmOpen\(true\)\}/);
+  assert.match(source, /onPredict=\{\(\) => void analyze\(selectedMatch\)\}/);
 });
 
 test('completed model lanes and dashboard cards open saved results instead of predicting again', async () => {
