@@ -924,8 +924,8 @@ input:focus-visible {
 }
 
 .sk--circle {
-  width: 44px;
-  height: 44px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
 }
 
@@ -949,20 +949,48 @@ input:focus-visible {
   gap: 10px;
 }
 
-/* prediction cards: larger crests and team names */
+/* prediction cards: large crests and team names (proportions from the
+   reference sportsbook card: crest ≈ 1/6 of card width) */
 .pcard .team img,
 .pcard .team .team-flag--fallback {
-  width: 44px;
-  height: 44px;
+  width: 64px;
+  height: 64px;
 }
 
 .pcard .team span {
-  font-size: 14px;
-  max-width: 132px;
+  font-size: 15px;
+  max-width: 128px;
 }
 
 .pcard .team {
-  width: 132px;
+  width: 128px;
+}
+
+/* center column between the teams: small date over a large time / score */
+.match-time {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  text-align: center;
+}
+
+.match-time span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+}
+
+.match-time b {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
 }
 
 .teams--light > b {

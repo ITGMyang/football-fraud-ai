@@ -602,9 +602,9 @@ function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
         <span className="fsd__free">FREE</span>
       </div>
       <div className="teams teams--light">
-        <div className="team"><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
-        <b>vs.</b>
-        <div className="team"><TeamFlag team={match.teamB} /><span>{match.teamB.name}</span></div>
+        <div className="team"><TeamFlag team={match.teamA} size={44} /><span>{match.teamA.name}</span></div>
+        <MatchTime match={match} />
+        <div className="team"><TeamFlag team={match.teamB} size={44} /><span>{match.teamB.name}</span></div>
       </div>
       <button className="glow-btn" onClick={onTry}>
         <img src="/assets/figma-sparkle-black.svg" alt="" />
@@ -647,6 +647,30 @@ function startingIn(kickoff: string) {
   return `${hours}h ${minutes}m`;
 }
 
+/* center column between the two teams: "28 JUL" over a large kickoff time
+   (or the score, when the match has one) */
+function kickoffParts(match: Match) {
+  const parsed = new Date(match.kickoff || "");
+  if (!Number.isNaN(parsed.getTime())) {
+    return {
+      date: parsed.toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "Asia/Shanghai" }).toUpperCase(),
+      time: parsed.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Shanghai" })
+    };
+  }
+  const [datePart, timePart] = String(match.date || "").split("|").map((part) => part.trim());
+  return { date: (datePart || "").toUpperCase(), time: timePart || "" };
+}
+
+function MatchTime({ match }: { match: Match }) {
+  const { date, time } = kickoffParts(match);
+  return (
+    <div className="match-time">
+      <span>{date}</span>
+      <b>{match.score || time}</b>
+    </div>
+  );
+}
+
 function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   match: Match;
   ranking: RankingView | null;
@@ -655,12 +679,12 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   onSee: () => void;
 }) {
   const soon = startingIn(match.kickoff);
-  const head = (
+  const head = (withScoreChip: boolean) => (
     <div className="pcard__head">
       <span className="pcard__date">{match.date}</span>
       {match.status === "live" ? (
         <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
-      ) : match.score ? (
+      ) : withScoreChip && match.score ? (
         <span className="badge badge--score">{match.score}</span>
       ) : soon ? (
         <span className="badge badge--soon"><img src="/assets/figma-icon-clock.svg" alt="" />Starting in: {soon}</span>
@@ -671,11 +695,11 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   if (analyzing) {
     return (
       <article className="pcard state-swap">
-        {head}
+        {head(false)}
         <div className="teams">
-          <div className="team"><TeamFlag team={match.teamA} size={44} /><span>{match.teamA.name}</span></div>
-          <b>vs.</b>
-          <div className="team"><TeamFlag team={match.teamB} size={44} /><span>{match.teamB.name}</span></div>
+          <div className="team"><TeamFlag team={match.teamA} size={64} /><span>{match.teamA.name}</span></div>
+          <MatchTime match={match} />
+          <div className="team"><TeamFlag team={match.teamB} size={64} /><span>{match.teamB.name}</span></div>
         </div>
         <div className="analyzing">
           <img src="/assets/figma-spinner.svg" alt="" />
@@ -712,11 +736,11 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
 
   return (
     <article className="pcard">
-      {head}
+      {head(false)}
       <div className="teams">
-        <div className="team"><TeamFlag team={match.teamA} size={44} /><span>{match.teamA.name}</span></div>
-        <b>vs.</b>
-        <div className="team"><TeamFlag team={match.teamB} size={44} /><span>{match.teamB.name}</span></div>
+        <div className="team"><TeamFlag team={match.teamA} size={64} /><span>{match.teamA.name}</span></div>
+        <MatchTime match={match} />
+        <div className="team"><TeamFlag team={match.teamB} size={64} /><span>{match.teamB.name}</span></div>
       </div>
       {match.status === "complete" ? (
         <span className="see-link" role="presentation">Predictions closed</span>
@@ -758,6 +782,11 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
       <div className="home-wrap">
         <div className="home-top">
           <HomeHeader session={session} access={access} navigate={navigate} />
+          {loading ? (
+            <span className="sk sk-hero" aria-hidden="true" />
+          ) : (
+            featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onOpenMatch(featured)} />
+          )}
           <CalendarSection selectedDate={selectedDate} onDate={onDate} matchDays={matchDays} />
           <Filters
             selectedDate={selectedDate}
@@ -770,11 +799,6 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
         </div>
         <div className="home-body">
           {error && <p className="app-note app-note--error" role="alert">{error}</p>}
-          {loading ? (
-            <span className="sk sk-hero" aria-hidden="true" />
-          ) : (
-            featured && <FreeScoreDay key={featured.id} match={featured} onTry={() => onOpenMatch(featured)} />
-          )}
           <div className="predictions">
             <h2>Predictions</h2>
             {loading ? (
