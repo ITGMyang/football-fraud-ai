@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { createClient, Session, SupabaseClient } from '@supabase/supabase-js';
 
 import { createApiClient, userFacingError } from './api.js';
@@ -472,12 +472,6 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
       .some((value) => String(value || '').toLowerCase().includes(text)));
   }, [query, sharedPool.matches]);
 
-  const modelKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const match of sharedPool.matches) for (const key of Object.keys(match.models)) keys.add(key);
-    return [...keys];
-  }, [sharedPool.matches]);
-
   return (
     <>
       <div className="a-metrics">
@@ -492,25 +486,41 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
           <input className="a-input" type="search" value={query} placeholder={t('searchMatch')} onChange={(event) => setQuery(event.target.value)} />
           <span className="a-filters__count">{count(poolRows.length)} {t('rows')}</span>
         </div>
-        <Table head={[t('colMatch'), t('colFixtureId'), t('kickoff'), ...modelKeys, t('colLastWrite')]}>
-          {poolRows.map((match) => (
-            <tr key={match.fixtureId}>
-              <td><strong>{match.matchName}</strong><small>{match.competition || '—'}</small></td>
-              <td><code>{match.fixtureId}</code></td>
-              <td>{when(match.kickoff)}</td>
-              {modelKeys.map((key) => {
-                const state = match.models[key] || 'not_requested';
-                return (
-                  <td key={key}>
-                    {state === 'not_requested'
-                      ? <span className="a-dim">—</span>
-                      : <Status tone={state === 'failed' ? 'bad' : state === 'live' ? 'ok' : 'idle'}>{state}</Status>}
-                  </td>
-                );
-              })}
-              <td>{when(match.latestUpdatedAt)}</td>
-            </tr>
-          ))}
+        <Table head={[t('colMatch'), t('colFixtureId'), t('kickoff'), t('colPhase'), t('colModelsInPool'), t('colLastWrite')]}>
+          {poolRows.map((match) => {
+            // One column of chips beats a fixed grid: a model that was never asked for
+            // is not information, and a failure has to stand out among the ones that ran.
+            const entries = Object.entries(match.models).filter(([, state]) => state !== 'not_requested');
+            const failed = entries.filter(([, state]) => state === 'failed');
+            const phase = entries.some(([, state]) => state === 'live') ? 'live' : entries.length ? 'early' : '';
+            return (
+              <tr key={match.fixtureId}>
+                <td><strong>{match.matchName}</strong><small>{match.competition || '—'}</small></td>
+                <td><code>{match.fixtureId}</code></td>
+                <td>{when(match.kickoff)}</td>
+                <td>
+                  {phase
+                    ? <Status tone={phase === 'live' ? 'ok' : 'idle'}>{phase}</Status>
+                    : <span className="a-dim">—</span>}
+                </td>
+                <td>
+                  {entries.length
+                    ? (
+                      <span className="a-chips">
+                        {entries.map(([key, state]) => (
+                          <Status key={key} tone={state === 'failed' ? 'bad' : 'idle'}>
+                            {key}{state === 'failed' ? ` · ${t('poolFailed')}` : ''}
+                          </Status>
+                        ))}
+                      </span>
+                    )
+                    : <span className="a-dim">{t('poolEmpty')}</span>}
+                  {failed.length > 0 && <small className="a-warn">{t('poolFailedNote', { n: failed.length })}</small>}
+                </td>
+                <td>{when(match.latestUpdatedAt)}</td>
+              </tr>
+            );
+          })}
         </Table>
       </Module>
 
@@ -559,12 +569,26 @@ function AccuracyTab({ accuracy }: { accuracy: Accuracy }) {
   const [category, setCategory] = useState('all');
   const [model, setModel] = useState('all');
 
-  const rows = useMemo(() => accuracy.evaluations.filter((row: AccuracyEvaluation) => {
-    if (!row.counted) return false;
-    if (category !== 'all' && row.category !== category) return false;
-    if (model !== 'all' && row.modelName !== model) return false;
-    return true;
-  }).slice(0, 300), [accuracy.evaluations, category, model]);
+  // One row per market repeated the match, competition, date and final score four
+  // times over. Group by fixture so a match reads as a single settled verdict.
+  const groups = useMemo(() => {
+    const filtered = accuracy.evaluations.filter((row: AccuracyEvaluation) => {
+      if (!row.counted) return false;
+      if (category !== 'all' && row.category !== category) return false;
+      if (model !== 'all' && row.modelName !== model) return false;
+      return true;
+    });
+    const byMatch = new Map<string, { key: string; head: AccuracyEvaluation; picks: AccuracyEvaluation[] }>();
+    for (const row of filtered) {
+      const key = `${row.contextId}|${row.modelName}`;
+      const group = byMatch.get(key) || { key, head: row, picks: [] };
+      group.picks.push(row);
+      byMatch.set(key, group);
+    }
+    return [...byMatch.values()].slice(0, 150);
+  }, [accuracy.evaluations, category, model]);
+
+  const shownPicks = groups.reduce((total, group) => total + group.picks.length, 0);
 
   return (
     <>
@@ -620,21 +644,39 @@ function AccuracyTab({ accuracy }: { accuracy: Accuracy }) {
             <option value="all">{t('allMarkets')}</option>
             {accuracy.categories.map((row) => <option key={row.key} value={row.key}>{row.key}</option>)}
           </select>
-          <span className="a-filters__count">{count(rows.length)} {t('rows')}</span>
+          <span className="a-filters__count">{t('groupCount', { matches: count(groups.length), picks: count(shownPicks) })}</span>
         </div>
-        <Table head={[t('colMatch'), t('colCompetition'), t('colDate'), t('colModel'), t('colMarket'), t('colSelection'), t('colFinal'), t('colResult')]}>
-          {rows.map((row, index) => (
-            <tr key={`${row.contextId}-${row.modelName}-${row.category}-${index}`}>
-              <td><strong>{row.contextName}</strong></td>
-              <td>{row.competition}</td>
-              <td>{row.matchDate}</td>
-              <td>{row.modelName}</td>
-              <td>{row.category}</td>
-              <td>{row.selection}</td>
-              <td><code>{row.actualScore}</code></td>
-              <td>{row.hit ? <Status tone="ok">{t('hit')}</Status> : <Status tone="bad">{t('miss')}</Status>}</td>
-            </tr>
-          ))}
+        <Table head={[t('colMarket'), t('colSelection'), t('colResult')]}>
+          {groups.map((group) => {
+            const hits = group.picks.filter((pick) => pick.hit).length;
+            return (
+              <Fragment key={group.key}>
+                <tr className="a-group">
+                  <td colSpan={3}>
+                    <div className="a-group__head">
+                      <div>
+                        <strong>{group.head.contextName}</strong>
+                        <small>{group.head.competition} · {group.head.matchDate} · {group.head.modelName}</small>
+                      </div>
+                      <div className="a-group__meta">
+                        <span className="a-dim">{t('colFinal')} <code>{group.head.actualScore}</code></span>
+                        <Status tone={hits === group.picks.length ? 'ok' : hits ? 'warn' : 'bad'}>
+                          {t('groupHits', { hits, total: group.picks.length })}
+                        </Status>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                {group.picks.map((pick, index) => (
+                  <tr key={`${group.key}-${pick.category}-${index}`}>
+                    <td>{pick.category}</td>
+                    <td>{pick.selection}</td>
+                    <td>{pick.hit ? <Status tone="ok">{t('hit')}</Status> : <Status tone="bad">{t('miss')}</Status>}</td>
+                  </tr>
+                ))}
+              </Fragment>
+            );
+          })}
         </Table>
       </Module>
     </>

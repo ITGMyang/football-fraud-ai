@@ -274,6 +274,12 @@ test('the admin console is wired to the dashboard API through its own shell', as
   assert.match(app, /\/api\/backend\/schedules/);
   assert.match(app, /\/api\/backend\/fixtures\//);
   assert.match(app, /\/api\/admin\/models\/check/);
+
+  // The pool lists only the models that actually ran; settled picks group by fixture.
+  assert.match(app, /state !== 'not_requested'/);
+  assert.doesNotMatch(app, /modelKeys/);
+  assert.match(app, /const byMatch = new Map/);
+  assert.match(app, /className="a-group"/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/models\/check'/);
   assert.match(app, /setAuthorized\(false\)/);
 

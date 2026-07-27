@@ -143,6 +143,13 @@ const COPY = {
   estimated: ['{n} estimated', '{n} 次估算'],
   none: ['none', '无'],
 
+  colModelsInPool: ['Models cached', '已入池模型'],
+  poolEmpty: ['nothing cached', '池中无结果'],
+  poolFailed: ['failed', '失败'],
+  poolFailedNote: ['{n} model(s) failed on this fixture', '这场比赛有 {n} 个模型调用失败'],
+  groupHits: ['{hits} of {total} hit', '命中 {hits}/{total}'],
+  groupCount: ['{matches} matches · {picks} settled picks', '{matches} 场比赛 · {picks} 条已结算预测'],
+
   modelCheck: ['Reachability', '连通性'],
   modelCheckTitle: ['Live model check', '模型连通性检查'],
   modelCheckNote: ['Sends one tiny request per model from the Worker. Cloudflare calls out from its own network, so this is the only result that reflects production — a model your laptop cannot reach may work fine here, and the reverse.', '从 Worker 向每个模型发一次极小的请求。Cloudflare 是用自己的网络出站的，所以只有这里的结果代表生产环境——你本机连不上的模型在这里可能完全正常，反之亦然。'],

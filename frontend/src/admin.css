@@ -260,7 +260,41 @@ code {
   border-bottom: none;
 }
 
-.a-table tbody tr:hover {
+.a-table tbody tr.a-group:hover {
+  background: rgba(30, 185, 120, 0.1);
+}
+
+.a-table tbody tr.a-group td {
+  background: rgba(30, 185, 120, 0.07);
+  border-top: 1px solid rgba(30, 185, 120, 0.22);
+  padding: 12px 14px;
+}
+
+.a-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.a-group__head strong {
+  font-size: 14px;
+}
+
+.a-group__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.a-warn {
+  display: block;
+  margin-top: 4px;
+  color: #e0ac5c;
+}
+
+.a-table tbody tr:not(.a-group):hover {
   background: rgba(255, 255, 255, 0.025);
 }
 
