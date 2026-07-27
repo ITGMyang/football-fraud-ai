@@ -619,7 +619,6 @@ function SkeletonCard() {
     <article className="pcard pcard--skeleton" aria-hidden="true">
       <div className="pcard__head">
         <span className="sk sk--text" style={{ width: 118 }} />
-        <span className="sk sk--text" style={{ width: 96 }} />
       </div>
       <div className="teams">
         <div className="team">
@@ -679,18 +678,16 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   onSee: () => void;
 }) {
   const soon = startingIn(match.kickoff);
-  const head = (withScoreChip: boolean) => (
-    <div className="pcard__head">
-      <span className="pcard__date">{match.date}</span>
-      {match.status === "live" ? (
-        <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
-      ) : withScoreChip && match.score ? (
-        <span className="badge badge--score">{match.score}</span>
-      ) : soon ? (
-        <span className="badge badge--soon"><img src="/assets/figma-icon-clock.svg" alt="" />Starting in: {soon}</span>
-      ) : null}
-    </div>
-  );
+  const head = (withScoreChip: boolean) => {
+    const badge = match.status === "live" ? (
+      <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
+    ) : withScoreChip && match.score ? (
+      <span className="badge badge--score">{match.score}</span>
+    ) : soon ? (
+      <span className="badge badge--soon"><img src="/assets/figma-icon-clock.svg" alt="" />Starting in: {soon}</span>
+    ) : null;
+    return badge ? <div className="pcard__head">{badge}</div> : null;
+  };
 
   if (analyzing) {
     return (
@@ -712,14 +709,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   if (ranking) {
     return (
       <article className="pcard pcard--done">
-        <div className="pcard__head">
-          <span className="pcard__date">{match.date}</span>
-          {match.status === "live" ? (
-            <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
-          ) : match.score ? (
-            <span className="badge badge--score">{match.score}</span>
-          ) : null}
-        </div>
+        {head(true)}
         <div className="pcard__result">
           <div className="stacked-teams">
             <div><TeamFlag team={match.teamA} /><span>{match.teamA.name}</span></div>
