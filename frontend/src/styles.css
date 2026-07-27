@@ -732,12 +732,6 @@ input:focus-visible {
   background: rgba(13, 53, 33, 0.1);
   border: 1px solid rgba(23, 54, 38, 0.5);
   border-radius: 16px;
-  transition: border-color var(--hover), background var(--hover);
-}
-
-.pcard:hover {
-  background: rgba(13, 53, 33, 0.25);
-  border-color: rgba(37, 84, 59, 0.8);
 }
 
 .pcard--done {
