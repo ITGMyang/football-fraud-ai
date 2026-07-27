@@ -99,19 +99,15 @@ input:focus-visible {
   background: #010403;
 }
 
-/* dark ambient backdrop: pinned to the viewport so it stays put while the
-   content scrolls, always filling the screen height */
+/* dark ambient backdrop (designer-supplied image): pinned to the viewport
+   so it stays put while the content scrolls, always filling the screen */
 .screen--home::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(75% 42% at -12% 45%, rgba(16, 74, 42, 0.5) 0%, rgba(16, 74, 42, 0) 70%),
-    radial-gradient(55% 35% at 106% 92%, rgba(14, 64, 36, 0.45) 0%, rgba(14, 64, 36, 0) 70%),
-    radial-gradient(50% 30% at 30% -8%, rgba(8, 40, 22, 0.35) 0%, rgba(8, 40, 22, 0) 70%),
-    #010403;
+  background: #010403 url("/assets/home-backdrop.jpg") center / cover no-repeat;
 }
 
 .home-wrap {
