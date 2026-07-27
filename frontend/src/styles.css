@@ -26,19 +26,12 @@ body {
 }
 
 html {
-  background-color: #08562e;
+  background-color: #010403;
   color-scheme: dark;
 }
 
 body {
-  background: linear-gradient(
-      180deg,
-      #08562e 0%,
-      #021e0f 16.967%,
-      #000000 36.382%
-    )
-    no-repeat #000;
-  background-size: 100% 100dvh;
+  background: #010403;
   color: #fff;
   font-family: "Manrope", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -103,13 +96,22 @@ input:focus-visible {
 /* ============ HOME ============ */
 
 .screen--home {
-  background: linear-gradient(
-    180deg,
-    #08562e 0%,
-    #021e0f 16.967%,
-    #000000 36.382%
-  );
-  background-attachment: fixed;
+  background: #010403;
+}
+
+/* dark ambient backdrop: pinned to the viewport so it stays put while the
+   content scrolls, always filling the screen height */
+.screen--home::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(75% 42% at -12% 45%, rgba(16, 74, 42, 0.5) 0%, rgba(16, 74, 42, 0) 70%),
+    radial-gradient(55% 35% at 106% 92%, rgba(14, 64, 36, 0.45) 0%, rgba(14, 64, 36, 0) 70%),
+    radial-gradient(50% 30% at 30% -8%, rgba(8, 40, 22, 0.35) 0%, rgba(8, 40, 22, 0) 70%),
+    #010403;
 }
 
 .home-wrap {
@@ -991,6 +993,23 @@ input:focus-visible {
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
+}
+
+.match-time__soon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1eb978;
+  white-space: nowrap;
+}
+
+.match-time__soon img {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .teams--light > b {
@@ -2654,9 +2673,9 @@ button.plan-option:disabled:hover {
 /* ============ RESPONSIVE: DESKTOP ≥1024 ============ */
 
 @media (min-width: 1024px) {
-  /* --- home: brand + toolbar row --- */
+  /* --- home: brand + toolbar row (wide screens get a wider column) --- */
   .home-wrap {
-    max-width: 1200px;
+    max-width: 1440px;
     padding: 106px 40px 64px;
     gap: 36px;
   }
@@ -2668,7 +2687,7 @@ button.plan-option:disabled:hover {
   .home-header {
     justify-content: flex-start;
     gap: 16px;
-    padding: max(16px, env(safe-area-inset-top)) max(40px, calc((100% - 1200px) / 2 + 40px)) 16px;
+    padding: max(16px, env(safe-area-inset-top)) max(40px, calc((100% - 1440px) / 2 + 40px)) 16px;
   }
 
   .home-header .pill {

@@ -87,7 +87,7 @@ const FREE_MODEL_NAME = "Qwen 3.7 Max";
 /* keep Safari's status-bar / overscroll tint in sync with each screen
    (ported from the prototype's SCREEN_TINTS + applyScreenTint) */
 const SCREEN_TINTS: Partial<Record<Screen, string>> = {
-  dashboard: "#08562e",
+  dashboard: "#010403",
   profile: "#020403",
   details: "#044423"
 };
@@ -617,15 +617,15 @@ function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
 function SkeletonCard() {
   return (
     <article className="pcard pcard--skeleton" aria-hidden="true">
-      <div className="pcard__head">
-        <span className="sk sk--text" style={{ width: 118 }} />
-      </div>
       <div className="teams">
         <div className="team">
           <span className="sk sk--circle" />
           <span className="sk sk--text" style={{ width: 72 }} />
         </div>
-        <span className="sk sk--text" style={{ width: 20 }} />
+        <div className="match-time">
+          <span className="sk sk--text" style={{ width: 44 }} />
+          <span className="sk sk--text" style={{ width: 64, height: 20 }} />
+        </div>
         <div className="team">
           <span className="sk sk--circle" />
           <span className="sk sk--text" style={{ width: 72 }} />
@@ -662,10 +662,17 @@ function kickoffParts(match: Match) {
 
 function MatchTime({ match }: { match: Match }) {
   const { date, time } = kickoffParts(match);
+  const soon = match.score ? "" : startingIn(match.kickoff);
   return (
     <div className="match-time">
       <span>{date}</span>
       <b>{match.score || time}</b>
+      {soon && (
+        <span className="match-time__soon">
+          <img src="/assets/figma-icon-clock.svg" alt="" />
+          {soon}
+        </span>
+      )}
     </div>
   );
 }
@@ -677,14 +684,11 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   onStart: () => void;
   onSee: () => void;
 }) {
-  const soon = startingIn(match.kickoff);
   const head = (withScoreChip: boolean) => {
     const badge = match.status === "live" ? (
       <span className="badge badge--live"><img src="/assets/figma-dot-live.svg" alt="" />Live</span>
     ) : withScoreChip && match.score ? (
       <span className="badge badge--score">{match.score}</span>
-    ) : soon ? (
-      <span className="badge badge--soon"><img src="/assets/figma-icon-clock.svg" alt="" />Starting in: {soon}</span>
     ) : null;
     return badge ? <div className="pcard__head">{badge}</div> : null;
   };
