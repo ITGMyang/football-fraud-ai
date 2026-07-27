@@ -71,7 +71,9 @@ npx wrangler secret delete MODEL_QWEN
 
 模型默认走 OpenRouter，设 `MODEL_<NAME>_PROVIDER` 为 `openai` 或 `apimart` 可以让某个模型改走直连。
 
-**当前配置不是全部走 OpenRouter**：这个 OpenRouter 账号的 billing region 没有 OpenAI / Anthropic / Google 的访问权限，这三家在 OpenRouter 上会返回 403 `violation of provider Terms Of Service`，所以 GPT 走 OpenAI 直连、Claude 和 Gemini 走 APIMart，只有 Qwen 走 OpenRouter。这是账号层面的限制，换出口 IP 没用。
+**当前四个模型全部走 APIMart**。原因：这个 OpenRouter 账号的 billing region 没有 OpenAI / Anthropic / Google 的访问权限，这三家在 OpenRouter 上返回 403 `violation of provider Terms Of Service`。这是账号层面的限制，换出口 IP 或改 billing address 都没有解除。APIMart 对四个模型都返回 200。
+
+成本统计的现状：`src/model-cost.js` 里 APIMart 只配了 `claude-opus-4-8` 和 `gemini-3.1-pro-preview` 的单价，**`gpt-5.5` 和 `qwen3.7-max` 没有单价**，后台会把它们标成 `unpriced`。补上这两行单价，成本就完整了。
 
 区分错误的办法：模型 id 写错返回 **400 `is not a valid model ID`**，地域被拒返回 **403**。
 
