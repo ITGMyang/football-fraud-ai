@@ -834,43 +834,42 @@ input:focus-visible {
   text-align: center;
 }
 
-/* next match day suggestion — shown under an empty date */
+/* upcoming matches — shown under an empty date, up to three match days */
 .next-day {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
   width: 100%;
   padding-top: 24px;
   border-top: 1px solid rgba(23, 54, 38, 0.5);
   animation: card-swap 0.5s var(--ease-out);
 }
 
+.next-day__heading {
+  font-family: "Red Hat Display", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.next-day__group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .next-day__head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.next-day__eyebrow {
-  display: block;
-  font-family: "Red Hat Display", sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  background: linear-gradient(96.321deg, #6a927c 0.68286%, #166f4a 97.815%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.next-day__title h3 {
-  margin-top: 4px;
-  font-family: "Red Hat Display", sans-serif;
-  font-size: 20px;
-  font-weight: 700;
-  color: #fff;
+.next-day__head h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .next-day__jump {
@@ -888,28 +887,6 @@ input:focus-visible {
 .next-day__jump:hover {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.28);
-}
-
-/* prominent "not your selected date" notice */
-.next-day__notice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: fit-content;
-  max-width: 100%;
-  padding: 8px 14px;
-  border-radius: 40px;
-  background: #04120c;
-  border: 1px solid rgba(30, 185, 120, 0.3);
-  color: #1eb978;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.next-day__notice img {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
 }
 
 /* skeleton loading — placeholders shaped like the real cards */

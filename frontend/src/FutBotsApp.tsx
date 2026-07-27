@@ -716,7 +716,7 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDay, pendingMatchId, onOpenMatch, onOpenResult }: {
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, nextDays, pendingMatchId, onOpenMatch, onOpenResult }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -727,7 +727,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   selectedDate: string;
   onDate: (date: string) => void;
   matchDays: Set<string>;
-  nextDay: { date: string; matches: Match[] } | null;
+  nextDays: { date: string; matches: Match[] }[];
   pendingMatchId: string;
   onOpenMatch: (match: Match) => void;
   onOpenResult: (match: Match) => void;
@@ -785,38 +785,36 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                 <div className="empty-note">
                   <b>No eligible matches on this date.</b>
                   <p>
-                    {matches.length === 0 && nextDay
-                      ? `The next match day is ${nextDayLabel(nextDay.date)}.`
+                    {matches.length === 0 && nextDays.length
+                      ? "See the upcoming matches below."
                       : "Choose another day in the calendar."}
                   </p>
                 </div>
-                {matches.length === 0 && nextDay && (
+                {matches.length === 0 && nextDays.length > 0 && (
                   <div className="next-day">
-                    <div className="next-day__head">
-                      <div className="next-day__title">
-                        <span className="next-day__eyebrow">Next match day</span>
-                        <h3>{nextDayLabel(nextDay.date)}</h3>
+                    <h2 className="next-day__heading">Upcoming Matches</h2>
+                    {nextDays.map((day) => (
+                      <div className="next-day__group" key={day.date}>
+                        <div className="next-day__head">
+                          <h3>{nextDayLabel(day.date)}</h3>
+                          <button className="next-day__jump" onClick={() => onDate(day.date)}>
+                            Go to {nextDayLabel(day.date)}
+                          </button>
+                        </div>
+                        <div className="pcards">
+                          {day.matches.map((match) => (
+                            <MatchCard
+                              key={match.id}
+                              match={match}
+                              ranking={rankingForMatch(rankings, match.id) as RankingView | null}
+                              analyzing={pendingMatchId === match.id}
+                              onStart={() => onOpenMatch(match)}
+                              onSee={() => onOpenResult(match)}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      <button className="next-day__jump" onClick={() => onDate(nextDay.date)}>
-                        Go to {nextDayLabel(nextDay.date)}
-                      </button>
-                    </div>
-                    <p className="next-day__notice" role="status">
-                      <img src="/assets/figma-icon-clock.svg" alt="" />
-                      Not your selected date — these matches are on {nextDayLabel(nextDay.date)}
-                    </p>
-                    <div className="pcards" key={`next-${nextDay.date}`}>
-                      {nextDay.matches.map((match) => (
-                        <MatchCard
-                          key={match.id}
-                          match={match}
-                          ranking={rankingForMatch(rankings, match.id) as RankingView | null}
-                          analyzing={pendingMatchId === match.id}
-                          onStart={() => onOpenMatch(match)}
-                          onSee={() => onOpenResult(match)}
-                        />
-                      ))}
-                    </div>
+                    ))}
                   </div>
                 )}
               </>
@@ -1484,7 +1482,7 @@ export default function FutBotsApp() {
   const [toastVisible, setToastVisible] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
   const [matchDays, setMatchDays] = useState<Set<string>>(() => new Set());
-  const [nextDay, setNextDay] = useState<{ date: string; matches: Match[] } | null>(null);
+  const [nextDays, setNextDays] = useState<{ date: string; matches: Match[] }[]>([]);
 
   const finishAuthSession = useCallback(() => {
     sessionStorage.removeItem("futbots.authNext");
@@ -1582,24 +1580,26 @@ export default function FutBotsApp() {
     }
   }, [api]);
 
-  /* When the selected date has no matches, load the next match day so the
-     dashboard can suggest it inline. Same read-only matches endpoint. */
+  /* When the selected date has no matches, load the next match days (up to
+     three) so the dashboard can suggest them inline. Same read-only endpoint. */
   useEffect(() => {
     let active = true;
-    setNextDay(null);
+    setNextDays([]);
     if (loading || matches.length) return;
-    const next = [...matchDays].filter((date) => date > selectedDate).sort()[0];
-    if (!next) return;
-    const fetchNextDay = async () => {
-      try {
-        const schedule = await api(`/api/football/matches?competitionId=all&date=${encodeURIComponent(next)}`);
-        const nextMatches = normalizeMatches(schedule) as Match[];
-        if (active && nextMatches.length) setNextDay({ date: next, matches: nextMatches });
-      } catch {
-        /* suggestion only — ignore failures */
-      }
+    const upcoming = [...matchDays].filter((date) => date > selectedDate).sort().slice(0, 3);
+    if (!upcoming.length) return;
+    const fetchNextDays = async () => {
+      const results = await Promise.all(upcoming.map(async (date) => {
+        try {
+          const schedule = await api(`/api/football/matches?competitionId=all&date=${encodeURIComponent(date)}`);
+          return { date, matches: normalizeMatches(schedule) as Match[] };
+        } catch {
+          return { date, matches: [] as Match[] };
+        }
+      }));
+      if (active) setNextDays(results.filter((result) => result.matches.length));
     };
-    void fetchNextDay();
+    void fetchNextDays();
     return () => { active = false; };
   }, [api, loading, matches, matchDays, selectedDate]);
 
@@ -1823,7 +1823,7 @@ export default function FutBotsApp() {
   const closeAuth = () => setAuthScreen("");
 
   const screenNode = screen === "dashboard" ? (
-    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDay={nextDay} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onOpenMatch={openMatch} onOpenResult={openResult} />
   ) : screen === "details" ? (
     <Details navigate={navigate} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} pendingModel={pendingModel} error={error} onPredict={(modelName) => void analyze(selectedMatch, modelName)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
