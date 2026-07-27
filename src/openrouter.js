@@ -1,5 +1,6 @@
 import { aggregateReport, validatePrediction } from './domain.js';
 import { calculateModelCostUsd } from './model-cost.js';
+import { buildPoissonBaseline, poissonPromptSummary } from './poisson.js';
 
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
@@ -68,15 +69,21 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
     odds: market.odds
   }));
 
+  const poissonBaseline = buildPoissonBaseline(matchContext);
+  const statisticalBaseline = poissonPromptSummary(poissonBaseline);
+
   const results = [];
   for (const [label, model,, provider] of selected) {
-    results.push(await callRankingModelWithRetry({ label, model, provider, markets: compactMarkets, env, fetchImpl, matchContext }));
+    results.push(await callRankingModelWithRetry({
+      label, model, provider, markets: compactMarkets, env, fetchImpl, matchContext, statisticalBaseline
+    }));
   }
 
   return {
     id: crypto.randomUUID(),
     results,
     marketCount: compactMarkets.length,
+    statisticalBaseline: poissonBaseline,
     createdAt: new Date().toISOString(),
     disclaimer: 'AI 概率来自模型预测，不是赔率换算；非财务建议，非稳赢预测。'
   };
@@ -143,7 +150,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
   }
 }
 
-async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, retry = false }) {
+async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, statisticalBaseline = null, retry = false }) {
   try {
     const client = modelClient(provider, env);
     const request = modelRequest({
@@ -151,7 +158,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       provider,
       model,
       system: rankingSystemPromptV2(),
-      user: rankingUserPromptV2(markets, matchContext, retry),
+      user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline),
       temperature: retry ? 0 : 0.15,
       maxTokens: 2200
     });
@@ -434,7 +441,10 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
         { role: 'system', content: system },
         { role: 'user', content: user }
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      // OpenRouter only returns usage.cost when accounting is requested. Without it
+      // every OpenRouter model (Qwen included) reports a zero spend in the console.
+      ...(String(provider).toLowerCase() === 'openrouter' ? { usage: { include: true } } : {})
     }
   };
 }
@@ -556,13 +566,14 @@ function rankingUserPrompt(markets, matchContext, retry) {
   });
 }
 
-function rankingUserPromptV2(markets, matchContext, retry) {
+function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline = null) {
   return JSON.stringify({
     task: retry
       ? 'The previous output was invalid. Return one valid JSON object with up to 4 qualifying picks, exactly 4 scorePicks, and exactly 1 bttsPick. Use English for every reason, risk, and note.'
       : 'Return up to 4 best-supported markets with independent estimatedProbability of at least 0.60, then provide exactly 4 correct-score paths and 1 both-teams-to-score assessment. Use English for every reason, risk, and note.',
     markets,
     matchContext: compactMatchContext(matchContext),
+    ...(statisticalBaseline ? { statisticalBaseline } : {}),
     requiredShape: {
       picks: [
         {
@@ -603,6 +614,7 @@ function rankingUserPromptV2(markets, matchContext, retry) {
       'If picks contains Over 2.5, every scorePick must total at least 3 goals; if it contains Under 2.5, every scorePick must total at most 2 goals.',
       'If picks contains Over 3.5, every scorePick must total at least 4 goals; if it contains Under 3.5, every scorePick must total at most 3 goals.',
       'Use an existing score marketId when available; otherwise still provide the score text.',
+      'statisticalBaseline, when present, is a Poisson prior fitted from season goal records. Treat it as the starting distribution: stay close to it unless lineups, injuries, market moves or motivation justify moving away, and name that evidence in the reason when you do.',
       'bttsPick selection must be exactly "Yes" or "No" and must be logically consistent with the weighted scorePicks.',
       'estimatedProbability is an independent model probability, not an odds conversion.',
       'Sort picks and scorePicks by estimatedProbability descending.',

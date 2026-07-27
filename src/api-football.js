@@ -363,11 +363,17 @@ function normalizeCatalog({ standings, topScorers, teamStatistics, squads, coach
     teamStatistics: (teamStatistics || []).map((row) => ({
       team: row?.team?.name || '',
       played: row?.fixtures?.played?.total ?? '',
+      playedHome: row?.fixtures?.played?.home ?? '',
+      playedAway: row?.fixtures?.played?.away ?? '',
       wins: row?.fixtures?.wins?.total ?? '',
       draws: row?.fixtures?.draws?.total ?? '',
       losses: row?.fixtures?.loses?.total ?? '',
       goalsFor: row?.goals?.for?.total?.total ?? '',
+      goalsForHome: row?.goals?.for?.total?.home ?? '',
+      goalsForAway: row?.goals?.for?.total?.away ?? '',
       goalsAgainst: row?.goals?.against?.total?.total ?? '',
+      goalsAgainstHome: row?.goals?.against?.total?.home ?? '',
+      goalsAgainstAway: row?.goals?.against?.total?.away ?? '',
       cleanSheets: row?.clean_sheet?.total ?? ''
     })),
     squads: (squads || []).flatMap((row) => (row?.players || []).map((player) => [

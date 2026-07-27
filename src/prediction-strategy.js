@@ -2,6 +2,7 @@ import { configuredModels } from './openrouter.js';
 import { predictionModelKey, predictionPhase } from './prediction-cache.js';
 import { buildAnalytics } from './evaluation.js';
 import { contextKey } from './context-utils.js';
+import { buildPoissonBaseline } from './poisson.js';
 
 const DEFAULT_SETTINGS = Object.freeze({
   championModelKey: 'qwen',
@@ -115,6 +116,9 @@ export async function resolveOptimizedPrediction({
       marketCount: markets.length,
       contextId: String(fixtureId),
       contextName,
+      // Stored alongside the published consensus so post-match reviews can score the
+      // models against the statistical prior they were given.
+      statisticalBaseline: buildPoissonBaseline(matchContext),
       createdAt: new Date(now).toISOString(),
       predictionPhase: phase,
       disclaimer: 'AI predictions are probabilistic and are not financial advice.'
