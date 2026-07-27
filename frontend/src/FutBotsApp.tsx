@@ -84,6 +84,20 @@ type AuthConfig = {
 
 const FREE_MODEL_NAME = "Qwen 3.7 Max";
 
+/* keep Safari's status-bar / overscroll tint in sync with each screen
+   (ported from the prototype's SCREEN_TINTS + applyScreenTint) */
+const SCREEN_TINTS: Partial<Record<Screen, string>> = {
+  dashboard: "#08562e",
+  profile: "#020403",
+  details: "#044423"
+};
+
+function applyScreenTint(screen: Screen) {
+  const tint = SCREEN_TINTS[screen] || "#010603";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", tint);
+  document.documentElement.style.backgroundColor = tint;
+}
+
 function TeamFlag({ team, size = 34, className = "", style }: {
   team: Team;
   size?: number;
@@ -1661,6 +1675,8 @@ export default function FutBotsApp() {
   }, [api, screen, session]);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: "auto" }); }, [screen]);
+
+  useEffect(() => { applyScreenTint(screen); }, [screen]);
 
   useEffect(() => {
     if (!toastVisible) return;
