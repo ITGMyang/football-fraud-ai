@@ -512,11 +512,11 @@ function Filters({ selectedDate, onDate, competitions, competition, onCompetitio
       <div className={`filter ${openPanel === "date" ? "is-open" : ""}`}>
         <span>Date</span>
         <button
-          className="filter__control g-stroke"
+          className="filter__control"
           onClick={() => setOpenPanel(openPanel === "date" ? "" : "date")}
         >
           <span>{shortDateLabel(selectedDate)}</span>
-          <img src="/assets/figma-chevron-down.svg" alt="" />
+          <img src="/assets/figma-chevron-down-neutral.svg" alt="" />
         </button>
         <div className="dd-panel dp-panel g-stroke">
           <div className="dp-head">
@@ -565,11 +565,11 @@ function Filters({ selectedDate, onDate, competitions, competition, onCompetitio
       <div className={`filter ${openPanel === "type" ? "is-open" : ""}`}>
         <span>Match type</span>
         <button
-          className="filter__control g-stroke"
+          className="filter__control"
           onClick={() => setOpenPanel(openPanel === "type" ? "" : "type")}
         >
           <span>{competition}</span>
-          <img src="/assets/figma-chevron-down.svg" alt="" />
+          <img src="/assets/figma-chevron-down-neutral.svg" alt="" />
         </button>
         <div className="dd-panel g-stroke">
           {["All Competitions", ...competitions].map((item) => (

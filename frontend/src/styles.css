@@ -400,7 +400,7 @@ input:focus-visible {
 .filter > span {
   font-size: 12px;
   font-weight: 500;
-  color: #6a927c;
+  color: #676767;
 }
 
 /* Gradient stroke ring — measured from Figma: white 14% top → 9% bottom */
@@ -427,6 +427,8 @@ input:focus-visible {
   pointer-events: none;
 }
 
+/* Figma 38:357 — neutral control on the pure-black backdrop:
+   fill rgba(255,255,255,0.02), stroke rgba(255,255,255,0.5), text #676767 */
 .filter__control {
   display: flex;
   align-items: center;
@@ -434,27 +436,21 @@ input:focus-visible {
   width: 100%;
   height: 48px;
   padding: 16px;
-  background: rgba(13, 53, 33, 0.4);
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 30px;
   font-size: 14px;
   font-weight: 500;
-  color: #6a927c;
+  color: #676767;
   white-space: nowrap;
-  transition: background var(--hover), color var(--hover);
+  transition: background var(--hover), border-color var(--hover),
+    color var(--hover);
 }
 
 .filter__control:hover {
-  background: rgba(13, 53, 33, 0.65);
-  color: #8fb6a1;
-}
-
-.filter__control:hover::before {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.3),
-    rgba(255, 255, 255, 0.18)
-  );
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.7);
+  color: #8f8f8f;
 }
 
 .filter__control img {
@@ -469,6 +465,7 @@ input:focus-visible {
 }
 
 /* Dropdown panel — 1:1 from Figma 30:230 */
+/* dropdown panel — neutral glass over the black backdrop, frosted blur kept */
 .dd-panel {
   position: absolute;
   top: calc(100% + 8px);
@@ -481,11 +478,11 @@ input:focus-visible {
   padding: 18px 16px;
   background: linear-gradient(
     180deg,
-    rgba(10, 40, 25, 0.72) 0%,
-    rgba(3, 16, 10, 0.86) 100%
+    rgba(42, 42, 42, 0.72) 0%,
+    rgba(12, 12, 12, 0.86) 100%
   );
-  backdrop-filter: blur(18px) saturate(1.15);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
   border: 1px solid transparent;
   border-radius: 30px;
@@ -506,7 +503,7 @@ input:focus-visible {
 .dd-item {
   font-size: 14px;
   font-weight: 500;
-  color: #8fb7a0;
+  color: #a3a3a3;
   white-space: nowrap;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   transition: color var(--hover);
@@ -571,7 +568,7 @@ input:focus-visible {
   justify-content: center;
   font-size: 13px;
   font-weight: 500;
-  color: #6a927c;
+  color: #9a9a9a;
   transition: background var(--hover), color var(--hover);
 }
 
