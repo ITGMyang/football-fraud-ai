@@ -151,9 +151,27 @@ input:focus-visible {
 }
 
 .home-brand {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* frosted black backdrop that fades in once the page starts scrolling */
+.home-header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(2, 6, 4, 0.78);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.home-header--scrolled::before {
+  opacity: 1;
 }
 
 .home-brand__ball {
@@ -2713,10 +2731,6 @@ button.plan-option:disabled:hover {
     max-width: 1440px;
     padding: 106px 40px 64px;
     gap: 36px;
-  }
-
-  .home-brand {
-    display: flex;
   }
 
   .home-header {

@@ -362,8 +362,15 @@ function HomeHeader({ session, access, navigate }: {
   navigate: (screen: Screen) => void;
 }) {
   const planLabel = access.billing?.active ? "AI Pass" : access.billing?.freePredictionUsed ? "Trial Used" : "Free Trial";
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   return (
-    <header className="home-header">
+    <header className={`home-header ${scrolled ? "home-header--scrolled" : ""}`}>
       <div className="home-brand" aria-hidden="true">
         <img className="home-brand__ball" src="/assets/figma-icon-futbot.png" alt="" />
         <img className="home-brand__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
