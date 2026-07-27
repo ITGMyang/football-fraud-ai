@@ -50,13 +50,15 @@ https://你的正式域名/auth/reset
 
 ```powershell
 npx wrangler secret put OPENROUTER_API_KEY
+npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put APIMART_API_KEY
 npx wrangler secret put API_FOOTBALL_KEY
 npx wrangler secret put SUPABASE_URL
 npx wrangler secret put SUPABASE_PUBLISHABLE_KEY
 npx wrangler secret put SUPABASE_SECRET_KEY
 ```
 
-模型 id 现在全部写在 `wrangler.jsonc` 的 `vars` 里，不再是 secret。**Cloudflare 的 secret 会覆盖同名 var**，所以如果之前设过模型 secret，要先删掉：
+模型 id 和 provider 现在都写在 `wrangler.jsonc` 的 `vars` 里，不再是 secret。**Cloudflare 的 secret 会覆盖同名 var**，所以如果之前设过模型 secret，要先删掉：
 
 ```powershell
 npx wrangler secret delete MODEL_GPT
@@ -67,17 +69,21 @@ npx wrangler secret delete MODEL_QWEN
 
 ## 模型路由
 
-四个模型默认全部走 OpenRouter，只需要一把 `OPENROUTER_API_KEY`。成本由 OpenRouter 直接回传，后台不再依赖本地价目表估算。
+模型默认走 OpenRouter，设 `MODEL_<NAME>_PROVIDER` 为 `openai` 或 `apimart` 可以让某个模型改走直连。
 
-模型 id 必须和 <https://openrouter.ai/models> 上完全一致。改完先验证：
+**当前配置不是全部走 OpenRouter**：这个 OpenRouter 账号的 billing region 没有 OpenAI / Anthropic / Google 的访问权限，这三家在 OpenRouter 上会返回 403 `violation of provider Terms Of Service`，所以 GPT 走 OpenAI 直连、Claude 和 Gemini 走 APIMart，只有 Qwen 走 OpenRouter。这是账号层面的限制，换出口 IP 没用。
+
+区分错误的办法：模型 id 写错返回 **400 `is not a valid model ID`**，地域被拒返回 **403**。
+
+改完配置后验证，两个办法：
 
 ```powershell
 npm run test:models
 ```
 
-这会逐个真实调用一次，打印每个模型的 HTTP 状态和错误原文——模型 id 写错、地域被拒、额度不足都能一眼看出来。
+本地跑，测的是你本机的出口。或者登录 `/admin` -> `Models` -> `Run check`，从 Worker 里测——生产环境以这个为准。两者都是每个模型发一次 16~32 token 的请求，成本可忽略。
 
-如果某个上游服务商拒绝你的地域，用这两个变量绕开（填 OpenRouter 的 provider slug，逗号分隔）：
+如果只是某个上游服务商拒绝你的地域（而不是整个账号受限），这两个变量可以绕开，填 OpenRouter 的 provider slug，逗号分隔：
 
 ```powershell
 npx wrangler secret put OPENROUTER_PROVIDER_IGNORE   # 跳过这些服务商
@@ -85,8 +91,6 @@ npx wrangler secret put OPENROUTER_PROVIDER_ORDER    # 优先用这些服务商
 ```
 
 两个都不填时不会向 OpenRouter 发送 provider 字段，保持它自己的默认路由。
-
-单独让某个模型走直连而不是 OpenRouter，设 `MODEL_<NAME>_PROVIDER` 为 `openai` 或 `apimart`，并补上对应的 `OPENAI_API_KEY` / `APIMART_API_KEY`。
 
 Supabase 新版后台路径：`Project Settings` -> `API Keys`。新版复制 `Secret keys` 区域的 `sb_secret_...`；旧版切到 `Legacy API Keys`，复制 `service_role`。
 
