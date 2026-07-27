@@ -273,6 +273,8 @@ test('the admin console is wired to the dashboard API through its own shell', as
   assert.match(app, /\/api\/admin\/dashboard/);
   assert.match(app, /\/api\/backend\/schedules/);
   assert.match(app, /\/api\/backend\/fixtures\//);
+  assert.match(app, /\/api\/admin\/models\/check/);
+  assert.match(worker, /url\.pathname === '\/api\/admin\/models\/check'/);
   assert.match(app, /setAuthorized\(false\)/);
 
   // Console copy ships in both languages behind a persisted toggle.

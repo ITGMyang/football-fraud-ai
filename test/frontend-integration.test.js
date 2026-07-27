@@ -347,10 +347,22 @@ test('a match card starts the prediction in place instead of opening a setup scr
   // The card carries its own spinner, so the run is visible without leaving the list.
   assert.match(source, /analyzing=\{pendingMatchId === match\.id\}/);
   assert.match(source, /<span>Analyzing\.\.\.<\/span>/);
-  // ModelRoom stays as the entry point for a fixture opened without a prediction.
+  // ModelRoom stays as the entry point for a fixture opened without a prediction,
+  // and routes through the same guard as the card.
   assert.match(source, /function ModelRoom/);
-  assert.match(source, /onRun=\{\(\) => setConfirmOpen\(true\)\}/);
-  assert.match(source, /onPredict=\{\(\) => void analyze\(selectedMatch\)\}/);
+  assert.match(source, /onRun=\{onPredict\}/);
+  assert.match(source, /onPredict=\{\(\) => selectedMatch && startPrediction\(selectedMatch\)\}/);
+});
+
+test('a run that would spend the single free prediction is confirmed first', async () => {
+  const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
+
+  // Paid access runs immediately; everyone else is asked before their one free run.
+  assert.match(source, /if \(!access\.billing\?\.active\) \{\s*setConfirmMatch\(match\);\s*return;\s*\}/);
+  assert.match(source, /You Have 1 Free Prediction Left/);
+  // The dialog lives in the shell so both the card and the details screen share it.
+  assert.match(source, /\{confirmMatch && \(\s*<PredictModal/);
+  assert.doesNotMatch(source, /confirmOpen/);
 });
 
 test('completed model lanes and dashboard cards open saved results instead of predicting again', async () => {

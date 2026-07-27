@@ -24,6 +24,8 @@ import type {
 import './admin.css';
 
 type AuthConfig = { enabled?: boolean; supabaseUrl?: string; publishableKey?: string; error?: string };
+type ModelCheckRow = { label: string; model: string; provider: string; ok: boolean; status: number; ms: number; message: string };
+type ModelCheck = { checkedAt: string; reachable: number; total: number; checks: ModelCheckRow[] };
 type TabId = 'overview' | 'data' | 'models' | 'predictions' | 'accuracy' | 'accounts';
 
 const TABS: { id: TabId; label: CopyKey; hint: CopyKey }[] = [
@@ -365,7 +367,15 @@ function DataConsoleTab({ dashboard, schedules, generatedAt, loading, error, onR
 
 /* ============ TAB: MODELS ============ */
 
-function ModelsTab({ dashboard, onDate, busy }: { dashboard: Dashboard; onDate: (date: string) => void; busy: boolean }) {
+function ModelsTab({ dashboard, onDate, busy, check, checking, checkError, onCheck }: {
+  dashboard: Dashboard;
+  onDate: (date: string) => void;
+  busy: boolean;
+  check: ModelCheck | null;
+  checking: boolean;
+  checkError: string;
+  onCheck: () => void;
+}) {
   const t = useT();
   const { modelUsage } = dashboard;
   const unpriced = modelUsage.total.calls - modelUsage.total.costAvailableCalls;
@@ -408,6 +418,41 @@ function ModelsTab({ dashboard, onDate, busy }: { dashboard: Dashboard; onDate: 
 
       <Module title={t('usageAllTime')} eyebrow={t('perModel')}>
         <UsageTable summary={modelUsage.total} />
+      </Module>
+
+      <Module
+        title={t('modelCheckTitle')}
+        eyebrow={t('modelCheck')}
+        note={t('modelCheckNote')}
+        action={<button className="a-btn" type="button" onClick={onCheck} disabled={checking}>{checking ? t('checking') : t('runCheck')}</button>}
+      >
+        {checkError && <p className="a-error" role="alert">{checkError}</p>}
+        {check && (
+          <div className="a-inline">
+            <Status tone={check.reachable === check.total ? 'ok' : check.reachable ? 'warn' : 'bad'}>
+              {t('reachableCount', { ok: check.reachable, total: check.total })}
+            </Status>
+            <span>{when(check.checkedAt)}</span>
+          </div>
+        )}
+        <Table
+          head={[t('colModel'), t('colProvider'), t('colStatus'), t('colLatency'), t('colDetail')]}
+          empty={checking ? t('checking') : t('notCheckedYet')}
+        >
+          {(check?.checks || []).map((row) => (
+            <tr key={`${row.label}-${row.model}`}>
+              <td><strong>{row.label}</strong><small>{row.model}</small></td>
+              <td>{row.provider}</td>
+              <td>
+                {row.ok
+                  ? <Status tone="ok">{t('reachable')}</Status>
+                  : <Status tone="bad">{t('unreachable')}{row.status ? ` ${row.status}` : ''}</Status>}
+              </td>
+              <td>{row.ms} ms</td>
+              <td className="a-dim a-wrap">{row.message}</td>
+            </tr>
+          ))}
+        </Table>
       </Module>
     </>
   );
@@ -791,6 +836,10 @@ export default function AdminApp() {
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [schedulesError, setSchedulesError] = useState('');
 
+  const [check, setCheck] = useState<ModelCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState('');
+
   const [fixtureId, setFixtureId] = useState('');
   const [fixture, setFixture] = useState<FixtureContext | null>(null);
   const [fixtureLoading, setFixtureLoading] = useState(false);
@@ -891,6 +940,18 @@ export default function AdminApp() {
       setFixtureError(userFacingError(openError, t('errorFixture')));
     } finally {
       setFixtureLoading(false);
+    }
+  }, [api, t]);
+
+  const runModelCheck = useCallback(async () => {
+    setChecking(true);
+    setCheckError('');
+    try {
+      setCheck(await api('/api/admin/models/check', { method: 'POST' }) as ModelCheck);
+    } catch (error) {
+      setCheckError(userFacingError(error, t('errorModelCheck')));
+    } finally {
+      setChecking(false);
     }
   }, [api, t]);
 
@@ -1000,7 +1061,15 @@ export default function AdminApp() {
                 />
               )}
               {tab === 'models' && (
-                <ModelsTab dashboard={dashboard} busy={loading} onDate={(date) => { setUsageDate(date); void loadDashboard(date); }} />
+                <ModelsTab
+                  dashboard={dashboard}
+                  busy={loading}
+                  onDate={(date) => { setUsageDate(date); void loadDashboard(date); }}
+                  check={check}
+                  checking={checking}
+                  checkError={checkError}
+                  onCheck={() => void runModelCheck()}
+                />
               )}
               {tab === 'predictions' && <PredictionsTab dashboard={dashboard} />}
               {tab === 'accuracy' && <AccuracyTab accuracy={dashboard.accuracy} />}

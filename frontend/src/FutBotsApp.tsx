@@ -1069,20 +1069,18 @@ function ModelRoom({ match, ranking, analyzing, error, onRun, onSee }: {
   );
 }
 
-function Details({ navigate, onBack, match, ranking, showResult, access, analyzing, error, onPredict, onSeeResult }: {
+function Details({ navigate, onBack, match, ranking, showResult, analyzing, error, onPredict, onSeeResult }: {
   navigate: (screen: Screen) => void;
   onBack: () => void;
   match: Match | null;
   ranking: RankingView | null;
   showResult: boolean;
-  access: Access;
   analyzing: boolean;
   error: string;
   onPredict: () => void;
   onSeeResult: () => void;
 }) {
   const [activeModelName, setActiveModelName] = useState("");
-  const [confirmOpen, setConfirmOpen] = useState(false);
   useEffect(() => {
     setActiveModelName(ranking?.models?.[0]?.name || "");
   }, [ranking]);
@@ -1110,7 +1108,7 @@ function Details({ navigate, onBack, match, ranking, showResult, access, analyzi
             ranking={ranking}
             analyzing={analyzing}
             error={error}
-            onRun={() => setConfirmOpen(true)}
+            onRun={onPredict}
             onSee={() => {
               setActiveModelName(ranking?.models?.[0]?.name || "");
               onSeeResult();
@@ -1154,18 +1152,6 @@ function Details({ navigate, onBack, match, ranking, showResult, access, analyzi
           </>
         )}
       </div>
-      {match && (
-        <PredictModal
-          open={confirmOpen}
-          match={match}
-          freeUser={!access.billing?.active}
-          onClose={() => setConfirmOpen(false)}
-          onConfirm={() => {
-            setConfirmOpen(false);
-            onPredict();
-          }}
-        />
-      )}
     </section>
   );
 }
@@ -1502,6 +1488,7 @@ export default function FutBotsApp() {
   const [error, setError] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
+  const [confirmMatch, setConfirmMatch] = useState<Match | null>(null);
   const [matchDays, setMatchDays] = useState<Set<string>>(() => new Set());
   const [nextDays, setNextDays] = useState<{ date: string; matches: Match[] }[]>([]);
 
@@ -1806,6 +1793,10 @@ export default function FutBotsApp() {
     setSelectedMatch(match);
     setSelectedRanking(rankingForMatch(rankings, match.id) as RankingView | null);
     setShowSelectedResult(false);
+    if (!access.billing?.active) {
+      setConfirmMatch(match);
+      return;
+    }
     void analyze(match);
   }
 
@@ -1914,7 +1905,7 @@ export default function FutBotsApp() {
   const screenNode = screen === "dashboard" ? (
     <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} nextDays={nextDays} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
   ) : screen === "details" ? (
-    <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} access={access} analyzing={analysisPending} error={error} onPredict={() => void analyze(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
+    <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} analyzing={analysisPending} error={error} onPredict={() => selectedMatch && startPrediction(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
     <Profile navigate={navigate} onBack={goBack} access={access} historyGroups={historyGroups} session={session} onOpenPrediction={openHistoryPrediction} onSignOut={signOut} />
   );
@@ -1928,6 +1919,19 @@ export default function FutBotsApp() {
       {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
       {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
       {plansOpen && <Plans access={access} checkout={checkout} onClose={closePlans} />}
+      {confirmMatch && (
+        <PredictModal
+          open
+          match={confirmMatch}
+          freeUser={!access.billing?.active}
+          onClose={() => setConfirmMatch(null)}
+          onConfirm={() => {
+            const match = confirmMatch;
+            setConfirmMatch(null);
+            void analyze(match);
+          }}
+        />
+      )}
       <PredictionToast visible={toastVisible} onOpen={openToastResult} />
     </>
   );

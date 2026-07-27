@@ -623,7 +623,7 @@ test('ranking score predictions stay consistent with under total pick', async ()
   assert.match(ranking.results[0].scorePicks.at(-1).reason, /compatible score/i);
 });
 
-test('gpt-prefixed model uses OpenAI provider automatically', async () => {
+test('a model is routed to OpenAI only when its provider says so', async () => {
   const markets = [
     buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
   ];
@@ -654,7 +654,8 @@ test('gpt-prefixed model uses OpenAI provider automatically', async () => {
   const ranking = await rankMarkets(markets, 'GPT', {
     OPENAI_API_KEY: 'test-openai',
     OPENROUTER_API_KEY: 'test-openrouter',
-    MODEL_GPT: 'gpt-5.5'
+    MODEL_GPT: 'gpt-5.5',
+    MODEL_GPT_PROVIDER: 'openai'
   }, fakeFetch);
 
   assert.match(requestedUrl, /^https:\/\/api\.openai\.com\/v1\/responses$/);
@@ -698,7 +699,8 @@ test('ranking parser accepts array content from OpenAI responses', async () => {
 
   const ranking = await rankMarkets(markets, 'GPT', {
     OPENAI_API_KEY: 'test-openai',
-    MODEL_GPT: 'gpt-5.5'
+    MODEL_GPT: 'gpt-5.5',
+    MODEL_GPT_PROVIDER: 'openai'
   }, fakeFetch);
 
   assert.equal(ranking.results[0].picks[0].marketId, 'a');
@@ -730,7 +732,8 @@ test('ranking parser accepts Responses API output content', async () => {
 
   const ranking = await rankMarkets(markets, 'GPT', {
     OPENAI_API_KEY: 'test-openai',
-    MODEL_GPT: 'gpt-5.5'
+    MODEL_GPT: 'gpt-5.5',
+    MODEL_GPT_PROVIDER: 'openai'
   }, fakeFetch);
 
   assert.equal(ranking.results[0].picks[0].marketId, 'a');
@@ -1000,7 +1003,8 @@ test('APIMart and OpenAI calls are left free of the OpenRouter usage field', asy
 
   await rankMarkets(markets, 'GPT', {
     OPENAI_API_KEY: 'test',
-    MODEL_GPT: 'gpt-5.5'
+    MODEL_GPT: 'gpt-5.5',
+    MODEL_GPT_PROVIDER: 'openai'
   }, fakeFetch);
   assert.equal(bodies[1].usage, undefined);
 });
@@ -1079,4 +1083,76 @@ test('a fixture without season goal records still ranks, with no baseline in the
   assert.equal(sentPrompt.statisticalBaseline, undefined);
   assert.equal(ranking.statisticalBaseline.available, false);
   assert.equal(ranking.results[0].error, undefined);
+});
+
+test('every model defaults to OpenRouter and carries the region escape hatch', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  const calls = [];
+  const fakeFetch = async (url, options) => {
+    calls.push({ url: String(url), body: JSON.parse(options.body) });
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.62, confidence: 0.5, reason: 'home', risks: [] }],
+              scorePicks: [{ score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'low' }]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  const env = {
+    OPENROUTER_API_KEY: 'test',
+    MODEL_GPT: 'openai/gpt-5.5',
+    MODEL_CLAUDE: 'anthropic/claude-opus-4.8',
+    MODEL_GEMINI: 'google/gemini-3.1-pro-preview',
+    MODEL_QWEN: 'qwen/qwen3.7-max',
+    OPENROUTER_PROVIDER_IGNORE: 'azure, bedrock',
+    OPENROUTER_PROVIDER_ORDER: 'together'
+  };
+
+  const ranking = await rankMarkets(markets, 'all', env, fakeFetch);
+
+  assert.equal(calls.length, 4);
+  for (const call of calls) {
+    assert.match(call.url, /^https:\/\/openrouter\.ai\/api\/v1\/chat\/completions$/);
+    assert.deepEqual(call.body.usage, { include: true });
+    assert.deepEqual(call.body.provider, { order: ['together'], ignore: ['azure', 'bedrock'] });
+  }
+  assert.deepEqual(calls.map((call) => call.body.model), [
+    'openai/gpt-5.5', 'anthropic/claude-opus-4.8', 'google/gemini-3.1-pro-preview', 'qwen/qwen3.7-max'
+  ]);
+  assert.deepEqual(ranking.results.map((result) => result.provider), ['OpenRouter', 'OpenRouter', 'OpenRouter', 'OpenRouter']);
+});
+
+test('no provider block is sent when no routing preference is configured', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let body = null;
+  const fakeFetch = async (url, options) => {
+    body = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              picks: [{ marketId: 'a', estimatedProbability: 0.62, confidence: 0.5, reason: 'home', risks: [] }],
+              scorePicks: [{ score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'low' }]
+            })
+          }
+        }]
+      })
+    };
+  };
+
+  await rankMarkets(markets, 'Qwen', { OPENROUTER_API_KEY: 'test', MODEL_QWEN: 'qwen/qwen3.7-max' }, fakeFetch);
+  assert.equal(body.provider, undefined);
 });

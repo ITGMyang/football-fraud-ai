@@ -7,21 +7,18 @@ const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
 
 export function configuredModels(env = process.env) {
   return [
-    [cleanEnvValue(env.MODEL_GPT_LABEL) || 'GPT', cleanEnvValue(env.MODEL_GPT), 'GPT', gptProvider(env)],
-    [cleanEnvValue(env.MODEL_CLAUDE_LABEL) || 'Claude', cleanEnvValue(env.MODEL_CLAUDE), 'Claude', modelProvider(env, 'CLAUDE', 'apimart')],
-    [cleanEnvValue(env.MODEL_GEMINI_LABEL) || 'Gemini', cleanEnvValue(env.MODEL_GEMINI), 'Gemini', modelProvider(env, 'GEMINI', 'openrouter')],
-    [cleanEnvValue(env.MODEL_QWEN_LABEL) || 'Qwen', cleanEnvValue(env.MODEL_QWEN), 'Qwen', modelProvider(env, 'QWEN', 'openrouter')]
+    [cleanEnvValue(env.MODEL_GPT_LABEL) || 'GPT', cleanEnvValue(env.MODEL_GPT), 'GPT', modelProvider(env, 'GPT')],
+    [cleanEnvValue(env.MODEL_CLAUDE_LABEL) || 'Claude', cleanEnvValue(env.MODEL_CLAUDE), 'Claude', modelProvider(env, 'CLAUDE')],
+    [cleanEnvValue(env.MODEL_GEMINI_LABEL) || 'Gemini', cleanEnvValue(env.MODEL_GEMINI), 'Gemini', modelProvider(env, 'GEMINI')],
+    [cleanEnvValue(env.MODEL_QWEN_LABEL) || 'Qwen', cleanEnvValue(env.MODEL_QWEN), 'Qwen', modelProvider(env, 'QWEN')]
   ].filter(([, model]) => model);
 }
 
-function gptProvider(env = process.env) {
-  const explicit = cleanEnvValue(env.MODEL_GPT_PROVIDER).toLowerCase();
-  if (explicit) return explicit;
-  return cleanEnvValue(env.MODEL_GPT).toLowerCase().startsWith('gpt-') ? 'openai' : 'openrouter';
-}
-
-function modelProvider(env, name, fallback) {
-  return cleanEnvValue(env[`MODEL_${name}_PROVIDER`] || fallback).toLowerCase();
+// OpenRouter for everything unless MODEL_<NAME>_PROVIDER names a direct provider.
+// Routing is explicit rather than inferred from the model id: a silent switch to a
+// different provider is the kind of thing nobody thinks to check when a call fails.
+function modelProvider(env, name) {
+  return cleanEnvValue(env[`MODEL_${name}_PROVIDER`] || 'openrouter').toLowerCase();
 }
 
 export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
@@ -110,6 +107,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
       client,
       provider,
       model,
+      env,
       system: systemPrompt(),
       user: userPrompt(market, retry),
       temperature: retry ? 0 : 0.2,
@@ -157,6 +155,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       client,
       provider,
       model,
+      env,
       system: rankingSystemPromptV2(),
       user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline),
       temperature: retry ? 0 : 0.15,
@@ -417,7 +416,7 @@ function modelTemperature(provider, value) {
     : { temperature: value };
 }
 
-function modelRequest({ client, provider, model, system, user, temperature, maxTokens }) {
+function modelRequest({ client, provider, model, system, user, temperature, maxTokens, env = {} }) {
   if (String(provider).toLowerCase() === 'openai') {
     return {
       url: `${client.baseUrl}/responses`,
@@ -443,10 +442,31 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
       ],
       response_format: { type: 'json_object' },
       // OpenRouter only returns usage.cost when accounting is requested. Without it
-      // every OpenRouter model (Qwen included) reports a zero spend in the console.
-      ...(String(provider).toLowerCase() === 'openrouter' ? { usage: { include: true } } : {})
+      // every OpenRouter model reports a zero spend in the console.
+      ...(String(provider).toLowerCase() === 'openrouter'
+        ? { usage: { include: true }, ...openRouterProviderRouting(env) }
+        : {})
     }
   };
+}
+
+// Escape hatch for upstream providers that refuse a region: OPENROUTER_PROVIDER_IGNORE
+// skips them and OPENROUTER_PROVIDER_ORDER states a preference, both comma separated.
+// Sending no provider block at all leaves OpenRouter's own routing untouched.
+function openRouterProviderRouting(env = {}) {
+  const ignore = commaList(env.OPENROUTER_PROVIDER_IGNORE);
+  const order = commaList(env.OPENROUTER_PROVIDER_ORDER);
+  if (!ignore.length && !order.length) return {};
+  return {
+    provider: {
+      ...(order.length ? { order } : {}),
+      ...(ignore.length ? { ignore } : {})
+    }
+  };
+}
+
+function commaList(value) {
+  return cleanEnvValue(value).split(',').map((item) => item.trim()).filter(Boolean);
 }
 
 function extractModelContent(data) {

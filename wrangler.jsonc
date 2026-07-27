@@ -29,12 +29,14 @@
     "API_FOOTBALL_BASE_URL": "https://api-football-proxy.64-186-226-161.sslip.io",
     "API_FOOTBALL_LEAGUES": "1,15,17,39,140,78,135,61,2,3,188,307,169,170,171",
     "API_FOOTBALL_DAILY_LIMIT": "7500",
-    "MODEL_GPT": "gpt-5.5",
-    "MODEL_GPT_PROVIDER": "openai",
+    // Every model routes through OpenRouter. Slugs must match the ids on
+    // openrouter.ai/models exactly; verify with `npm run test:models`.
+    // Set MODEL_<NAME>_PROVIDER to "openai" or "apimart" to send one direct instead.
+    "MODEL_GPT": "openai/gpt-5.5",
     "MODEL_GPT_LABEL": "GPT 5.5",
-    "MODEL_CLAUDE_PROVIDER": "apimart",
+    "MODEL_CLAUDE": "anthropic/claude-opus-4.8",
     "MODEL_CLAUDE_LABEL": "Claude 4.8",
-    "MODEL_GEMINI_PROVIDER": "apimart",
+    "MODEL_GEMINI": "google/gemini-3.1-pro-preview",
     "MODEL_GEMINI_LABEL": "Gemini",
     "MODEL_QWEN": "qwen/qwen3.7-max",
     "MODEL_QWEN_LABEL": "Qwen 3.7 Max"
