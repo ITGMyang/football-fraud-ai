@@ -492,7 +492,7 @@ function CalendarSection({ selectedDate, onDate, matchDays, accuracyDays }: {
       >
         {days.map((day) => (
           <button
-            className={`day ${day.iso === selectedDate ? "day--active" : ""}`}
+            className={`day ${day.iso < todayShanghai() ? "day--past" : "day--upcoming"} ${day.iso === selectedDate ? "day--active" : ""}`}
             key={day.iso}
             onClick={() => {
               if (swipe.current.paged) return;
@@ -586,7 +586,7 @@ function Filters({ selectedDate, onDate, competitions, competition, onCompetitio
               const outside = iso < windowStart || iso > windowEnd;
               return (
                 <button
-                  className={`dp-day ${iso === selectedDate ? "is-selected" : ""}`}
+                  className={`dp-day ${iso < todayShanghai() ? "dp-day--past" : "dp-day--upcoming"} ${iso === selectedDate ? "is-selected" : ""}`}
                   key={iso}
                   disabled={outside}
                   onClick={() => {

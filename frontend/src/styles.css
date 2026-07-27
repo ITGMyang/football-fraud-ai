@@ -394,6 +394,19 @@ input:focus-visible {
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* past dates read as expired; today and future dates stay white */
+.day--past {
+  color: rgba(255, 255, 255, 0.26);
+}
+
+.day--past:hover {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.day--upcoming {
+  color: #fff;
+}
+
 .day span,
 .day b {
   font-weight: 500;
@@ -672,6 +685,14 @@ input:focus-visible {
 
 .dp-day.is-selected .dp-day__dots {
   display: none;
+}
+
+.dp-day--past {
+  color: #5b5b5b;
+}
+
+.dp-day--upcoming {
+  color: #fff;
 }
 
 .dp-day:hover {
