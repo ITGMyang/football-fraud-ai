@@ -2962,13 +2962,12 @@ button.plan-option:disabled:hover {
     gap: 28px;
   }
 
+  /* result cards stack vertically, centered in the page */
   .d-cards {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     padding-left: 0;
-    gap: 24px;
+    gap: 16px;
     margin-top: 48px;
   }
 
