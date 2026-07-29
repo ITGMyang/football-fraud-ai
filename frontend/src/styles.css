@@ -2154,6 +2154,22 @@ button.plan-option:disabled:hover {
   display: contents;
 }
 
+/* back to the auth landing from the email / signup forms */
+.auth-back {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  left: 16px;
+  z-index: 2;
+}
+
+.auth-back img {
+  position: absolute;
+  left: 17px;
+  top: 14px;
+  width: 5.5px;
+  height: 11.5px;
+}
+
 .auth-side {
   display: none;
 }

@@ -146,10 +146,11 @@ function AccountAvatar({ session, size = 32 }: { session: Session | null; size?:
 
 /* ============ AUTH SCREENS (Figma 1:664 / 1:849 / 1:549) ============ */
 
-function AuthDialog({ plain = false, brandFooter = false, onClose, children }: {
+function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, children }: {
   plain?: boolean;
   brandFooter?: boolean;
   onClose: () => void;
+  onBack?: () => void;
   children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -172,6 +173,11 @@ function AuthDialog({ plain = false, brandFooter = false, onClose, children }: {
           <img className="auth-side__wordmark" src="/assets/figma-wordmark.svg" alt="" />
         </aside>
         <div className="auth-main">
+          {onBack && (
+            <button className="icon-btn auth-back" onClick={onBack} aria-label="Go back">
+              <img src="/assets/figma-icon-back.svg" alt="" />
+            </button>
+          )}
           {children}
           <footer className="auth-footer">
             {brandFooter ? (
@@ -236,11 +242,12 @@ function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled,
   );
 }
 
-function AccountForm({ mode, navigate, submitAuth, onClose }: {
+function AccountForm({ mode, navigate, submitAuth, onClose, onBack }: {
   mode: "login" | "signup";
   navigate: (screen: Screen) => void;
   submitAuth: (mode: "login" | "signup", email: string, password: string) => Promise<string>;
   onClose: () => void;
+  onBack: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -265,7 +272,7 @@ function AccountForm({ mode, navigate, submitAuth, onClose }: {
   };
 
   return (
-    <AuthDialog plain={signup} brandFooter={signup} onClose={onClose}>
+    <AuthDialog plain={signup} brandFooter={signup} onClose={onClose} onBack={onBack}>
       <form className="auth-content" onSubmit={(event) => void submit(event)}>
         <div className="auth-hero">
           {signup ? (
@@ -2062,8 +2069,8 @@ export default function FutBotsApp() {
       {authScreen === "auth" && (
         <AuthLanding navigate={navigate} signInProvider={signInProvider} continueGuest={closeAuth} telegramEnabled={Boolean(config?.telegramEnabled)} error={error} onClose={closeAuth} />
       )}
-      {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
-      {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} />}
+      {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} onBack={() => setAuthScreen("auth")} />}
+      {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} onBack={() => setAuthScreen("login")} />}
       {plansOpen && <Plans access={access} checkout={checkout} onClose={closePlans} />}
       {confirmMatch && (
         <PredictModal
