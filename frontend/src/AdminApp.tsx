@@ -486,23 +486,23 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
           <input className="a-input" type="search" value={query} placeholder={t('searchMatch')} onChange={(event) => setQuery(event.target.value)} />
           <span className="a-filters__count">{count(poolRows.length)} {t('rows')}</span>
         </div>
-        <Table head={[t('colMatch'), t('colFixtureId'), t('kickoff'), t('colPhase'), t('colModelsInPool'), t('colLastWrite')]}>
+        <Table head={[t('colMatch'), t('colFixtureId'), t('kickoff'), t('colPhase'), t('colPublished'), t('colModelsInPool'), t('colLastWrite')]}>
           {poolRows.map((match) => {
             // One column of chips beats a fixed grid: a model that was never asked for
             // is not information, and a failure has to stand out among the ones that ran.
             const entries = Object.entries(match.models).filter(([, state]) => state !== 'not_requested');
             const failed = entries.filter(([, state]) => state === 'failed');
-            const phase = entries.some(([, state]) => state === 'live') ? 'live' : entries.length ? 'early' : '';
             return (
               <tr key={match.fixtureId}>
                 <td><strong>{match.matchName}</strong><small>{match.competition || '—'}</small></td>
                 <td><code>{match.fixtureId}</code></td>
                 <td>{when(match.kickoff)}</td>
                 <td>
-                  {phase
-                    ? <Status tone={phase === 'live' ? 'ok' : 'idle'}>{phase}</Status>
+                  {match.phase
+                    ? <Status tone={match.phase === 'live' ? 'ok' : 'idle'}>{match.phase}</Status>
                     : <span className="a-dim">—</span>}
                 </td>
+                <td>{match.publishedModel || <span className="a-dim">—</span>}</td>
                 <td>
                   {entries.length
                     ? (
@@ -543,21 +543,6 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
         </Table>
       </Module>
 
-      <Module title={t('pipeline')} eyebrow={t('colSnapshots')}>
-        <Table head={[t('colMatch'), t('colPhase'), t('colPublished'), t('colRawModels'), t('colSnapshots'), t('colConsensus'), t('colGenerated')]}>
-          {architecture.matches.slice(0, 60).map((match) => (
-            <tr key={match.fixtureId}>
-              <td><strong>{match.matchName}</strong><small>{match.fixtureId}</small></td>
-              <td><Status tone={match.phase === 'live' ? 'ok' : 'idle'}>{match.phase || '—'}</Status></td>
-              <td>{match.publicModel || '—'}</td>
-              <td>{match.rawModels.join(', ') || '—'}</td>
-              <td>{count(match.snapshotCount)}</td>
-              <td>{count(match.consensusCount)} <span className="a-dim">({t('sourced', { n: count(match.sourceSnapshotCount) })})</span></td>
-              <td>{when(match.generatedAt)}</td>
-            </tr>
-          ))}
-        </Table>
-      </Module>
     </>
   );
 }

@@ -49,21 +49,11 @@ export type SharedPoolMatch = {
   matchName: string;
   competition: string;
   kickoff: string;
+  phase: string;
+  publishedModel: string;
   cachedCount: number;
   latestUpdatedAt: string;
   models: Record<string, string>;
-};
-
-export type ArchitectureMatch = {
-  fixtureId: string;
-  matchName: string;
-  phase: string;
-  publicModel: string;
-  rawModels: string[];
-  snapshotCount: number;
-  consensusCount: number;
-  sourceSnapshotCount: number;
-  generatedAt: string;
 };
 
 export type WeeklyModelRow = {
@@ -172,7 +162,6 @@ export type Dashboard = {
     snapshotCount: number;
     consensusCount: number;
     currentConsensusCount: number;
-    matches: ArchitectureMatch[];
     latestWeek: { weekStart: string; rows: WeeklyModelRow[] };
   };
   leagues: LeagueRow[];

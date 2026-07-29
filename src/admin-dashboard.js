@@ -15,7 +15,6 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
   const orders = input.orders || [];
   const entitlements = input.entitlements || [];
   const schedules = input.schedules || [];
-  const sharedPredictions = input.sharedPredictions || [];
   const predictionRequests = input.predictionRequests || [];
   const predictionSnapshots = input.predictionSnapshots || [];
   const predictionConsensus = input.predictionConsensus || [];
@@ -68,7 +67,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
       total: summarizeUsage(aiUsage)
     },
     accuracy,
-    sharedPool: summarizeSharedPool(sharedPredictions, aiUsage, contexts, schedules),
+    sharedPool: summarizeSharedPool(predictionSnapshots, predictionConsensus, aiUsage, contexts, schedules),
     predictionArchitecture: summarizePredictionArchitecture({
       predictionSnapshots,
       predictionConsensus,
@@ -105,29 +104,6 @@ function summarizePredictionArchitecture({
 }) {
   const settings = predictionSettings.find((row) => row.key === 'default') || predictionSettings[0] || {};
   const currentConsensus = predictionConsensus.filter((row) => row.is_current ?? row.isCurrent);
-  const fixtureIds = new Set([
-    ...predictionSnapshots.map((row) => String(row.fixture_id || row.fixtureId || '')),
-    ...predictionConsensus.map((row) => String(row.fixture_id || row.fixtureId || ''))
-  ].filter(Boolean));
-  const matches = [...fixtureIds].map((fixtureId) => {
-    const snapshots = predictionSnapshots.filter((row) => String(row.fixture_id || row.fixtureId) === fixtureId);
-    const consensusRows = predictionConsensus
-      .filter((row) => String(row.fixture_id || row.fixtureId) === fixtureId)
-      .sort((a, b) => timestamp(b.generated_at || b.generatedAt) - timestamp(a.generated_at || a.generatedAt));
-    const current = consensusRows.find((row) => row.is_current ?? row.isCurrent) || consensusRows[0] || {};
-    const payload = current.payload || current.ranking || {};
-    return {
-      fixtureId,
-      matchName: payload.contextName || fixtureId,
-      phase: current.phase || '',
-      publicModel: payload.results?.[0]?.modelName || '',
-      rawModels: [...new Set(snapshots.map((row) => row.model_key || row.modelKey).filter(Boolean))],
-      snapshotCount: snapshots.length,
-      consensusCount: consensusRows.length,
-      sourceSnapshotCount: (current.source_snapshot_ids || current.sourceSnapshotIds || []).length,
-      generatedAt: current.generated_at || current.generatedAt || ''
-    };
-  }).sort((a, b) => timestamp(b.generatedAt) - timestamp(a.generatedAt));
   const weekStarts = [...new Set(weeklyPerformance.map((row) => row.week_start || row.weekStart).filter(Boolean))].sort().reverse();
   const latestWeekStart = weekStarts[0] || '';
   const latestRows = weeklyPerformance
@@ -150,7 +126,6 @@ function summarizePredictionArchitecture({
     snapshotCount: predictionSnapshots.length,
     consensusCount: predictionConsensus.length,
     currentConsensusCount: currentConsensus.length,
-    matches,
     latestWeek: {
       weekStart: latestWeekStart,
       rows: latestRows
@@ -329,42 +304,79 @@ function summarizeUsage(rows) {
   };
 }
 
-function summarizeSharedPool(sharedRows, usageRows, contextRows, scheduleRows) {
+// The pool answers one question: will the next request for this fixture cost anything?
+// It reads prediction_snapshots and prediction_consensus - the tables the current
+// pipeline actually writes. The older shared_prediction_results table stopped being
+// written when the shared architecture was rewritten, so reading it showed a pool
+// frozen in the past.
+function summarizeSharedPool(snapshotRows, consensusRows, usageRows, contextRows, scheduleRows) {
   const matchDetails = new Map();
   for (const row of scheduleRows) {
     for (const match of (row.payload || row).matches || []) addMatchDetails(matchDetails, match);
   }
   for (const row of contextRows) addMatchDetails(matchDetails, row.payload || row);
 
-  const fixtureIds = new Set(sharedRows.map((row) => String(row.fixture_id || '')).filter(Boolean));
+  const fixtureOf = (row) => String(row.fixture_id || row.fixtureId || '');
+  const fixtureIds = new Set([
+    ...snapshotRows.map(fixtureOf),
+    ...consensusRows.map(fixtureOf)
+  ].filter(Boolean));
   for (const row of usageRows) {
     if (row.request_kind === 'ranking' && row.context_id) fixtureIds.add(String(row.context_id));
   }
 
-  const cachedByFixture = groupByFixtureAndModel(sharedRows, (row) => row.fixture_id, (row) => row.model_key);
   const latestUsage = latestUsageByFixtureAndModel(usageRows);
   const matches = [...fixtureIds].map((fixtureId) => {
     const details = matchDetails.get(fixtureId) || {};
-    const cached = cachedByFixture.get(fixtureId) || new Map();
+    const snapshots = snapshotRows.filter((row) => fixtureOf(row) === fixtureId);
+    const consensus = consensusRows
+      .filter((row) => fixtureOf(row) === fixtureId)
+      .sort((a, b) => timestamp(b.generated_at || b.generatedAt) - timestamp(a.generated_at || a.generatedAt));
+    const current = consensus.find((row) => row.is_current ?? row.isCurrent) || consensus[0] || null;
+
+    // Keep the newest snapshot per model; an earlier failure should not mask a later success.
+    const bySnapshotModel = new Map();
+    for (const row of snapshots) {
+      const key = modelKey(row.model_key || row.modelKey || row.payload?.modelName);
+      if (!key) continue;
+      const existing = bySnapshotModel.get(key);
+      if (!existing || timestamp(row.generated_at || row.generatedAt) > timestamp(existing.generated_at || existing.generatedAt)) {
+        bySnapshotModel.set(key, row);
+      }
+    }
+
     const models = Object.fromEntries(PREDICTION_MODELS.map((model) => {
-      const attempt = latestUsage.get(`${fixtureId}|${model}`);
-      const cachedRow = cached.get(model);
-      const phase = cachedRow?.payload?.predictionPhase;
-      return [model, cachedRow ? (phase === 'live' ? 'live' : phase === 'early' ? 'early' : 'cached') : attempt?.status === 'error' ? 'failed' : 'not_requested'];
+      const snapshot = bySnapshotModel.get(model);
+      if (snapshot) {
+        if (snapshot.payload?.error) return [model, 'failed'];
+        return [model, snapshot.phase === 'live' ? 'live' : snapshot.phase === 'early' ? 'early' : 'cached'];
+      }
+      return [model, latestUsage.get(`${fixtureId}|${model}`)?.status === 'error' ? 'failed' : 'not_requested'];
     }));
-    const cachedRowsForMatch = [...cached.values()];
+
+    const succeeded = [...bySnapshotModel.values()].filter((row) => !row.payload?.error);
+    const written = [...bySnapshotModel.values()]
+      .map((row) => row.generated_at || row.generatedAt || '')
+      .sort((a, b) => timestamp(b) - timestamp(a))[0] || '';
+
     return {
       fixtureId,
-      matchName: details.matchName || fixtureId,
+      matchName: current?.payload?.contextName || details.matchName || fixtureId,
       competition: details.competition || '',
       kickoff: details.kickoff || '',
-      cachedCount: cachedRowsForMatch.length,
-      latestUpdatedAt: cachedRowsForMatch.sort((a, b) => timestamp(b.updated_at) - timestamp(a.updated_at))[0]?.updated_at || '',
+      phase: current?.phase || '',
+      publishedModel: current?.payload?.results?.[0]?.modelName || '',
+      cachedCount: succeeded.length,
+      latestUpdatedAt: current?.generated_at || current?.generatedAt || written,
       models
     };
   }).sort((a, b) => timestamp(b.latestUpdatedAt) - timestamp(a.latestUpdatedAt) || timestamp(b.kickoff) - timestamp(a.kickoff));
 
-  return { totalMatches: matches.filter((match) => match.cachedCount > 0).length, totalResults: sharedRows.length, matches };
+  return {
+    totalMatches: matches.filter((match) => match.cachedCount > 0).length,
+    totalResults: snapshotRows.length,
+    matches
+  };
 }
 
 function addMatchDetails(map, match = {}) {

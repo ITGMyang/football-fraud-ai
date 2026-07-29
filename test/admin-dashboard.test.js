@@ -86,9 +86,12 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
       { owner_id: 'u2', payload: { id: 'match-2', competition: 'La Liga' } }
     ],
     schedules: [{ payload: { competitionId: '39', matches: [{ matchId: '1' }, { matchId: '2' }] } }],
-    sharedPredictions: [
-      { fixture_id: 'match-1', model_key: 'gpt', model_id: 'gpt-5.5', payload: { modelName: 'GPT 5.5', predictionPhase: 'early' }, updated_at: '2026-07-21T10:01:00Z' },
-      { fixture_id: 'match-1', model_key: 'claude', model_id: 'claude-opus-4-8', payload: { modelName: 'Claude 4.8', predictionPhase: 'live' }, updated_at: '2026-07-21T10:02:00Z' }
+    predictionSnapshots: [
+      { fixture_id: 'match-1', phase: 'early', model_key: 'gpt', model_id: 'gpt-5.5', payload: { modelName: 'GPT 5.5' }, generated_at: '2026-07-21T10:01:00Z' },
+      { fixture_id: 'match-1', phase: 'live', model_key: 'claude', model_id: 'claude-opus-4-8', payload: { modelName: 'Claude 4.8' }, generated_at: '2026-07-21T10:02:00Z' }
+    ],
+    predictionConsensus: [
+      { fixture_id: 'match-1', phase: 'live', is_current: true, payload: { contextName: 'match-1', results: [{ modelName: 'Claude 4.8' }] }, generated_at: '2026-07-21T10:02:00Z' }
     ],
     aiUsage: [
       { owner_id: 'u1', request_kind: 'ranking', context_id: 'match-1', model_name: 'GPT 5.5', model_id: 'gpt-5.5', provider: 'OpenAI', input_tokens: 1000, output_tokens: 250, total_tokens: 1250, cost_usd: 0, cost_reported: false, status: 'success', created_at: '2026-07-21T10:00:00Z' },
@@ -140,13 +143,18 @@ test('admin dashboard aggregates real system, model, league, user, and order dat
   assert.deepEqual(dashboard.sharedPool.matches[0].models, {
     gpt: 'early', claude: 'live', gemini: 'failed', qwen: 'not_requested'
   });
+  assert.equal(dashboard.sharedPool.matches[0].phase, 'live');
+  assert.equal(dashboard.sharedPool.matches[0].publishedModel, 'Claude 4.8');
   assert.equal(dashboard.sharedPool.matches[0].matchName, 'match-1');
 });
 
 test('shared prediction pool uses schedule match details when a private context is unavailable', () => {
   const dashboard = buildAdminDashboard({
-    sharedPredictions: [{
-      fixture_id: '9001', model_key: 'qwen', payload: { modelName: 'Qwen 3.7 Max' }, updated_at: '2026-07-21T10:00:00Z'
+    predictionSnapshots: [{
+      fixture_id: '9001', phase: 'early', model_key: 'qwen', payload: { modelName: 'Qwen 3.7 Max' }, generated_at: '2026-07-21T10:00:00Z'
+    }],
+    predictionConsensus: [{
+      fixture_id: '9001', phase: 'early', is_current: true, payload: { results: [{ modelName: 'Qwen 3.7 Max' }] }, generated_at: '2026-07-21T10:00:00Z'
     }],
     schedules: [{ payload: { matches: [{
       matchId: '9001', homeTeam: 'Spain', awayTeam: 'Argentina', kickoff: '2026-07-22T19:00:00Z', competition: 'World Cup'
@@ -158,9 +166,11 @@ test('shared prediction pool uses schedule match details when a private context 
     matchName: 'Spain v Argentina',
     competition: 'World Cup',
     kickoff: '2026-07-22T19:00:00Z',
+    phase: 'early',
+    publishedModel: 'Qwen 3.7 Max',
     cachedCount: 1,
     latestUpdatedAt: '2026-07-21T10:00:00Z',
-    models: { gpt: 'not_requested', claude: 'not_requested', gemini: 'not_requested', qwen: 'cached' }
+    models: { gpt: 'not_requested', claude: 'not_requested', gemini: 'not_requested', qwen: 'early' }
   });
 });
 
@@ -279,6 +289,10 @@ test('the admin console is wired to the dashboard API through its own shell', as
   assert.match(app, /state !== 'not_requested'/);
   assert.doesNotMatch(app, /modelKeys/);
   assert.match(app, /const byMatch = new Map/);
+  // The pool must read the tables the current pipeline writes, not the retired one.
+  const dashboardSource = await readFile(new URL('../src/admin-dashboard.js', import.meta.url), 'utf8');
+  assert.match(dashboardSource, /summarizeSharedPool\(predictionSnapshots, predictionConsensus,/);
+  assert.doesNotMatch(dashboardSource, /sharedPredictions/);
   assert.match(app, /className="a-group"/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/models\/check'/);
   assert.match(app, /setAuthorized\(false\)/);
@@ -357,7 +371,13 @@ test('admin dashboard summarizes optimized prediction architecture records', () 
   assert.deepEqual(dashboard.predictionArchitecture.liveModelKeys, ['gpt', 'claude', 'gemini']);
   assert.equal(dashboard.predictionArchitecture.snapshotCount, 2);
   assert.equal(dashboard.predictionArchitecture.currentConsensusCount, 1);
-  assert.equal(dashboard.predictionArchitecture.matches[0].fixtureId, '123');
-  assert.deepEqual(dashboard.predictionArchitecture.matches[0].rawModels, ['claude', 'gpt']);
   assert.equal(dashboard.predictionArchitecture.latestWeek.rows[0].isChampion, true);
+  // The per-fixture view lives in the pool now; the architecture block is settings only.
+  assert.equal(dashboard.predictionArchitecture.matches, undefined);
+  assert.equal(dashboard.sharedPool.matches[0].fixtureId, '123');
+  // Each model carries the phase of its own snapshot, not the consensus phase.
+  assert.equal(dashboard.sharedPool.matches[0].models.gpt, 'live');
+  assert.equal(dashboard.sharedPool.matches[0].models.claude, 'early');
+  assert.equal(dashboard.sharedPool.matches[0].phase, 'live');
+  assert.equal(dashboard.sharedPool.matches[0].matchName, 'Alpha v Beta');
 });
