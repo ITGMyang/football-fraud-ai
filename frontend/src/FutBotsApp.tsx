@@ -170,7 +170,7 @@ function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, child
       <div className="auth-dialog" role="dialog" aria-modal="true" aria-label="Sign in">
         <aside className="auth-side" aria-hidden="true">
           <img className="auth-side__ball" src="/assets/brand-logo.png" alt="" />
-          <img className="auth-side__wordmark" src="/assets/figma-wordmark.svg" alt="" />
+          <img className="auth-side__wordmark" src="/assets/brand-wordmark.png" alt="" />
         </aside>
         <div className="auth-main">
           {onBack && (
@@ -183,10 +183,10 @@ function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, child
             {brandFooter ? (
               <div className="auth-footer__brand">
                 <img className="auth-footer__ball" src="/assets/brand-logo.png" alt="" />
-                <img className="auth-footer__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
+                <img className="auth-footer__wordmark" src="/assets/brand-wordmark.png" alt="FutBots" />
               </div>
             ) : (
-              <img className="auth-footer__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
+              <img className="auth-footer__wordmark" src="/assets/brand-wordmark.png" alt="FutBots" />
             )}
             <p className="auth-footer__disclaimer">
               By continuing, you acknowledge that the predictions are provided for
@@ -391,7 +391,7 @@ function HomeHeader({ session, access, navigate }: {
     <header className={`home-header ${scrolled ? "home-header--scrolled" : ""}`}>
       <div className="home-brand" aria-hidden="true">
         <img className="home-brand__ball" src="/assets/brand-logo.png" alt="" />
-        <img className="home-brand__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
+        <img className="home-brand__wordmark" src="/assets/brand-wordmark.png" alt="FutBots" />
       </div>
       <button className="pill" onClick={() => session ? navigate("profile") : navigate("auth")}>
         {session ? <AccountAvatar session={session} size={21.5} /> : <img src="/assets/figma-icon-user.svg" alt="" />}

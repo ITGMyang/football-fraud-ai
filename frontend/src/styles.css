@@ -195,7 +195,7 @@ input:focus-visible {
 
 .home-brand__wordmark {
   width: 96px;
-  height: 24.5px;
+  height: auto;
 }
 
 .pill {
@@ -2530,7 +2530,7 @@ button.plan-option:disabled:hover {
 
 .auth-footer__wordmark {
   width: 76.35px;
-  height: 19.482px;
+  height: auto;
 }
 
 .auth-footer__disclaimer {
@@ -3225,7 +3225,7 @@ button.plan-option:disabled:hover {
 
   .auth-side__wordmark {
     width: 130px;
-    height: 33.17px;
+    height: auto;
   }
 
   .auth-main {
