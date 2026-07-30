@@ -666,6 +666,54 @@ function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
   );
 }
 
+/* First-visit-of-the-day welcome modal (Figma 93:460). Highlights the day's
+   Free Score Day, or the next one with its date when today has none. */
+type ScoreDay = { match: Match; date: string; isToday: boolean };
+
+function WelcomeModal({ scoreDay, onStart, onClose }: {
+  scoreDay: ScoreDay | null;
+  onStart: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="welcome-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="welcome-card" role="dialog" aria-modal="true" aria-label="Welcome to FutBots">
+        <div className="welcome-card__scrim" aria-hidden="true" />
+        <div className="welcome-card__head">
+          <h2>Welcome to FutBots</h2>
+          <p>Not sure? Bot it!</p>
+        </div>
+        {scoreDay && (
+          <div className="welcome-scoreday">
+            <div className="welcome-scoreday__head">
+              <img src="/assets/figma-sparkle-white.svg" alt="" />
+              <h3>Score Day</h3>
+              <span className="fsd__free">FREE</span>
+            </div>
+            {!scoreDay.isToday && (
+              <span className="welcome-scoreday__date">{nextDayLabel(scoreDay.date)}</span>
+            )}
+            <div className="teams teams--light">
+              <div className="team"><TeamFlag team={scoreDay.match.teamA} size={34} /><span>{scoreDay.match.teamA.name}</span></div>
+              <b>vs.</b>
+              <div className="team"><TeamFlag team={scoreDay.match.teamB} size={34} /><span>{scoreDay.match.teamB.name}</span></div>
+            </div>
+          </div>
+        )}
+        <button className="welcome-card__cta" onClick={onStart}>Start Now</button>
+      </section>
+    </div>
+  );
+}
+
 /* Apple Watch-style activity ring: rounded caps, sweeps in on mount while
    the percentage counts up in sync */
 const RING_RADIUS = 33;
@@ -1595,6 +1643,8 @@ export default function FutBotsApp() {
   const [nextDays, setNextDays] = useState<{ date: string; matches: Match[] }[]>([]);
   const [dayAccuracy, setDayAccuracy] = useState<DayAccuracy | null>(null);
   const [accuracyDays, setAccuracyDays] = useState<Set<string>>(() => new Set());
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const welcomeChecked = useRef(false);
 
   const historyDepth = useRef(0);
   const historyReady = useRef(false);
@@ -1881,6 +1931,34 @@ export default function FutBotsApp() {
 
   useEffect(() => { applyScreenTint(screen); }, [screen]);
 
+  /* Show the welcome modal on the first dashboard visit of each Shanghai day. */
+  useEffect(() => {
+    if (welcomeChecked.current) return;
+    if (screen !== "dashboard" || loading) return;
+    welcomeChecked.current = true;
+    if (localStorage.getItem("futbots.welcomeSeen") !== todayShanghai()) setWelcomeOpen(true);
+  }, [screen, loading]);
+
+  const dismissWelcome = useCallback(() => {
+    localStorage.setItem("futbots.welcomeSeen", todayShanghai());
+    setWelcomeOpen(false);
+  }, []);
+
+  /* The day's Free Score Day, or the next upcoming one with its date. */
+  const scoreDay = useMemo<ScoreDay | null>(() => {
+    const todayIso = todayShanghai();
+    if (selectedDate === todayIso) {
+      const featured = matches.find((match) => match.status !== "complete" && !rankingForMatch(rankings, match.id));
+      if (featured) return { match: featured, date: todayIso, isToday: true };
+    }
+    const upcoming = nextDays.find((day) => day.matches.length);
+    if (upcoming) {
+      const featured = upcoming.matches.find((match) => match.status !== "complete") || upcoming.matches[0];
+      return { match: featured, date: upcoming.date, isToday: false };
+    }
+    return null;
+  }, [matches, rankings, nextDays, selectedDate]);
+
   useEffect(() => {
     if (!toastVisible) return;
     const timer = window.setTimeout(() => setToastVisible(false), 6000);
@@ -2071,6 +2149,17 @@ export default function FutBotsApp() {
       )}
       {authScreen === "login" && <AccountForm mode="login" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} onBack={() => setAuthScreen("auth")} />}
       {authScreen === "signup" && <AccountForm mode="signup" navigate={navigate} submitAuth={submitAuth} onClose={closeAuth} onBack={() => setAuthScreen("login")} />}
+      {welcomeOpen && screen === "dashboard" && (
+        <WelcomeModal
+          scoreDay={scoreDay}
+          onClose={dismissWelcome}
+          onStart={() => {
+            dismissWelcome();
+            if (scoreDay?.isToday) startPrediction(scoreDay.match);
+            else if (scoreDay) setSelectedDate(scoreDay.date);
+          }}
+        />
+      )}
       {plansOpen && <Plans access={access} checkout={checkout} onClose={closePlans} />}
       {confirmMatch && (
         <PredictModal

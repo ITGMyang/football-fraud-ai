@@ -792,6 +792,154 @@ input:focus-visible {
   white-space: nowrap;
 }
 
+/* ============ WELCOME MODAL (Figma 93:460) ============ */
+
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.75);
+  animation: welcome-fade 0.3s ease;
+}
+
+.welcome-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 367px;
+  max-width: 100%;
+  padding: 24px 20px;
+  border: 1px solid #272727;
+  border-radius: 32px;
+  overflow: hidden;
+  background: #000;
+  animation: welcome-rise 0.45s var(--ease-out);
+}
+
+/* photo backdrop + a bottom-to-top black gradient for legibility */
+.welcome-card__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, #000 100%),
+    #000 url("/assets/welcome-bg.jpg") center / cover no-repeat;
+}
+
+.welcome-card > *:not(.welcome-card__scrim) {
+  position: relative;
+  z-index: 1;
+}
+
+.welcome-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.welcome-card__head h2 {
+  max-width: 222px;
+  font-family: "Red Hat Display", sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.welcome-card__head p {
+  font-size: 16px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.welcome-scoreday {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 32px 16px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.54);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.welcome-scoreday__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.welcome-scoreday__head img {
+  width: 16px;
+  height: 17px;
+  transform: scaleY(-1);
+}
+
+.welcome-scoreday__head h3 {
+  font-family: "Red Hat Display", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.welcome-scoreday__date {
+  margin-top: -8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1eb978;
+}
+
+.welcome-card__cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 56px;
+  border: 1px solid #fff;
+  border-radius: 31px;
+  background: #fff;
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  filter: drop-shadow(0 0 17px rgba(255, 255, 255, 0.45));
+  transition: filter var(--hover), transform var(--hover);
+}
+
+.welcome-card__cta:hover {
+  filter: drop-shadow(0 0 26px rgba(255, 255, 255, 0.7));
+  transform: translateY(-1px);
+}
+
+.welcome-card__cta:active {
+  transform: translateY(0) scale(0.98);
+}
+
+@keyframes welcome-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes welcome-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (min-width: 1024px) {
+  .welcome-overlay {
+    align-items: center;
+    padding: 40px;
+  }
+}
+
 /* Prediction section */
 
 .predictions {
