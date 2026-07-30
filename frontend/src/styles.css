@@ -1059,18 +1059,28 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   flex: 1 0 0;
   min-width: 1px;
   width: 100%;
 }
 
+/* team columns share the leftover space equally and shrink to fit;
+   the center column (time / vs.) is sized to its own content so long
+   names can never collide with it */
 .team {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 122px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.teams > b,
+.teams .match-time {
+  flex: 0 0 auto;
 }
 
 .team img {
@@ -1085,7 +1095,7 @@ input:focus-visible {
   font-weight: 500;
   color: #fff;
   white-space: nowrap;
-  max-width: 122px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1290,19 +1300,16 @@ input:focus-visible {
 
 /* prediction cards: large crests and team names (proportions from the
    reference sportsbook card: crest ≈ 1/6 of card width) */
+/* crest and name scale down a touch on narrow screens so nothing is cramped */
 .pcard .team img,
 .pcard .team .team-flag--fallback {
-  width: 64px;
-  height: 64px;
+  width: clamp(52px, 16vw, 64px);
+  height: clamp(52px, 16vw, 64px);
 }
 
 .pcard .team span {
-  font-size: 15px;
-  max-width: 128px;
-}
-
-.pcard .team {
-  width: 128px;
+  font-size: clamp(12px, 3.6vw, 15px);
+  max-width: 100%;
 }
 
 /* center column between the teams: small date over a large time / score */
@@ -1326,7 +1333,7 @@ input:focus-visible {
 }
 
 .match-time b {
-  font-size: 24px;
+  font-size: clamp(18px, 5.6vw, 24px);
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
