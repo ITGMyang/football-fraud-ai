@@ -146,9 +146,8 @@ function AccountAvatar({ session, size = 32 }: { session: Session | null; size?:
 
 /* ============ AUTH SCREENS (Figma 1:664 / 1:849 / 1:549) ============ */
 
-function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, children }: {
+function AuthDialog({ plain = false, onClose, onBack, children }: {
   plain?: boolean;
-  brandFooter?: boolean;
   onClose: () => void;
   onBack?: () => void;
   children: React.ReactNode;
@@ -180,14 +179,10 @@ function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, child
           )}
           {children}
           <footer className="auth-footer">
-            {brandFooter ? (
-              <div className="auth-footer__brand">
-                <img className="auth-footer__ball" src="/assets/brand-logo.png" alt="" />
-                <img className="auth-footer__wordmark" src="/assets/brand-wordmark.png" alt="FutBots" />
-              </div>
-            ) : (
+            <div className="auth-footer__brand">
+              <img className="auth-footer__ball" src="/assets/brand-logo.png" alt="" />
               <img className="auth-footer__wordmark" src="/assets/brand-wordmark.png" alt="FutBots" />
-            )}
+            </div>
             <p className="auth-footer__disclaimer">
               By continuing, you acknowledge that the predictions are provided for
               informational purposes only and will not be used to place bets
@@ -272,7 +267,7 @@ function AccountForm({ mode, navigate, submitAuth, onClose, onBack }: {
   };
 
   return (
-    <AuthDialog plain={signup} brandFooter={signup} onClose={onClose} onBack={onBack}>
+    <AuthDialog plain={signup} onClose={onClose} onBack={onBack}>
       <form className="auth-content" onSubmit={(event) => void submit(event)}>
         <div className="auth-hero">
           {signup ? (

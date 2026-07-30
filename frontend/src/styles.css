@@ -2520,12 +2520,13 @@ button.plan-option:disabled:hover {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
 }
 
 .auth-footer__ball {
-  width: 45px;
-  height: 45px;
-  object-fit: cover;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
 }
 
 .auth-footer__wordmark {
