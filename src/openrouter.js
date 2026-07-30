@@ -1,6 +1,7 @@
 import { aggregateReport, validatePrediction } from './domain.js';
 import { calculateModelCostUsd } from './model-cost.js';
 import { buildPoissonBaseline, poissonPromptSummary } from './poisson.js';
+import { buildMarketBaseline, compareToBaseline, marketPromptSummary } from './market-odds.js';
 
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
@@ -68,11 +69,15 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
 
   const poissonBaseline = buildPoissonBaseline(matchContext);
   const statisticalBaseline = poissonPromptSummary(poissonBaseline);
+  const marketBaseline = buildMarketBaseline(matchContext);
+  const marketComparison = compareToBaseline(marketBaseline, poissonBaseline);
+  const marketConsensus = marketPromptSummary(marketBaseline, marketComparison);
 
   const results = [];
   for (const [label, model,, provider] of selected) {
     results.push(await callRankingModelWithRetry({
-      label, model, provider, markets: compactMarkets, env, fetchImpl, matchContext, statisticalBaseline
+      label, model, provider, markets: compactMarkets, env, fetchImpl, matchContext,
+      statisticalBaseline, marketConsensus
     }));
   }
 
@@ -81,6 +86,8 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
     results,
     marketCount: compactMarkets.length,
     statisticalBaseline: poissonBaseline,
+    marketBaseline,
+    marketComparison,
     createdAt: new Date().toISOString(),
     disclaimer: 'AI 概率来自模型预测，不是赔率换算；非财务建议，非稳赢预测。'
   };
@@ -148,7 +155,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
   }
 }
 
-async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, statisticalBaseline = null, retry = false }) {
+async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, statisticalBaseline = null, marketConsensus = null, retry = false }) {
   try {
     const client = modelClient(provider, env);
     const request = modelRequest({
@@ -157,7 +164,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       model,
       env,
       system: rankingSystemPromptV2(),
-      user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline),
+      user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline, marketConsensus),
       temperature: retry ? 0 : 0.15,
       maxTokens: 2200
     });
@@ -586,7 +593,7 @@ function rankingUserPrompt(markets, matchContext, retry) {
   });
 }
 
-function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline = null) {
+function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline = null, marketConsensus = null) {
   return JSON.stringify({
     task: retry
       ? 'The previous output was invalid. Return one valid JSON object with up to 4 qualifying picks, exactly 4 scorePicks, and exactly 1 bttsPick. Use English for every reason, risk, and note.'
@@ -594,6 +601,7 @@ function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline =
     markets,
     matchContext: compactMatchContext(matchContext),
     ...(statisticalBaseline ? { statisticalBaseline } : {}),
+    ...(marketConsensus ? { marketConsensus } : {}),
     requiredShape: {
       picks: [
         {
@@ -634,7 +642,8 @@ function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline =
       'If picks contains Over 2.5, every scorePick must total at least 3 goals; if it contains Under 2.5, every scorePick must total at most 2 goals.',
       'If picks contains Over 3.5, every scorePick must total at least 4 goals; if it contains Under 3.5, every scorePick must total at most 3 goals.',
       'Use an existing score marketId when available; otherwise still provide the score text.',
-      'statisticalBaseline, when present, is a Poisson prior fitted from season goal records. Treat it as the starting distribution: stay close to it unless lineups, injuries, market moves or motivation justify moving away, and name that evidence in the reason when you do.',
+      'statisticalBaseline, when present, is a Dixon-Coles prior fitted from season goal records. Treat it as the starting distribution: stay close to it unless lineups, injuries, market moves or motivation justify moving away, and name that evidence in the reason when you do.',
+      'marketConsensus, when present, is the bookmaker price with the margin removed. It carries information neither you nor the statistical prior can see, so it outranks the prior wherever the two disagree. Departing from the market needs a concrete reason named in the reason field.',
       'bttsPick selection must be exactly "Yes" or "No" and must be logically consistent with the weighted scorePicks.',
       'estimatedProbability is an independent model probability, not an odds conversion.',
       'Sort picks and scorePicks by estimatedProbability descending.',

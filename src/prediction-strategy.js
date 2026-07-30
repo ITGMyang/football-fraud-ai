@@ -3,6 +3,7 @@ import { predictionModelKey, predictionPhase } from './prediction-cache.js';
 import { buildAnalytics } from './evaluation.js';
 import { contextKey } from './context-utils.js';
 import { buildPoissonBaseline } from './poisson.js';
+import { buildMarketBaseline, compareToBaseline } from './market-odds.js';
 
 const DEFAULT_SETTINGS = Object.freeze({
   championModelKey: 'qwen',
@@ -70,6 +71,9 @@ export async function resolveOptimizedPrediction({
     }
   }
 
+  const poissonBaseline = buildPoissonBaseline(matchContext);
+  const marketBaseline = buildMarketBaseline(matchContext);
+
   try {
     const settings = normalizeSettings(await storage.readPredictionSettings?.());
     const modelKeys = phase === 'live'
@@ -117,8 +121,10 @@ export async function resolveOptimizedPrediction({
       contextId: String(fixtureId),
       contextName,
       // Stored alongside the published consensus so post-match reviews can score the
-      // models against the statistical prior they were given.
-      statisticalBaseline: buildPoissonBaseline(matchContext),
+      // models against both references they were given.
+      statisticalBaseline: poissonBaseline,
+      marketBaseline,
+      marketComparison: compareToBaseline(marketBaseline, poissonBaseline),
       createdAt: new Date(now).toISOString(),
       predictionPhase: phase,
       disclaimer: 'AI predictions are probabilistic and are not financial advice.'

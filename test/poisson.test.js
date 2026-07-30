@@ -168,11 +168,12 @@ test('the low-score correction moves probability the way the record does', () =>
 test('the correction leaves every derived market summing to one', () => {
   for (const rho of [-0.2, -0.13, 0, 0.1]) {
     const baseline = buildPoissonBaseline(context(), { rho });
+    // 4dp display rounding, so the bound is that rather than machine epsilon.
     const { home, draw, away } = baseline.outcome;
-    assert.ok(Math.abs(home + draw + away - 1) < 1e-9, `outcome at rho=${rho}`);
-    assert.ok(Math.abs(baseline.btts.yes + baseline.btts.no - 1) < 1e-9, `btts at rho=${rho}`);
+    assert.ok(Math.abs(home + draw + away - 1) < 1e-3, `outcome at rho=${rho}`);
+    assert.ok(Math.abs(baseline.btts.yes + baseline.btts.no - 1) < 1e-3, `btts at rho=${rho}`);
     for (const total of baseline.totals) {
-      assert.ok(Math.abs(total.over + total.under - 1) < 1e-9, `total ${total.line} at rho=${rho}`);
+      assert.ok(Math.abs(total.over + total.under - 1) < 1e-3, `total ${total.line} at rho=${rho}`);
     }
     for (const entry of baseline.scores) assert.ok(entry.probability > 0, `positive cells at rho=${rho}`);
   }

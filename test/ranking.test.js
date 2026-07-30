@@ -1156,3 +1156,78 @@ test('no provider block is sent when no routing preference is configured', async
   await rankMarkets(markets, 'Qwen', { OPENROUTER_API_KEY: 'test', MODEL_QWEN: 'qwen/qwen3.7-max' }, fakeFetch);
   assert.equal(body.provider, undefined);
 });
+
+test('the market consensus reaches the prompt beside the statistical prior', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  const matchContext = {
+    matchName: 'A v B',
+    teams: ['A', 'B'],
+    fixture: { home: { name: 'A' }, away: { name: 'B' } },
+    catalog: { teamStatistics: [
+      { team: 'A', played: 20, playedHome: 10, goalsForHome: 20, goalsAgainstHome: 10 },
+      { team: 'B', played: 20, playedAway: 10, goalsForAway: 12, goalsAgainstAway: 16 }
+    ] },
+    index: { live: {
+      euro: [{ company: 'Bet365', home: '1.80', line: '3.60', away: '4.50' }],
+      size: [{ company: 'Bet365', line: '2.5', home: '1.90', away: '1.95' }],
+      asia: []
+    } }
+  };
+  let sentPrompt = null;
+  const fakeFetch = async (url, options) => {
+    sentPrompt = JSON.parse(JSON.parse(options.body).messages[1].content);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({
+          picks: [{ marketId: 'a', estimatedProbability: 0.62, confidence: 0.5, reason: 'home', risks: [] }],
+          scorePicks: [{ score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'low' }]
+        }) } }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'Qwen', {
+    OPENROUTER_API_KEY: 'test', MODEL_QWEN: 'qwen/test'
+  }, fakeFetch, matchContext);
+
+  assert.ok(sentPrompt.marketConsensus, 'the de-margined market must reach the model');
+  assert.match(sentPrompt.marketConsensus.source, /margin removed/i);
+  assert.ok(sentPrompt.statisticalBaseline, 'the prior travels with it');
+  // The market ranks above the prior, and the rule says so explicitly.
+  assert.ok(sentPrompt.rules.some((rule) => /marketConsensus.*outranks/i.test(rule)));
+
+  assert.equal(ranking.marketBaseline.available, true);
+  assert.ok(ranking.marketComparison.rows.length > 0);
+  assert.ok(ranking.marketComparison.meanDivergence >= 0);
+});
+
+test('a fixture without odds still ranks, with no market block in the prompt', async () => {
+  const markets = [
+    buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })
+  ];
+  let sentPrompt = null;
+  const fakeFetch = async (url, options) => {
+    sentPrompt = JSON.parse(JSON.parse(options.body).messages[1].content);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({
+          picks: [{ marketId: 'a', estimatedProbability: 0.62, confidence: 0.5, reason: 'home', risks: [] }],
+          scorePicks: [{ score: '1:0', estimatedProbability: 0.2, confidence: 0.4, reason: 'low' }]
+        }) } }]
+      })
+    };
+  };
+
+  const ranking = await rankMarkets(markets, 'Qwen', {
+    OPENROUTER_API_KEY: 'test', MODEL_QWEN: 'qwen/test'
+  }, fakeFetch, { fixture: { home: { name: 'A' }, away: { name: 'B' } } });
+
+  assert.equal(sentPrompt.marketConsensus, undefined);
+  assert.equal(ranking.marketBaseline.available, false);
+  assert.equal(ranking.marketComparison, null);
+  assert.equal(ranking.results[0].error, undefined);
+});
