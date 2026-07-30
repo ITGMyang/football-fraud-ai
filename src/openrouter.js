@@ -2,6 +2,7 @@ import { aggregateReport, validatePrediction } from './domain.js';
 import { calculateModelCostUsd } from './model-cost.js';
 import { buildPoissonBaseline, poissonPromptSummary } from './poisson.js';
 import { buildMarketBaseline, compareToBaseline, marketPromptSummary } from './market-odds.js';
+import { fetchTeamNews, teamNewsPromptSummary } from './team-news.js';
 
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
@@ -46,7 +47,7 @@ export async function predictMarket(market, env = process.env, fetchImpl = fetch
   };
 }
 
-export async function rankMarkets(markets, modelLabel = 'all', env = process.env, fetchImpl = fetch, matchContext = null) {
+export async function rankMarkets(markets, modelLabel = 'all', env = process.env, fetchImpl = fetch, matchContext = null, teamNews = null) {
   if (!hasAnyApiKey(env)) {
     throw new Error('缺少模型 API Key，请配置 OPENROUTER_API_KEY / OPENAI_API_KEY / APIMART_API_KEY');
   }
@@ -72,12 +73,15 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
   const marketBaseline = buildMarketBaseline(matchContext);
   const marketComparison = compareToBaseline(marketBaseline, poissonBaseline);
   const marketConsensus = marketPromptSummary(marketBaseline, marketComparison);
+  // Search is a network call, so it is resolved once here rather than per model.
+  const news = teamNews ?? await fetchTeamNews(matchContext, env, fetchImpl);
+  const teamNewsSummary = teamNewsPromptSummary(news);
 
   const results = [];
   for (const [label, model,, provider] of selected) {
     results.push(await callRankingModelWithRetry({
       label, model, provider, markets: compactMarkets, env, fetchImpl, matchContext,
-      statisticalBaseline, marketConsensus
+      statisticalBaseline, marketConsensus, teamNewsSummary
     }));
   }
 
@@ -88,6 +92,7 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
     statisticalBaseline: poissonBaseline,
     marketBaseline,
     marketComparison,
+    teamNews: news,
     createdAt: new Date().toISOString(),
     disclaimer: 'AI 概率来自模型预测，不是赔率换算；非财务建议，非稳赢预测。'
   };
@@ -155,7 +160,7 @@ async function callModel({ label, model, provider, market, env, fetchImpl, retry
   }
 }
 
-async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, statisticalBaseline = null, marketConsensus = null, retry = false }) {
+async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, statisticalBaseline = null, marketConsensus = null, teamNewsSummary = null, retry = false }) {
   try {
     const client = modelClient(provider, env);
     const request = modelRequest({
@@ -164,7 +169,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       model,
       env,
       system: rankingSystemPromptV2(),
-      user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline, marketConsensus),
+      user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline, marketConsensus, teamNewsSummary),
       temperature: retry ? 0 : 0.15,
       maxTokens: 2200
     });
@@ -593,7 +598,7 @@ function rankingUserPrompt(markets, matchContext, retry) {
   });
 }
 
-function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline = null, marketConsensus = null) {
+function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline = null, marketConsensus = null, teamNewsSummary = null) {
   return JSON.stringify({
     task: retry
       ? 'The previous output was invalid. Return one valid JSON object with up to 4 qualifying picks, exactly 4 scorePicks, and exactly 1 bttsPick. Use English for every reason, risk, and note.'
@@ -602,6 +607,7 @@ function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline =
     matchContext: compactMatchContext(matchContext),
     ...(statisticalBaseline ? { statisticalBaseline } : {}),
     ...(marketConsensus ? { marketConsensus } : {}),
+    ...(teamNewsSummary ? { teamNews: teamNewsSummary } : {}),
     requiredShape: {
       picks: [
         {
@@ -643,6 +649,7 @@ function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline =
       'If picks contains Over 3.5, every scorePick must total at least 4 goals; if it contains Under 3.5, every scorePick must total at most 3 goals.',
       'Use an existing score marketId when available; otherwise still provide the score text.',
       'statisticalBaseline, when present, is a Dixon-Coles prior fitted from season goal records. Treat it as the starting distribution: stay close to it unless lineups, injuries, market moves or motivation justify moving away, and name that evidence in the reason when you do.',
+      'teamNews, when present, is unverified live search used only because the data provider had no injuries for this fixture. A named, cited absence may move your read; vague or uncited reporting must not.',
       'marketConsensus, when present, is the bookmaker price with the margin removed. It carries information neither you nor the statistical prior can see, so it outranks the prior wherever the two disagree. Departing from the market needs a concrete reason named in the reason field.',
       'bttsPick selection must be exactly "Yes" or "No" and must be logically consistent with the weighted scorePicks.',
       'estimatedProbability is an independent model probability, not an odds conversion.',

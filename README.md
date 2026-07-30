@@ -154,6 +154,49 @@ npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN
 
 想要城市/地区级别的数据，得换个思路：Worker 在每个请求上都能读到 `request.cf.country` / `city` / `region` / `colo`，自己记录进 Supabase 就有了，而且能按路径细分。这条没做，需要的话说一声。
 
+## 预测数据层
+
+一次预测按顺序用三个来源，前两个零成本：
+
+**① 统计基线**（[`src/poisson.js`](src/poisson.js)，纯代码，0 token）
+
+用赛季进球记录拟合 Dixon-Coles 模型，输出预期进球、胜平负、比分分布、大小球、双方进球。带低比分修正（rho = −0.13）——独立泊松会低估 0-0 和 1-1、高估 1-0 和 0-1，因为低比分比赛里两队进球并不独立。
+
+**② 盘口共识**（[`src/market-odds.js`](src/market-odds.js)，纯代码，0 token）
+
+读 API-Football 已经返回的 1X2 / 亚盘 / 大小球赔率，**去掉水位**再跨博彩公司取平均。赔率倒数不是概率——5% 水位的盘口直接换算会得到"所有结果加起来 105%"。去水用等比例法，Shin 方法对失衡盘口更准但需要迭代和先验假设，这份数据撑不起来。
+
+盘口在 prompt 里**排在统计基线之上**：它定价了模型看不到的信息。模型与市场的偏离度会被算出来并存进结果，赛后可以对两个参照分别打分。
+
+四分之一盘（如 +1.25）按原样保留，不在这里拆分——拆分会改变"打赢盘口"的定义，那属于结算逻辑。
+
+**③ 实时球队新闻**（[`src/team-news.js`](src/team-news.js)，xAI 实时搜索，**仅在有数据缺口时触发**）
+
+API-Football 对覆盖好的联赛有伤停数据，对有些联赛完全没有。实测一场欧联资格赛：`injuries: empty`，而搜索找到了 6 名缺阵球员。
+
+所以触发条件是 `fetchStatus.injuries` 为空或报错，**不是每场都搜**：
+
+```
+injuries: available (n)  →  跳过，成本 $0
+injuries: empty / error  →  搜一次，约 $0.012
+```
+
+只看伤停，不看 lineups——首发在开赛前 1 小时才发布，每场都缺，用它当触发条件等于每场都搜。
+
+搜索结果**没有引用就丢弃**：无出处的球员伤停说法和猜测没有区别。prompt 里明确标注它是未经核实的信息，且不得覆盖盘口。
+
+搜索失败、超时、未配置都不会影响预测——照常出结果，只是少一份输入。
+
+### 相关配置
+
+```powershell
+npx wrangler secret put XAI_API_KEY
+```
+
+不设 `XAI_API_KEY` 就是关闭。想保留 key 但暂时停用，设 `TEAM_NEWS_SEARCH_ENABLED=false`。模型默认 `grok-4.3`，可用 `XAI_MODEL` 覆盖。
+
+**注意**：xAI 的 `search_parameters`（Live Search）已废弃，返回 410，必须用 Agent Tools API（`/v1/responses` + `tools:[{type:"x_search"}]`）。经 OpenRouter 转发时 `x_search` 拿不到，只能直连 xAI。
+
 ## 测试
 
 ```powershell
