@@ -1,4 +1,4 @@
-import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Component, createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState, type ErrorInfo, type ReactNode } from 'react';
 import { createClient, Session, SupabaseClient } from '@supabase/supabase-js';
 
 import { createApiClient, userFacingError } from './api.js';
@@ -138,6 +138,29 @@ function Table({ head, children, empty }: { head: string[]; children: React.Reac
 
 function Status({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'idle'; children: React.ReactNode }) {
   return <span className={`a-status a-status--${tone}`}>{children}</span>;
+}
+
+// A render error in one panel used to unmount the whole console and leave a black
+// page with no clue what happened. Contain it and show what threw instead.
+class Boundary extends Component<{ label: string; children: ReactNode }, { message: string }> {
+  state = { message: '' };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { message: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error('[admin]', this.props.label, error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.message) return this.props.children;
+    return (
+      <p className="a-error" role="alert">
+        {this.props.label}: {this.state.message}
+      </p>
+    );
+  }
 }
 
 function UsageTable({ summary }: { summary: UsageSummary }) {
@@ -896,10 +919,12 @@ function FixtureModal({ fixtureId, context, loading, error, onClose }: {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const notes = context?.lineup?.notes || [];
   const sections: [CopyKey, string[]][] = context ? [
-    ['formations', context.lineup?.formations || []],
+    ['formations', context.lineup?.formation ? [context.lineup.formation] : []],
     ['lineups', context.lineup?.players || []],
-    ['injuries', context.lineup?.injuries || []],
+    ['injuries', notes.filter((note) => /^(伤停|injury)/i.test(note))],
+    ['matchNotes', notes.filter((note) => !/^(伤停|injury)/i.test(note))],
     ['h2h', context.analysis?.h2h || []],
     ['odds', context.index?.handicapRows || []],
     ['standings', context.catalog?.standings || []],
@@ -934,11 +959,16 @@ function FixtureModal({ fixtureId, context, loading, error, onClose }: {
             {context.fetchStatus && (
               <Module title={t('endpointCoverage')} eyebrow={t('endpointNote')}>
                 <div className="a-chips">
-                  {Object.entries(context.fetchStatus).map(([endpoint, state]) => (
-                    <Status key={endpoint} tone={state === 'ok' ? 'ok' : state === 'empty' ? 'idle' : 'bad'}>
-                      {endpoint}: {state}
-                    </Status>
-                  ))}
+                  {Object.entries(context.fetchStatus).map(([endpoint, status]) => {
+                    const state = String(status?.state || 'unknown');
+                    const count = Number(status?.count) || 0;
+                    return (
+                      <Status key={endpoint} tone={state === 'available' ? 'ok' : state === 'empty' ? 'idle' : 'bad'}>
+                        {endpoint}: {state}{count ? ` (${count})` : ''}
+                        {status?.error ? ` — ${String(status.error).slice(0, 60)}` : ''}
+                      </Status>
+                    );
+                  })}
                 </div>
               </Module>
             )}
@@ -1210,6 +1240,7 @@ export default function AdminApp() {
           ? <p className="a-empty">{t('loadingData')}</p>
           : (
             <div className="a-panel" role="tabpanel">
+              <Boundary label={tab}>
               {tab === 'overview' && <OverviewTab dashboard={dashboard} />}
               {tab === 'traffic' && (
                 <TrafficTab
@@ -1245,10 +1276,12 @@ export default function AdminApp() {
               {tab === 'predictions' && <PredictionsTab dashboard={dashboard} />}
               {tab === 'accuracy' && <AccuracyTab accuracy={dashboard.accuracy} />}
               {tab === 'accounts' && <AccountsTab dashboard={dashboard} />}
+              </Boundary>
             </div>
           )}
 
         {fixtureId && (
+          <Boundary label={t('fixture', { id: fixtureId })}>
           <FixtureModal
             fixtureId={fixtureId}
             context={fixture}
@@ -1256,6 +1289,7 @@ export default function AdminApp() {
             error={fixtureError}
             onClose={() => { setFixtureId(''); setFixture(null); setFixtureError(''); }}
           />
+          </Boundary>
         )}
       </main>
     </CopyContext.Provider>

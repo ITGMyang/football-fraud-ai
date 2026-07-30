@@ -268,8 +268,9 @@ export type FixtureContext = {
   fixture?: Record<string, unknown>;
   catalog?: { teamStatistics?: Record<string, unknown>[]; standings?: string[]; topScorers?: string[] };
   analysis?: { h2h?: string[]; teamStatistics?: { team: string; values: Record<string, unknown> }[] };
-  lineup?: { formations?: string[]; players?: string[]; injuries?: string[] };
+  lineup?: { formation?: string; players?: string[]; notes?: string[] };
   index?: { handicapRows?: string[] };
   live?: string[];
-  fetchStatus?: Record<string, string>;
+  // Each endpoint reports an object, not a status string.
+  fetchStatus?: Record<string, { state?: string; count?: number; error?: string }>;
 };

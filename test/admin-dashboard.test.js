@@ -298,6 +298,23 @@ test('the admin console is wired to the dashboard API through its own shell', as
   assert.match(dashboardSource, /summarizeSharedPool\(predictionSnapshots, predictionConsensus,/);
   assert.doesNotMatch(dashboardSource, /sharedPredictions/);
   assert.match(app, /className="a-group"/);
+
+  // The fixture payload nests an object per endpoint and names the lineup fields
+  // `formation` / `notes`; reading them as strings blanked the console.
+  assert.match(app, /String\(status\?\.state \|\| 'unknown'\)/);
+  assert.match(app, /state === 'available' \? 'ok'/);
+  assert.match(app, /context\.lineup\?\.formation \?/);
+  assert.match(app, /context\?\.lineup\?\.notes \|\| \[\]/);
+  assert.doesNotMatch(app, /lineup\?\.formations/);
+  assert.doesNotMatch(app, /lineup\?\.injuries/);
+
+  // A render error must not take the whole console down with it.
+  assert.match(app, /class Boundary extends Component/);
+  assert.match(app, /getDerivedStateFromError/);
+  assert.match(app, /<Boundary label=\{tab\}>/);
+
+  const types = await readFile(new URL('../frontend/src/adminTypes.ts', import.meta.url), 'utf8');
+  assert.match(types, /fetchStatus\?: Record<string, \{ state\?: string; count\?: number; error\?: string \}>/);
   assert.match(worker, /url\.pathname === '\/api\/admin\/models\/check'/);
   assert.match(app, /setAuthorized\(false\)/);
 
@@ -306,8 +323,13 @@ test('the admin console is wired to the dashboard API through its own shell', as
   assert.match(app, /createTranslator\(language\)/);
   assert.match(app, /localStorage\.setItem\(LANGUAGE_STORAGE_KEY, language\)/);
   assert.match(app, /className="a-lang"/);
-  // The toggle's own label is the only Han text allowed outside the copy table.
-  assert.deepEqual([...app.matchAll(/[\u4e00-\u9fff]+/g)].map((entry) => entry[0]), ['中文']);
+  // Han text in the component is allowed only for the toggle's own label and for
+  // regexes matching backend data prefixes — never for UI copy, which lives in adminCopy.
+  const HAN_ALLOWED = new Set(['中文', '伤停']);
+  for (const [text] of app.matchAll(/[\u4e00-\u9fff]+/g)) {
+    assert.ok(HAN_ALLOWED.has(text), `unexpected Han text in the component: ${text}`);
+  }
+  assert.match(app, /\/\^\(伤停\|injury\)\/i/);
   assert.match(copy, /consoleTitle: \['Operations console', '运营后台'\]/);
   for (const [, en, zh] of copy.matchAll(/^ {2}\w+: \['((?:[^'\\]|\\.)*)', '((?:[^'\\]|\\.)*)'\]/gm)) {
     assert.ok(en.length > 0 && zh.length > 0, 'every console string needs both languages');

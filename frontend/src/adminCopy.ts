@@ -286,6 +286,7 @@ const COPY = {
   endpointCoverage: ['Endpoint coverage', '端点覆盖'],
   endpointNote: ['What was actually captured', '实际抓到了什么'],
   formations: ['Formations', '阵型'],
+  matchNotes: ['Referee and venue', '裁判与场地'],
   lineups: ['Lineups and players', '首发与球员'],
   injuries: ['Injuries', '伤停'],
   h2h: ['Head to head', '历史交锋'],
