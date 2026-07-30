@@ -169,7 +169,7 @@ function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, child
     >
       <div className="auth-dialog" role="dialog" aria-modal="true" aria-label="Sign in">
         <aside className="auth-side" aria-hidden="true">
-          <img className="auth-side__ball" src="/assets/figma-logo-ball.svg" alt="" />
+          <img className="auth-side__ball" src="/assets/brand-logo.png" alt="" />
           <img className="auth-side__wordmark" src="/assets/figma-wordmark.svg" alt="" />
         </aside>
         <div className="auth-main">
@@ -182,7 +182,7 @@ function AuthDialog({ plain = false, brandFooter = false, onClose, onBack, child
           <footer className="auth-footer">
             {brandFooter ? (
               <div className="auth-footer__brand">
-                <img className="auth-footer__ball" src="/assets/figma-icon-futbot.png" alt="" />
+                <img className="auth-footer__ball" src="/assets/brand-logo.png" alt="" />
                 <img className="auth-footer__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
               </div>
             ) : (
@@ -212,13 +212,13 @@ function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled,
     <AuthDialog onClose={onClose}>
       <div className="auth-content">
         <div className="auth-hero">
-          <img className="auth-hero__ball" src="/assets/figma-logo-ball.svg" alt="" />
+          <img className="auth-hero__ball" src="/assets/brand-logo.png" alt="" />
           <h1>Not Sure? Bot It</h1>
         </div>
         <div className="auth-actions">
           <button className="social-button" onClick={() => navigate("login")}>
-            <span className="social-button__icon social-button__icon--futbot">
-              <img src="/assets/figma-icon-futbot.png" alt="" />
+            <span className="social-button__icon">
+              <img src="/assets/brand-logo.png" alt="" />
             </span>
             Login with FutBot account
           </button>
@@ -279,7 +279,7 @@ function AccountForm({ mode, navigate, submitAuth, onClose, onBack }: {
             <h1 className="auth-title">Create account</h1>
           ) : (
             <>
-              <img className="auth-hero__ball" src="/assets/figma-logo-ball.svg" alt="" />
+              <img className="auth-hero__ball" src="/assets/brand-logo.png" alt="" />
               <h1>Not Sure? Bot It</h1>
             </>
           )}
@@ -390,7 +390,7 @@ function HomeHeader({ session, access, navigate }: {
   return (
     <header className={`home-header ${scrolled ? "home-header--scrolled" : ""}`}>
       <div className="home-brand" aria-hidden="true">
-        <img className="home-brand__ball" src="/assets/figma-icon-futbot.png" alt="" />
+        <img className="home-brand__ball" src="/assets/brand-logo.png" alt="" />
         <img className="home-brand__wordmark" src="/assets/figma-wordmark.svg" alt="FutBots" />
       </div>
       <button className="pill" onClick={() => session ? navigate("profile") : navigate("auth")}>
