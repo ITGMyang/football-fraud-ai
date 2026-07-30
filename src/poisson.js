@@ -4,6 +4,10 @@
 // inventing scorelines from prose.
 
 const MAX_GOALS = 8;
+// Dixon-Coles low-score correction. Independent Poisson margins understate 0-0 and
+// 1-1 and overstate 1-0 and 0-1, because goals in low-scoring games are not
+// independent. A negative rho shifts probability back the way the record shows.
+const DIXON_COLES_RHO = -0.13;
 const TOTAL_LINES = [0.5, 1.5, 2.5, 3.5, 4.5];
 const DEFAULT_SCORE_COUNT = 6;
 // Home sides score roughly 1.15x and concede roughly 0.87x the neutral rate across
@@ -12,7 +16,7 @@ const HOME_ADVANTAGE = 1.15;
 const AWAY_DISADVANTAGE = 0.87;
 const MIN_SAMPLE = 4;
 
-export function buildPoissonBaseline(context, { scoreCount = DEFAULT_SCORE_COUNT } = {}) {
+export function buildPoissonBaseline(context, { scoreCount = DEFAULT_SCORE_COUNT, rho = DIXON_COLES_RHO } = {}) {
   const teams = fixtureTeams(context);
   if (!teams) return unavailable('Fixture is missing home and away team names');
 
@@ -39,12 +43,13 @@ export function buildPoissonBaseline(context, { scoreCount = DEFAULT_SCORE_COUNT
   const lambdaHome = round(homeAttack * awayDefence * leagueGoals * homeRates.venueFactor, 3);
   const lambdaAway = round(awayAttack * homeDefence * leagueGoals * awayRates.venueFactor, 3);
 
-  const grid = scoreGrid(lambdaHome, lambdaAway);
+  const grid = scoreGrid(lambdaHome, lambdaAway, rho);
   return {
     available: true,
     method: 'poisson',
     lambdaHome,
     lambdaAway,
+    rho,
     sample: { home: homeRates.played, away: awayRates.played, venueSplit: homeRates.split && awayRates.split },
     outcome: outcomeProbabilities(grid),
     scores: topScores(grid, scoreCount),
@@ -57,7 +62,7 @@ export function buildPoissonBaseline(context, { scoreCount = DEFAULT_SCORE_COUNT
 export function poissonPromptSummary(baseline) {
   if (!baseline?.available) return null;
   return {
-    method: 'Poisson goal model fitted from season goal records',
+    method: 'Dixon-Coles goal model fitted from season goal records',
     expectedGoals: { home: baseline.lambdaHome, away: baseline.lambdaAway },
     outcomeProbability: baseline.outcome,
     likelyScores: baseline.scores.map((entry) => `${entry.score} ${percent(entry.probability)}`),
@@ -121,20 +126,32 @@ function venueRates(row, venue) {
   };
 }
 
-function scoreGrid(lambdaHome, lambdaAway) {
+function scoreGrid(lambdaHome, lambdaAway, rho = DIXON_COLES_RHO) {
   const homeProbabilities = poissonSeries(lambdaHome);
   const awayProbabilities = poissonSeries(lambdaAway);
   const grid = [];
   let mass = 0;
   for (let home = 0; home <= MAX_GOALS; home += 1) {
     for (let away = 0; away <= MAX_GOALS; away += 1) {
-      const probability = homeProbabilities[home] * awayProbabilities[away];
+      const probability = homeProbabilities[home] * awayProbabilities[away]
+        * lowScoreAdjustment(home, away, lambdaHome, lambdaAway, rho);
       mass += probability;
       grid.push({ home, away, probability });
     }
   }
-  // Renormalise the truncated tail so every derived market sums to one.
+  // Renormalise: the correction perturbs total mass, and the tail beyond MAX_GOALS
+  // is truncated. Without this the derived markets would not sum to one.
   return mass > 0 ? grid.map((cell) => ({ ...cell, probability: cell.probability / mass })) : grid;
+}
+
+// The tau function touches only the four cells where both sides score at most once;
+// everything else is left as the independent product.
+function lowScoreAdjustment(home, away, lambdaHome, lambdaAway, rho) {
+  if (home > 1 || away > 1) return 1;
+  if (home === 0 && away === 0) return Math.max(1 - lambdaHome * lambdaAway * rho, 0.0001);
+  if (home === 0 && away === 1) return Math.max(1 + lambdaHome * rho, 0.0001);
+  if (home === 1 && away === 0) return Math.max(1 + lambdaAway * rho, 0.0001);
+  return Math.max(1 - rho, 0.0001);
 }
 
 function poissonSeries(lambda) {

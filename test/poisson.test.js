@@ -138,3 +138,51 @@ test('the prompt summary stays compact and only ships when a baseline exists', (
   assert.match(summary.note, /Statistical prior only/);
   assert.ok(JSON.stringify(summary).length < 900, 'summary must stay a rounding error next to the match context');
 });
+
+test('the low-score correction moves probability the way the record does', () => {
+  const base = buildPoissonBaseline(context());
+  const scoreOf = (baseline, score) => baseline.scores.find((entry) => entry.score === score)?.probability;
+
+  // rho is negative, so 0-0 and 1-1 gain and the split low scores give way.
+  assert.equal(base.rho < 0, true);
+  assert.equal(base.method, 'poisson');
+
+  // Compare against the same fixture priced with the correction switched off.
+  const plain = buildPoissonBaseline(context(), { rho: 0 });
+  for (const score of ['0:0', '1:1']) {
+    const corrected = scoreOf(base, score);
+    const independent = scoreOf(plain, score);
+    if (corrected !== undefined && independent !== undefined) {
+      assert.ok(corrected > independent, `${score} should gain: ${corrected} vs ${independent}`);
+    }
+  }
+  for (const score of ['1:0', '0:1']) {
+    const corrected = scoreOf(base, score);
+    const independent = scoreOf(plain, score);
+    if (corrected !== undefined && independent !== undefined) {
+      assert.ok(corrected < independent, `${score} should give way: ${corrected} vs ${independent}`);
+    }
+  }
+});
+
+test('the correction leaves every derived market summing to one', () => {
+  for (const rho of [-0.2, -0.13, 0, 0.1]) {
+    const baseline = buildPoissonBaseline(context(), { rho });
+    const { home, draw, away } = baseline.outcome;
+    assert.ok(Math.abs(home + draw + away - 1) < 1e-9, `outcome at rho=${rho}`);
+    assert.ok(Math.abs(baseline.btts.yes + baseline.btts.no - 1) < 1e-9, `btts at rho=${rho}`);
+    for (const total of baseline.totals) {
+      assert.ok(Math.abs(total.over + total.under - 1) < 1e-9, `total ${total.line} at rho=${rho}`);
+    }
+    for (const entry of baseline.scores) assert.ok(entry.probability > 0, `positive cells at rho=${rho}`);
+  }
+});
+
+test('scores above one goal a side are untouched by the correction', () => {
+  const withRho = buildPoissonBaseline(context());
+  const without = buildPoissonBaseline(context(), { rho: 0 });
+  // 2:1 shifts only through renormalisation, never through the tau function itself.
+  const a = withRho.scores.find((entry) => entry.score === '2:1')?.probability;
+  const b = without.scores.find((entry) => entry.score === '2:1')?.probability;
+  if (a !== undefined && b !== undefined) assert.ok(Math.abs(a - b) / b < 0.1);
+});
