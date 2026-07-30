@@ -121,14 +121,38 @@ npm run cf:deploy
 
 登录后访问 `/admin`，管理员账号才能读取数据。旧的 `/analytics`、`/backend`、`/data`、`/history` 已经合并进 `/admin`，访问会 301 跳转过去。
 
-后台分成六个标签页：
+后台分成七个标签页：
 
 - **Overview**：当天 API-Football 配额、模型调用与花费、预测队列、定时任务状态、收入与用户概览。
+- **Traffic**：Cloudflare zone 的访问数据——每日独立访客、请求数、页面浏览、流量、拦截威胁，以及按国家/地区的请求分布。需要额外配置，见下。
 - **Data Console**：Supabase 里的 API-Football 赛程缓存，可按赛事、球队、赔率状态过滤。点 Inspect 会实时拉一次该场比赛的完整 context，并列出每个 API 端点到底抓到没有。
 - **Models**：按天和累计的 token 与花费，区分「服务商回传」和「本地估算」两种成本来源。
 - **Predictions**：共享预测池的命中情况、每场比赛的快照与共识、每周模型结算和冠军模型。
 - **Accuracy**：赛后结算的准确率，按模型和玩法拆分。
 - **Accounts**：用户、套餐权益和订单。
+
+### 访问数据配置
+
+Traffic 标签读 Cloudflare 的 GraphQL Analytics API，需要两个 secret：
+
+```powershell
+npx wrangler secret put CLOUDFLARE_ZONE_ID
+npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN
+```
+
+- `CLOUDFLARE_ZONE_ID`：Cloudflare 后台 `futbots.cc` 概览页右下角的 Zone ID。
+- `CLOUDFLARE_ANALYTICS_TOKEN`：**新建一个单独的 token**，权限只给 `Zone → Analytics → Read`，范围限定到这一个 zone。不要复用部署用的 `CLOUDFLARE_API_TOKEN`——那个有写权限，没必要让后台读接口拿着它。
+
+没配置时 Traffic 标签会明确显示缺哪个变量，不会静默显示 0。
+
+**这份数据的边界**（界面上也写了）：
+
+- **独立访客只有按天的粒度**，没有按国家的。国家维度统计的是**请求数**，不是访客数——Cloudflare 这个数据集就是这样。
+- 累加每日访客会把隔天回访的人重复计一次，所以界面上把它标成「访问数」而不是「人数」，并另外给出「单日访客峰值」。
+- **没有国家以下的粒度**（城市、省份）。标准套餐的 zone analytics 不提供。
+- 如果 GraphQL 因为套餐或 token 权限报错，界面会把 Cloudflare 的原始错误原文显示出来，不会当成"没有流量"。
+
+想要城市/地区级别的数据，得换个思路：Worker 在每个请求上都能读到 `request.cf.country` / `city` / `region` / `colo`，自己记录进 Supabase 就有了，而且能按路径细分。这条没做，需要的话说一声。
 
 ## 测试
 

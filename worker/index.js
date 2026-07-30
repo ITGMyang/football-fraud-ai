@@ -28,6 +28,7 @@ import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.
 import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
 import { buildAdminDashboard, summarizeDayAccuracy } from '../src/admin-dashboard.js';
 import { checkModels } from '../src/model-check.js';
+import { fetchSiteTraffic } from '../src/cloudflare-analytics.js';
 import { isAdminUser } from '../src/auth.js';
 import {
   filterVisibleMatches,
@@ -183,6 +184,11 @@ async function routeApi(request, env, access) {
       }, Date.now(), { selectedDate: url.searchParams.get('date') || '' }),
       billingReconciliation: reconciliation
     });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/admin/traffic') {
+    if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);
+    if (!isAdminUser(access.user, env)) return json({ error: 'Administrator access required' }, 403);
+    return json(await fetchSiteTraffic(env, workerFetch, { days: url.searchParams.get('days') || 7 }));
   }
   if (request.method === 'POST' && url.pathname === '/api/admin/models/check') {
     if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);

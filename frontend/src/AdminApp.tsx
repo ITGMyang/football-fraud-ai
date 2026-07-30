@@ -18,6 +18,7 @@ import type {
   OrderRow,
   Schedule,
   ScheduleMatch,
+  Traffic,
   UsageSummary,
   UserRow
 } from './adminTypes';
@@ -26,10 +27,11 @@ import './admin.css';
 type AuthConfig = { enabled?: boolean; supabaseUrl?: string; publishableKey?: string; error?: string };
 type ModelCheckRow = { label: string; model: string; provider: string; ok: boolean; status: number; ms: number; message: string };
 type ModelCheck = { checkedAt: string; reachable: number; total: number; checks: ModelCheckRow[] };
-type TabId = 'overview' | 'data' | 'models' | 'predictions' | 'accuracy' | 'accounts';
+type TabId = 'overview' | 'traffic' | 'data' | 'models' | 'predictions' | 'accuracy' | 'accounts';
 
 const TABS: { id: TabId; label: CopyKey; hint: CopyKey }[] = [
   { id: 'overview', label: 'tabOverview', hint: 'tabOverviewHint' },
+  { id: 'traffic', label: 'tabTraffic', hint: 'tabTrafficHint' },
   { id: 'data', label: 'tabData', hint: 'tabDataHint' },
   { id: 'models', label: 'tabModels', hint: 'tabModelsHint' },
   { id: 'predictions', label: 'tabPredictions', hint: 'tabPredictionsHint' },
@@ -62,6 +64,24 @@ function money(value: number) {
 
 function ratio(value: number) {
   return `${Math.round((Number(value) || 0) * 1000) / 10}%`;
+}
+
+function bytes(value: number) {
+  const scale = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = Number(value) || 0;
+  let unit = 0;
+  while (size >= 1024 && unit < scale.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size < 10 && unit > 0 ? size.toFixed(1) : Math.round(size)} ${scale[unit]}`;
+}
+
+// Two-letter zone codes render as the matching flag; anything else is left as text.
+function countryLabel(code: string) {
+  if (!/^[A-Za-z]{2}$/.test(code)) return code || '—';
+  const flag = String.fromCodePoint(...[...code.toUpperCase()].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65));
+  return `${flag} ${code.toUpperCase()}`;
 }
 
 function fixtureIdOf(match: ScheduleMatch) {
@@ -217,6 +237,99 @@ function OverviewTab({ dashboard }: { dashboard: Dashboard }) {
             tone={orders.statusCounts.failed > 0 ? 'warn' : ''}
           />
         </div>
+      </Module>
+    </>
+  );
+}
+
+/* ============ TAB: TRAFFIC ============ */
+
+function TrafficTab({ traffic, days, loading, error, onDays }: {
+  traffic: Traffic | null;
+  days: number;
+  loading: boolean;
+  error: string;
+  onDays: (days: number) => void;
+}) {
+  const t = useT();
+  const rangePicker = (
+    <select className="a-input" value={days} onChange={(event) => onDays(Number(event.target.value))} disabled={loading}>
+      {[1, 7, 14, 30].map((option) => (
+        <option key={option} value={option}>{t('trafficRange', { days: option })}</option>
+      ))}
+    </select>
+  );
+
+  if (!traffic && loading) return <p className="a-empty">{t('loading')}</p>;
+
+  if (traffic && !traffic.configured) {
+    return (
+      <Module title={t('trafficNotConfigured')} eyebrow={t('trafficEyebrow')} note={t('trafficNotConfiguredNote')}>
+        <p className="a-empty">{traffic.reason}</p>
+      </Module>
+    );
+  }
+
+  if (traffic && traffic.ok === false) {
+    return (
+      <Module title={t('trafficTitle')} eyebrow={t('trafficEyebrow')} action={rangePicker}>
+        <p className="a-error" role="alert">{traffic.error}</p>
+      </Module>
+    );
+  }
+
+  const totals = traffic?.totals;
+  const peak = Math.max(1, ...(traffic?.daily || []).map((day) => day.uniques));
+
+  return (
+    <>
+      {error && <p className="a-error" role="alert">{error}</p>}
+      <div className="a-metrics">
+        <Metric label={t('peakUniques')} value={count(totals?.peakDailyUniques || 0)} note={t('peakUniquesNote')} />
+        <Metric label={t('uniqueSum')} value={count(totals?.dailyUniqueSum || 0)} note={t('uniqueSumNote')} />
+        <Metric label={t('requestsTotal')} value={count(totals?.requests || 0)} />
+        <Metric label={t('pageViewsTotal')} value={count(totals?.pageViews || 0)} />
+        <Metric label={t('bandwidth')} value={bytes(totals?.bytes || 0)} />
+        <Metric label={t('countriesCount')} value={count(totals?.countries || 0)} />
+        <Metric
+          label={t('threats')}
+          value={count(totals?.threats || 0)}
+          tone={totals?.threats ? 'warn' : ''}
+        />
+      </div>
+
+      <Module title={t('trafficTitle')} eyebrow={t('trafficEyebrow')} note={t('trafficNote')} action={rangePicker}>
+        <Table head={[t('colDate'), t('colVisitors'), '', t('colRequests'), t('colPageViews'), t('colBandwidth'), t('colThreats')]}>
+          {[...(traffic?.daily || [])].reverse().map((day) => (
+            <tr key={day.date}>
+              <td><strong>{day.date}</strong></td>
+              <td>{count(day.uniques)}</td>
+              <td className="a-bar-cell">
+                <span className="a-bar"><span className="a-bar__fill" style={{ width: `${(day.uniques / peak) * 100}%` }} /></span>
+              </td>
+              <td>{count(day.requests)}</td>
+              <td>{count(day.pageViews)}</td>
+              <td>{bytes(day.bytes)}</td>
+              <td>{day.threats ? <Status tone="bad">{count(day.threats)}</Status> : '0'}</td>
+            </tr>
+          ))}
+        </Table>
+      </Module>
+
+      <Module title={t('countriesTitle')} eyebrow={t('trafficEyebrow')} note={t('countriesNote')}>
+        <Table head={[t('colCountry'), t('colRequests'), t('colShare'), '', t('colThreats')]}>
+          {(traffic?.countries || []).map((row) => (
+            <tr key={row.country}>
+              <td><strong>{countryLabel(row.country)}</strong></td>
+              <td>{count(row.requests)}</td>
+              <td>{ratio(row.share)}</td>
+              <td className="a-bar-cell">
+                <span className="a-bar"><span className="a-bar__fill" style={{ width: `${row.share * 100}%` }} /></span>
+              </td>
+              <td>{row.threats ? <Status tone="bad">{count(row.threats)}</Status> : '0'}</td>
+            </tr>
+          ))}
+        </Table>
       </Module>
     </>
   );
@@ -863,6 +976,11 @@ export default function AdminApp() {
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [schedulesError, setSchedulesError] = useState('');
 
+  const [traffic, setTraffic] = useState<Traffic | null>(null);
+  const [trafficDays, setTrafficDays] = useState(7);
+  const [trafficLoading, setTrafficLoading] = useState(false);
+  const [trafficError, setTrafficError] = useState('');
+
   const [check, setCheck] = useState<ModelCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState('');
@@ -945,6 +1063,18 @@ export default function AdminApp() {
     }
   }, [api, t]);
 
+  const loadTraffic = useCallback(async (days: number) => {
+    setTrafficLoading(true);
+    setTrafficError('');
+    try {
+      setTraffic(await api(`/api/admin/traffic?days=${days}`) as Traffic);
+    } catch (error) {
+      setTrafficError(userFacingError(error, t('errorTraffic')));
+    } finally {
+      setTrafficLoading(false);
+    }
+  }, [api, t]);
+
   useEffect(() => {
     if (booting || !session || dashboard) return;
     void loadDashboard();
@@ -954,6 +1084,11 @@ export default function AdminApp() {
     if (tab !== 'data' || !session || schedules.length || schedulesLoading || schedulesError) return;
     void loadSchedules();
   }, [loadSchedules, schedules.length, schedulesError, schedulesLoading, session, tab]);
+
+  useEffect(() => {
+    if (tab !== 'traffic' || !session || traffic || trafficLoading || trafficError) return;
+    void loadTraffic(trafficDays);
+  }, [loadTraffic, session, tab, traffic, trafficDays, trafficError, trafficLoading]);
 
   const openFixture = useCallback(async (id: string) => {
     setFixtureId(id);
@@ -1076,6 +1211,15 @@ export default function AdminApp() {
           : (
             <div className="a-panel" role="tabpanel">
               {tab === 'overview' && <OverviewTab dashboard={dashboard} />}
+              {tab === 'traffic' && (
+                <TrafficTab
+                  traffic={traffic}
+                  days={trafficDays}
+                  loading={trafficLoading}
+                  error={trafficError}
+                  onDays={(next) => { setTrafficDays(next); void loadTraffic(next); }}
+                />
+              )}
               {tab === 'data' && (
                 <DataConsoleTab
                   dashboard={dashboard}

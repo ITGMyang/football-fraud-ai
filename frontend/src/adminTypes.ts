@@ -189,6 +189,45 @@ export type Dashboard = {
   recentOrders: OrderRow[];
 };
 
+// Shape of GET /api/admin/traffic — Cloudflare zone analytics.
+
+export type TrafficDay = {
+  date: string;
+  uniques: number;
+  requests: number;
+  pageViews: number;
+  bytes: number;
+  threats: number;
+};
+
+export type TrafficCountry = {
+  country: string;
+  requests: number;
+  threats: number;
+  share: number;
+};
+
+export type Traffic = {
+  configured: boolean;
+  ok?: boolean;
+  reason?: string;
+  error?: string;
+  since: string;
+  until: string;
+  days: number;
+  totals?: {
+    peakDailyUniques: number;
+    dailyUniqueSum: number;
+    requests: number;
+    pageViews: number;
+    bytes: number;
+    threats: number;
+    countries: number;
+  };
+  daily?: TrafficDay[];
+  countries?: TrafficCountry[];
+};
+
 // Shape of GET /api/backend/schedules — the API-Football cache written by the cron.
 
 export type ScheduleMatch = {
