@@ -670,8 +670,9 @@ function FreeScoreDay({ match, onTry }: { match: Match; onTry: () => void }) {
    Free Score Day, or the next one with its date when today has none. */
 type ScoreDay = { match: Match; date: string; isToday: boolean };
 
-function WelcomeModal({ scoreDay, onStart, onClose }: {
+function WelcomeModal({ scoreDay, loading, onStart, onClose }: {
   scoreDay: ScoreDay | null;
+  loading: boolean;
   onStart: () => void;
   onClose: () => void;
 }) {
@@ -691,7 +692,17 @@ function WelcomeModal({ scoreDay, onStart, onClose }: {
           <h2>Welcome to FutBots</h2>
           <p>Not sure? Bot it!</p>
         </div>
-        {scoreDay && (
+        {loading ? (
+          /* reserve the Free Score Day space with a skeleton until data loads */
+          <div className="welcome-scoreday welcome-scoreday--skeleton" aria-hidden="true">
+            <span className="sk sk--text" style={{ width: 148, height: 20 }} />
+            <div className="teams teams--light">
+              <div className="team"><span className="sk sk--circle" style={{ width: 34, height: 34 }} /><span className="sk sk--text" style={{ width: 64 }} /></div>
+              <span className="sk sk--text" style={{ width: 20 }} />
+              <div className="team"><span className="sk sk--circle" style={{ width: 34, height: 34 }} /><span className="sk sk--text" style={{ width: 64 }} /></div>
+            </div>
+          </div>
+        ) : scoreDay ? (
           <div className="welcome-scoreday">
             <div className="welcome-scoreday__head">
               <img src="/assets/figma-sparkle-white.svg" alt="" />
@@ -707,7 +718,7 @@ function WelcomeModal({ scoreDay, onStart, onClose }: {
               <div className="team"><TeamFlag team={scoreDay.match.teamB} size={34} /><span>{scoreDay.match.teamB.name}</span></div>
             </div>
           </div>
-        )}
+        ) : null}
         <button className="welcome-card__cta" onClick={onStart}>Start Now</button>
       </section>
     </div>
@@ -1644,6 +1655,8 @@ export default function FutBotsApp() {
   const [dayAccuracy, setDayAccuracy] = useState<DayAccuracy | null>(null);
   const [accuracyDays, setAccuracyDays] = useState<Set<string>>(() => new Set());
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [nextDaysPending, setNextDaysPending] = useState(false);
+  const [matchDaysProbed, setMatchDaysProbed] = useState(false);
   const welcomeChecked = useRef(false);
 
   const historyDepth = useRef(0);
@@ -1803,9 +1816,10 @@ export default function FutBotsApp() {
   useEffect(() => {
     let active = true;
     setNextDays([]);
-    if (loading || matches.length) return;
+    if (loading || matches.length) { setNextDaysPending(false); return; }
     const upcoming = [...matchDays].filter((date) => date > selectedDate).sort().slice(0, 3);
-    if (!upcoming.length) return;
+    if (!upcoming.length) { setNextDaysPending(false); return; }
+    setNextDaysPending(true);
     const fetchNextDays = async () => {
       const results = await Promise.all(upcoming.map(async (date) => {
         try {
@@ -1815,7 +1829,7 @@ export default function FutBotsApp() {
           return { date, matches: [] as Match[] };
         }
       }));
-      if (active) setNextDays(results.filter((result) => result.matches.length));
+      if (active) { setNextDays(results.filter((result) => result.matches.length)); setNextDaysPending(false); }
     };
     void fetchNextDays();
     return () => { active = false; };
@@ -1897,6 +1911,7 @@ export default function FutBotsApp() {
         }
         return next;
       });
+      setMatchDaysProbed(true);
     };
     void probe();
     return () => { active = false; };
@@ -1931,16 +1946,17 @@ export default function FutBotsApp() {
 
   useEffect(() => { applyScreenTint(screen); }, [screen]);
 
-  /* Show the welcome modal on the first dashboard visit of each Shanghai day. */
+  /* Show the welcome modal on the dashboard at most once every 30 minutes. */
   useEffect(() => {
     if (welcomeChecked.current) return;
     if (screen !== "dashboard" || loading) return;
     welcomeChecked.current = true;
-    if (localStorage.getItem("futbots.welcomeSeen") !== todayShanghai()) setWelcomeOpen(true);
+    const lastSeen = Number(localStorage.getItem("futbots.welcomeSeenAt") || 0);
+    if (Date.now() - lastSeen >= 30 * 60 * 1000) setWelcomeOpen(true);
   }, [screen, loading]);
 
   const dismissWelcome = useCallback(() => {
-    localStorage.setItem("futbots.welcomeSeen", todayShanghai());
+    localStorage.setItem("futbots.welcomeSeenAt", String(Date.now()));
     setWelcomeOpen(false);
   }, []);
 
@@ -1958,6 +1974,10 @@ export default function FutBotsApp() {
     }
     return null;
   }, [matches, rankings, nextDays, selectedDate]);
+
+  /* Free Score Day data is still resolving: today's matches loading, the
+     match-day window not probed yet, or the next-day fetch in flight. */
+  const scoreDayLoading = !scoreDay && (loading || !matchDaysProbed || nextDaysPending);
 
   useEffect(() => {
     if (!toastVisible) return;
@@ -2152,6 +2172,7 @@ export default function FutBotsApp() {
       {welcomeOpen && screen === "dashboard" && (
         <WelcomeModal
           scoreDay={scoreDay}
+          loading={scoreDayLoading}
           onClose={dismissWelcome}
           onStart={() => {
             dismissWelcome();

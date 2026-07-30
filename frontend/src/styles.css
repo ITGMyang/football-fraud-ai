@@ -862,8 +862,10 @@ input:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 20px;
   width: 100%;
+  min-height: 159px;
   padding: 32px 16px;
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.54);
