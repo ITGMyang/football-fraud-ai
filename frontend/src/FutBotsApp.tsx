@@ -179,10 +179,6 @@ function AuthDialog({ plain = false, onClose, onBack, children }: {
           )}
           {children}
           <footer className="auth-footer">
-            <div className="auth-footer__brand">
-              <img className="auth-footer__ball" src="/assets/brand-logo.png" alt="" />
-              <img className="auth-footer__wordmark" src="/assets/brand-wordmark.png" alt="FutBots" />
-            </div>
             <p className="auth-footer__disclaimer">
               By continuing, you acknowledge that the predictions are provided for
               informational purposes only and will not be used to place bets
@@ -207,7 +203,6 @@ function AuthLanding({ navigate, signInProvider, continueGuest, telegramEnabled,
     <AuthDialog onClose={onClose}>
       <div className="auth-content">
         <div className="auth-hero">
-          <img className="auth-hero__ball" src="/assets/brand-logo.png" alt="" />
           <h1>Not Sure? Bot It</h1>
         </div>
         <div className="auth-actions">
@@ -273,10 +268,7 @@ function AccountForm({ mode, navigate, submitAuth, onClose, onBack }: {
           {signup ? (
             <h1 className="auth-title">Create account</h1>
           ) : (
-            <>
-              <img className="auth-hero__ball" src="/assets/brand-logo.png" alt="" />
-              <h1>Not Sure? Bot It</h1>
-            </>
+            <h1>Not Sure? Bot It</h1>
           )}
         </div>
         <div className="auth-actions">

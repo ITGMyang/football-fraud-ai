@@ -2349,11 +2349,6 @@ button.plan-option:disabled:hover {
   max-width: 100%;
 }
 
-.auth-hero__ball {
-  width: 140.566px;
-  height: 140.566px;
-}
-
 .auth-hero h1,
 .auth-title {
   font-size: 36px;
@@ -2514,19 +2509,6 @@ button.plan-option:disabled:hover {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-}
-
-.auth-footer__brand {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.auth-footer__ball {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
 }
 
 .auth-footer__wordmark {
@@ -3243,9 +3225,6 @@ button.plan-option:disabled:hover {
     padding-top: 0;
   }
 
-  .auth-hero__ball {
-    display: none;
-  }
 
   .auth-footer {
     position: absolute;
