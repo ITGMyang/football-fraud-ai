@@ -319,6 +319,19 @@ test('the app shell and the admin console are the only two served shells', async
   }
 });
 
+test('a cached shell can never outlive the hashed bundle it names', async () => {
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+
+  // Both shells go through one helper so their caching cannot drift apart.
+  assert.match(worker, /serveShell\(env, url, request, '\/admin\.html'\)/);
+  assert.match(worker, /serveShell\(env, url, request, '\/index\.html'\)/);
+  // no-cache still allows storage; no-store plus the CDN header is what the edge obeys.
+  assert.match(worker, /'Cache-Control': 'no-store, must-revalidate'/);
+  assert.match(worker, /'CDN-Cache-Control': 'no-store'/);
+  // Headers are rebuilt, not copied: an inherited ETag let revalidation keep the stale body.
+  assert.doesNotMatch(worker, /new Headers\(shell(Response)?\.headers\)/);
+});
+
 test('prediction cards keep metadata, teams, and actions aligned at tablet widths', async () => {
   const css = await readFile(new URL('../frontend/src/styles.css', import.meta.url), 'utf8');
 

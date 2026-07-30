@@ -103,16 +103,10 @@ export default {
         return Response.redirect(new URL('/admin', url.origin).toString(), 301);
       }
       if (request.method === 'GET' && url.pathname === '/admin') {
-        const shellResponse = await env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
-        const headers = new Headers(shellResponse.headers);
-        headers.set('Cache-Control', 'no-cache');
-        return new Response(shellResponse.body, { status: shellResponse.status, headers });
+        return serveShell(env, url, request, '/admin.html');
       }
       if (request.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || url.pathname.startsWith('/match/'))) {
-        const shellResponse = await env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
-        const headers = new Headers(shellResponse.headers);
-        headers.set('Cache-Control', 'no-cache');
-        return new Response(shellResponse.body, { status: shellResponse.status, headers });
+        return serveShell(env, url, request, '/index.html');
       }
       return env.ASSETS.fetch(request);
     } catch (error) {
@@ -150,6 +144,25 @@ export default {
     })());
   }
 };
+
+// The shell names a content-hashed bundle, so a cached copy outlives the file it
+// points at: the next deploy deletes that bundle, the stale HTML still asks for it,
+// and the SPA fallback answers with HTML that the browser tries to run as JavaScript.
+// Nothing renders and the page goes black. Build the headers from scratch - copying
+// the asset response carried its ETag, which let revalidation keep serving the stale
+// body - and use no-store plus CDN-Cache-Control, which is the header Cloudflare's
+// own edge honours.
+async function serveShell(env, url, request, shellPath) {
+  const shell = await env.ASSETS.fetch(new Request(new URL(shellPath, url.origin), request));
+  return new Response(shell.body, {
+    status: shell.status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store, must-revalidate',
+      'CDN-Cache-Control': 'no-store'
+    }
+  });
+}
 
 async function routeApi(request, env, access) {
   const url = new URL(request.url);
