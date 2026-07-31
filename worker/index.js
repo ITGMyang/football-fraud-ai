@@ -108,6 +108,7 @@ export default {
       if (request.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || url.pathname.startsWith('/match/'))) {
         return serveShell(env, url, request, '/index.html');
       }
+      if (url.pathname.startsWith('/build/')) return serveBundle(env, request);
       return env.ASSETS.fetch(request);
     } catch (error) {
       return json({ error: error.message }, 500);
@@ -162,6 +163,18 @@ async function serveShell(env, url, request, shellPath) {
       'CDN-Cache-Control': 'no-store'
     }
   });
+}
+
+// The SPA fallback answers anything it cannot find with index.html, including a
+// bundle that no longer exists - so the browser gets 200 text/html for a <script>
+// and runs the markup as JavaScript. A 404 lets it fail as a failed script load
+// instead, which the error boundary and a plain reload can both recover from.
+async function serveBundle(env, request) {
+  const asset = await env.ASSETS.fetch(request);
+  if (asset.ok && (asset.headers.get('Content-Type') || '').includes('text/html')) {
+    return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  }
+  return asset;
 }
 
 async function routeApi(request, env, access) {

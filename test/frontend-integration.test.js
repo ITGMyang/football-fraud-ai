@@ -477,4 +477,19 @@ test('the previous build stays deployed so stale HTML cannot break', async () =>
   assert.ok(wrangler.includes('"/"'), 'the app shell must run through the Worker');
   assert.ok(wrangler.includes('"/admin"'), 'the console shell must run through the Worker');
   assert.ok(wrangler.includes('"/api/*"'), 'the API must run through the Worker');
+  assert.ok(wrangler.includes('"/build/*"'), 'bundles must run through the Worker to get a real 404');
+});
+
+test('a bundle that no longer exists 404s instead of returning the app shell', async () => {
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  assert.match(worker, /url\.pathname\.startsWith\('\/build\/'\)\) return serveBundle/);
+
+  const serveBundle = new Function('return ' + worker.slice(worker.indexOf('async function serveBundle')).match(/async function serveBundle[\s\S]*?\n}\n/)[0])();
+  const shellFallback = { ASSETS: { fetch: async () => new Response('<!doctype html>', { headers: { 'Content-Type': 'text/html' } }) } };
+  const realBundle = { ASSETS: { fetch: async () => new Response('export{}', { headers: { 'Content-Type': 'text/javascript' } }) } };
+
+  // Answering a <script> request with HTML makes the browser run markup as JavaScript,
+  // which is what left the page black after a deploy.
+  assert.equal((await serveBundle(shellFallback, new Request('https://x/build/gone.js'))).status, 404);
+  assert.equal((await serveBundle(realBundle, new Request('https://x/build/app.js'))).status, 200);
 });

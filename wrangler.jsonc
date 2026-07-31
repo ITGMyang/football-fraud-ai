@@ -30,7 +30,9 @@
       "/auth/*",
       "/match/*",
       "/api/*",
-      "/media/*"
+      "/media/*",
+      // A deleted bundle must 404 rather than fall through to index.html.
+      "/build/*"
     ]
   },
   "vars": {
