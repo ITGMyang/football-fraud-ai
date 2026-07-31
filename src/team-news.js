@@ -1,10 +1,17 @@
-// Pre-match team news from xAI's live search, fetched only when the fixture context
-// is missing it.
+// Pre-match evidence from xAI's live search, fetched only for the fields the data
+// provider failed to return.
 //
 // API-Football carries injuries for well-covered leagues and nothing at all for
 // others - a Europa League qualifier came back with injuries: empty while search
 // found six absent players. Searching every fixture would pay for information we
-// already hold, so the gap in fetchStatus is the trigger.
+// already hold, so the gaps in fetchStatus are the trigger.
+//
+// Two rules decide what is worth filling. Post-match fields are never searched
+// before kickoff: fixture statistics, player statistics and events do not exist yet.
+// And teamStatistics is never searched at any point - it is the one field that feeds
+// the maths, and a hallucinated goal count would produce a confident, wrong lambda
+// that nothing downstream could detect. A missing baseline reports itself; a
+// corrupted one does not.
 
 const ENDPOINT = 'https://api.x.ai/v1/responses';
 const DEFAULT_MODEL = 'grok-4.3';
@@ -23,19 +30,52 @@ export function newsConfig(env = {}) {
   };
 }
 
-// Only the absence of injury data justifies the spend. Lineups are absent on every
-// fixture until roughly an hour before kickoff, so their absence proves nothing.
-export function needsTeamNews(context) {
-  const injuries = context?.fetchStatus?.injuries;
-  if (!injuries) return { needed: true, reason: 'No injury fetch was recorded' };
-  if (injuries.state === 'error') return { needed: true, reason: `Injury fetch failed: ${injuries.error || 'unknown error'}` };
-  if (!Number(injuries.count)) return { needed: true, reason: 'The provider returned no injuries for this fixture' };
-  return { needed: false, reason: `The provider already returned ${injuries.count} injury rows` };
+// Lineups are absent on every fixture until roughly an hour before kickoff, so before
+// that window their absence is expected and searching would only return speculation.
+const LINEUP_WINDOW_MS = 90 * 60 * 1000;
+
+const TOPICS = [
+  {
+    field: 'injuries',
+    label: 'injuries',
+    ask: 'injuries, suspensions and doubtful players, named'
+  },
+  {
+    field: 'lineups',
+    label: 'lineups',
+    ask: 'the confirmed or leaked starting XI and any manager comment on rotation',
+    // Asking three days out returns guesswork dressed as reporting.
+    when: (context, now) => {
+      const kickoff = Date.parse(context?.kickoff || '');
+      return Number.isFinite(kickoff) && kickoff - now <= LINEUP_WINDOW_MS && kickoff > now;
+    }
+  },
+  {
+    field: 'standings',
+    label: 'form and stakes',
+    ask: 'current league position, recent form, and what each side still has to play for'
+  }
+];
+
+function missing(status) {
+  if (!status) return 'no fetch was recorded';
+  if (status.state === 'error') return `fetch failed: ${status.error || 'unknown error'}`;
+  if (!Number(status.count)) return 'the provider returned nothing';
+  return '';
 }
 
-export async function fetchTeamNews(context, env = {}, fetchImpl = fetch) {
-  const gap = needsTeamNews(context);
-  if (!gap.needed) return { searched: false, reason: gap.reason };
+export function findDataGaps(context, now = Date.now()) {
+  return TOPICS
+    .filter((topic) => !topic.when || topic.when(context, now))
+    .map((topic) => ({ ...topic, gap: missing(context?.fetchStatus?.[topic.field]) }))
+    .filter((topic) => topic.gap)
+    .map(({ field, label, ask, gap }) => ({ field, label, ask, reason: `${field}: ${gap}` }));
+}
+
+export async function fetchTeamNews(context, env = {}, fetchImpl = fetch, now = Date.now()) {
+  const gaps = findDataGaps(context, now);
+  if (!gaps.length) return { searched: false, reason: 'The provider covered every field worth searching' };
+  const gapReason = gaps.map((topic) => topic.reason).join('; ');
 
   const config = newsConfig(env);
   if (!config.ok) return { searched: false, reason: config.reason };
@@ -43,6 +83,7 @@ export async function fetchTeamNews(context, env = {}, fetchImpl = fetch) {
   const home = context?.fixture?.home?.name || context?.teams?.[0] || '';
   const away = context?.fixture?.away?.name || context?.teams?.[1] || '';
   if (!home || !away) return { searched: false, reason: 'Fixture is missing team names' };
+  const fields = gaps.map((topic) => topic.field);
 
   try {
     const response = await fetchImpl(config.baseUrl, {
@@ -53,7 +94,7 @@ export async function fetchTeamNews(context, env = {}, fetchImpl = fetch) {
         // X carries lineup and fitness news hours before it reaches a news site, and
         // it is the source the web index does not cover.
         tools: [{ type: 'x_search' }, { type: 'web_search' }],
-        input: [{ role: 'user', content: prompt(home, away, context?.kickoff) }]
+        input: [{ role: 'user', content: prompt(home, away, context?.kickoff, gaps) }]
       })
     });
 
@@ -62,31 +103,33 @@ export async function fetchTeamNews(context, env = {}, fetchImpl = fetch) {
     try {
       payload = JSON.parse(body);
     } catch {
-      return { searched: true, ok: false, error: `xAI returned a non-JSON response (${response.status})`, gapReason: gap.reason };
+      return { searched: true, ok: false, error: `xAI returned a non-JSON response (${response.status})`, fields, gapReason };
     }
     if (!response.ok) {
       return {
         searched: true,
         ok: false,
         error: String(payload?.error?.message || payload?.error || `xAI returned ${response.status}`).slice(0, 200),
-        gapReason: gap.reason
+        fields,
+        gapReason
       };
     }
 
     const { text, citations } = readOutput(payload);
     // An uncited claim about a player's fitness is not usable evidence.
     if (!citations.length) {
-      return { searched: true, ok: false, error: 'Search returned no citations', gapReason: gap.reason };
+      return { searched: true, ok: false, error: 'Search returned no citations', fields, gapReason };
     }
     if (/^\s*NO_INTEL\b/i.test(text)) {
-      return { searched: true, ok: true, found: false, gapReason: gap.reason, citations: citations.length };
+      return { searched: true, ok: true, found: false, fields, gapReason, citations: citations.length };
     }
 
     return {
       searched: true,
       ok: true,
       found: true,
-      gapReason: gap.reason,
+      fields,
+      gapReason,
       summary: text.slice(0, 1200),
       citations: citations.slice(0, 8),
       usage: {
@@ -99,7 +142,8 @@ export async function fetchTeamNews(context, env = {}, fetchImpl = fetch) {
       searched: true,
       ok: false,
       error: error instanceof Error ? error.message : String(error),
-      gapReason: gap.reason
+      fields,
+      gapReason
     };
   }
 }
@@ -107,19 +151,21 @@ export async function fetchTeamNews(context, env = {}, fetchImpl = fetch) {
 export function teamNewsPromptSummary(news) {
   if (!news?.ok || !news.found) return null;
   return {
-    source: 'Live search, used because the data provider carried no injuries for this fixture',
+    source: `Live search, used because the data provider returned nothing for: ${(news.fields || []).join(', ')}`,
     findings: news.summary,
     citations: news.citations,
     note: 'Unverified reporting, not provider data. Weigh a named and cited absence; ignore anything vague, and never let it override the market.'
   };
 }
 
-function prompt(home, away, kickoff) {
+// One call covers every gap, so the cost does not grow with the number of them.
+function prompt(home, away, kickoff, gaps) {
   return [
     `Match: ${home} vs ${away}${kickoff ? `, kicking off ${kickoff}` : ''}.`,
-    'Report ONLY confirmed pre-match team news from the last 48 hours: injuries, suspensions,',
-    'doubtful players, confirmed or leaked starting XI, and manager statements about rotation.',
-    'Name the players. Do not speculate, do not summarise form, do not predict the result.',
+    'Report ONLY verifiable pre-match facts from the last 48 hours, covering:',
+    gaps.map((topic, index) => `(${index + 1}) ${topic.ask}`).join('; ') + '.',
+    'Name players and cite every claim. Do not speculate, do not predict the result,',
+    'and do not report goal counts or season statistics.',
     'If nothing verifiable is found, reply exactly NO_INTEL.'
   ].join(' ');
 }

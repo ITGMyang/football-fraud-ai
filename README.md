@@ -170,18 +170,29 @@ npx wrangler secret put CLOUDFLARE_ANALYTICS_TOKEN
 
 四分之一盘（如 +1.25）按原样保留，不在这里拆分——拆分会改变"打赢盘口"的定义，那属于结算逻辑。
 
-**③ 实时球队新闻**（[`src/team-news.js`](src/team-news.js)，xAI 实时搜索，**仅在有数据缺口时触发**）
+**③ 缺口补全**（[`src/team-news.js`](src/team-news.js)，xAI 实时搜索，**只补 API-Football 没抓到的字段**）
 
-API-Football 对覆盖好的联赛有伤停数据，对有些联赛完全没有。实测一场欧联资格赛：`injuries: empty`，而搜索找到了 6 名缺阵球员。
+API-Football 对覆盖好的联赛数据齐全，对有些联赛大片缺失。实测一场欧联资格赛：`injuries: empty`，而搜索找到了 6 名缺阵球员。
 
-所以触发条件是 `fetchStatus.injuries` 为空或报错，**不是每场都搜**：
+按 `fetchStatus` 逐字段判断缺口，**所有缺口合并成一次调用**，成本不随缺口数量增长：
+
+| 字段 | 缺失时 | 说明 |
+|---|---|---|
+| `injuries` | ✅ 搜 | 伤停、停赛、存疑球员 |
+| `lineups` | ✅ 搜，**但只在开赛前 90 分钟内** | 更早去搜只会搜到猜测 |
+| `standings` | ✅ 搜 | 排名、近况、赛季目标（战意依据） |
+| `fixtureStatistics` / `playerStatistics` / `events` | ❌ 不搜 | 赛后数据，赛前不存在 |
+| `topScorers` / `squads` / `coaches` | ❌ 不搜 | 信号弱 |
+| **`teamStatistics`** | ❌ **永不搜** | 见下 |
 
 ```
-injuries: available (n)  →  跳过，成本 $0
-injuries: empty / error  →  搜一次，约 $0.012
+全部字段齐全  →  跳过，成本 $0
+有任意缺口    →  搜一次，约 $0.012
 ```
 
-只看伤停，不看 lineups——首发在开赛前 1 小时才发布，每场都缺，用它当触发条件等于每场都搜。
+**为什么 `teamStatistics` 永远不补**：它是唯一喂进数学模型的字段，泊松层的 λ 完全来自它的进球数。其它字段搜来的是文字证据，进 prompt 后模型自己权衡，错了顶多是一条噪音；而一个搜错的进球数会算出**看起来正常、实际错误**的 λ，比分分布、大小球、胜平负全部被静默污染，下游没有任何东西会发现。
+
+缺失时泊松层会诚实返回 `available: false` 并说明原因——**错的基线比没有基线更糟**。prompt 里也明确要求搜索不得返回进球数和赛季统计。
 
 搜索结果**没有引用就丢弃**：无出处的球员伤停说法和猜测没有区别。prompt 里明确标注它是未经核实的信息，且不得覆盖盘口。
 
