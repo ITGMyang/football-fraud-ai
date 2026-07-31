@@ -1225,7 +1225,9 @@ export default function AdminApp() {
         <main className="a-shell a-shell--center">
           <section className="a-gate">
             <div className="a-gate__top">
-              <span className="a-module__eyebrow">FutBots</span>
+              {/* The console signs in the same way the public site does, so the gate has
+                  to say which one you are looking at. */}
+              <span className="a-module__eyebrow">FutBots · {t('consoleTitle')}</span>
               {languageToggle}
             </div>
             <h1>{session ? t('adminOnlyTitle') : t('signInTitle')}</h1>
