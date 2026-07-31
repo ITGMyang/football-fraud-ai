@@ -207,6 +207,17 @@ export type TrafficCountry = {
   share: number;
 };
 
+export type TrafficSource = {
+  source: string;
+  views: number;
+  share: number;
+};
+
+export type TrafficReferrer = TrafficSource & {
+  referrerHost: string;
+  campaign: string;
+};
+
 export type Traffic = {
   configured: boolean;
   ok?: boolean;
@@ -226,6 +237,9 @@ export type Traffic = {
   };
   daily?: TrafficDay[];
   countries?: TrafficCountry[];
+  total?: number;
+  sources?: TrafficSource[];
+  referrers?: TrafficReferrer[];
 };
 
 // Shape of GET /api/backend/schedules — the API-Football cache written by the cron.

@@ -77,11 +77,35 @@ function bytes(value: number) {
   return `${size < 10 && unit > 0 ? size.toFixed(1) : Math.round(size)} ${scale[unit]}`;
 }
 
-// Two-letter zone codes render as the matching flag; anything else is left as text.
-function countryLabel(code: string) {
+// Two-letter zone codes render as the matching flag and the country's name in the
+// console's language; anything else is left as text. Intl carries the names, so no
+// table of 250 countries has to be kept in sync here.
+function countryLabel(code: string, language: Language = 'en') {
   if (!/^[A-Za-z]{2}$/.test(code)) return code || '—';
-  const flag = String.fromCodePoint(...[...code.toUpperCase()].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65));
-  return `${flag} ${code.toUpperCase()}`;
+  const upper = code.toUpperCase();
+  const flag = String.fromCodePoint(...[...upper].map((letter) => 0x1f1e6 + letter.charCodeAt(0) - 65));
+  let name = upper;
+  try {
+    name = new Intl.DisplayNames([language === 'zh' ? 'zh-CN' : 'en'], { type: 'region' }).of(upper) || upper;
+  } catch {
+    // An unassigned code throws rather than returning it; the code alone still reads.
+  }
+  return `${flag} ${name}`;
+}
+
+// The classifier's own words are the keys; anything it grows later still renders.
+const SOURCE_COPY: Record<string, CopyKey> = {
+  search: 'srcSearch',
+  social: 'srcSocial',
+  assistant: 'srcAssistant',
+  referral: 'srcReferral',
+  campaign: 'srcCampaign',
+  direct: 'srcDirect'
+};
+
+function sourceLabel(source: string, t: Translate) {
+  const key = SOURCE_COPY[source];
+  return key ? t(key) : source;
 }
 
 function fixtureIdOf(match: ScheduleMatch) {
@@ -267,11 +291,12 @@ function OverviewTab({ dashboard }: { dashboard: Dashboard }) {
 
 /* ============ TAB: TRAFFIC ============ */
 
-function TrafficTab({ traffic, days, loading, error, onDays }: {
+function TrafficTab({ traffic, days, loading, error, language, onDays }: {
   traffic: Traffic | null;
   days: number;
   loading: boolean;
   error: string;
+  language: Language;
   onDays: (days: number) => void;
 }) {
   const t = useT();
@@ -339,11 +364,40 @@ function TrafficTab({ traffic, days, loading, error, onDays }: {
         </Table>
       </Module>
 
+      <Module title={t('sourcesTitle')} eyebrow={t('trafficEyebrow')} note={t('sourcesNote')}>
+        <Table head={[t('colSource'), t('colViews'), t('colShare'), '']} empty={t('sourcesEmpty')}>
+          {(traffic?.sources || []).map((row) => (
+            <tr key={row.source}>
+              <td><strong>{sourceLabel(row.source, t)}</strong></td>
+              <td>{count(row.views)}</td>
+              <td>{ratio(row.share)}</td>
+              <td className="a-bar-cell">
+                <span className="a-bar"><span className="a-bar__fill" style={{ width: `${row.share * 100}%` }} /></span>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </Module>
+
+      <Module title={t('referrersTitle')} eyebrow={t('trafficEyebrow')}>
+        <Table head={[t('colReferrer'), t('colSource'), t('colCampaign'), t('colViews'), t('colShare')]} empty={t('sourcesEmpty')}>
+          {(traffic?.referrers || []).filter((row) => row.source !== 'direct').map((row) => (
+            <tr key={`${row.source}|${row.referrerHost}|${row.campaign}`}>
+              <td><strong>{row.referrerHost || '—'}</strong></td>
+              <td>{sourceLabel(row.source, t)}</td>
+              <td>{row.campaign || '—'}</td>
+              <td>{count(row.views)}</td>
+              <td>{ratio(row.share)}</td>
+            </tr>
+          ))}
+        </Table>
+      </Module>
+
       <Module title={t('countriesTitle')} eyebrow={t('trafficEyebrow')} note={t('countriesNote')}>
         <Table head={[t('colCountry'), t('colRequests'), t('colShare'), '', t('colThreats')]}>
           {(traffic?.countries || []).map((row) => (
             <tr key={row.country}>
-              <td><strong>{countryLabel(row.country)}</strong></td>
+              <td><strong>{countryLabel(row.country, language)}</strong></td>
               <td>{count(row.requests)}</td>
               <td>{ratio(row.share)}</td>
               <td className="a-bar-cell">
@@ -1325,6 +1379,7 @@ export default function AdminApp() {
                   days={trafficDays}
                   loading={trafficLoading}
                   error={trafficError}
+                  language={language}
                   onDays={(next) => { setTrafficDays(next); void loadTraffic(next); }}
                 />
               )}

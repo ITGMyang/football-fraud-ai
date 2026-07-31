@@ -25,6 +25,7 @@ import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js'
 import { authConfig } from '../src/auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from '../src/guest-access.js';
 import { regionDenial } from '../src/region-access.js';
+import { classifyTrafficSource, countsAsArrival, summarizeTrafficSources } from '../src/traffic-source.js';
 import { adminConsoleUrl, allowedOnAdminHost, isAdminHost } from '../src/admin-host.js';
 import { notFound, serveBundle, serveShell } from '../src/asset-response.js';
 import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.js';
@@ -61,7 +62,7 @@ const RETIRED_CONSOLE_ROUTES = new Set([
 ]);
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       const url = new URL(request.url);
       const denial = regionDenial(request, url);
@@ -121,6 +122,7 @@ export default {
         return serveShell(env, url, request, '/admin.html');
       }
       if (request.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || url.pathname.startsWith('/match/'))) {
+        recordArrival(request, url, env, ctx);
         return serveShell(env, url, request, '/index.html');
       }
       if (url.pathname.startsWith('/build/')) return serveBundle(env, request);
@@ -161,6 +163,21 @@ export default {
   }
 };
 
+// Counted on the public shell only: bundles and API calls are not arrivals, and the
+// console's own traffic is not what this measures. The write happens after the
+// response is on its way and a failure is swallowed - a page must never fail to load
+// because analytics did.
+function recordArrival(request, url, env, ctx) {
+  if (typeof ctx?.waitUntil !== 'function' || !countsAsArrival(url.pathname)) return;
+  const arrival = classifyTrafficSource(request, url);
+  if (!arrival) return;
+  ctx.waitUntil(
+    createSupabaseStorage(env, (input, init) => fetch(input, init))
+      .recordTrafficSource({ day: new Date().toISOString().slice(0, 10), ...arrival })
+      .catch(() => null)
+  );
+}
+
 async function routeApi(request, env, access) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/')) return null;
@@ -198,7 +215,13 @@ async function routeApi(request, env, access) {
   if (request.method === 'GET' && url.pathname === '/api/admin/traffic') {
     if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);
     if (!isAdminUser(access.user, env)) return json({ error: 'Administrator access required' }, 403);
-    return json(await fetchSiteTraffic(env, workerFetch, { days: url.searchParams.get('days') || 7 }));
+    const days = url.searchParams.get('days') || 7;
+    const since = new Date(Date.now() - (Number(days) || 7) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const [zone, sourceRows] = await Promise.all([
+      fetchSiteTraffic(env, workerFetch, { days }),
+      storage.readTrafficSources(since).catch(() => [])
+    ]);
+    return json({ ...zone, ...summarizeTrafficSources(sourceRows) });
   }
   if (request.method === 'POST' && url.pathname === '/api/admin/models/check') {
     if (access.role !== 'user') return json({ error: 'Sign in required' }, 401);
