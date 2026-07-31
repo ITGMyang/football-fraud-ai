@@ -535,6 +535,12 @@ code {
   margin-top: 6px;
 }
 
+.a-gate__who {
+  font-size: 13px;
+  color: #7f9d8c;
+  word-break: break-all;
+}
+
 .a-gate__form {
   display: flex;
   flex-direction: column;

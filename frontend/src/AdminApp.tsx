@@ -1025,6 +1025,7 @@ export default function AdminApp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [signingIn, setSigningIn] = useState(false);
+  const [deniedStatus, setDeniedStatus] = useState<number | null>(null);
 
   const t = useMemo(() => createTranslator(language), [language]);
 
@@ -1078,7 +1079,12 @@ export default function AdminApp() {
       setAuthorized(true);
     } catch (loadError) {
       const status = (loadError as { status?: number }).status;
-      if (status === 401 || status === 403) setAuthorized(false);
+      // A rejected session and a rejected account are different problems with different
+      // fixes, and showing one message for both sent us looking in the wrong place.
+      if (status === 401 || status === 403) {
+        setAuthorized(false);
+        setDeniedStatus(status);
+      }
       setError(userFacingError(loadError, t('errorLoad')));
     } finally {
       setLoading(false);
@@ -1158,6 +1164,7 @@ export default function AdminApp() {
     setSession(null);
     setDashboard(null);
     setAuthorized(null);
+    setDeniedStatus(null);
   };
 
   const signInWithGoogle = async () => {
@@ -1230,8 +1237,11 @@ export default function AdminApp() {
               <span className="a-module__eyebrow">FutBots · {t('consoleTitle')}</span>
               {languageToggle}
             </div>
-            <h1>{session ? t('adminOnlyTitle') : t('signInTitle')}</h1>
-            <p>{session ? t('adminOnlyBody') : t('signInBody')}</p>
+            <h1>{!session ? t('signInTitle') : deniedStatus === 401 ? t('sessionRejectedTitle') : t('adminOnlyTitle')}</h1>
+            <p>{!session ? t('signInBody') : deniedStatus === 401 ? t('sessionRejectedBody') : t('adminOnlyBody')}</p>
+            {/* Which account is signed in is the first thing worth checking, and it used
+                to be the one thing the gate would not say. */}
+            {session?.user?.email && <p className="a-gate__who">{t('signedInAs')}: <strong>{session.user.email}</strong></p>}
             {error && <p className="a-error" role="alert">{error}</p>}
             {session ? (
               <div className="a-gate__actions">
