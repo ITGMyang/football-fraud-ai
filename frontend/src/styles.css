@@ -1959,6 +1959,10 @@ button.plan-option:disabled:hover {
 }
 
 .plan-option__price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.72px;
@@ -3249,4 +3253,49 @@ button.plan-option:disabled:hover {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* The price a buyer pays, what it used to be, and what one pass covers. The old
+   price is a <s> so it is announced as removed rather than read as the price. */
+
+.plan-option__now {
+  color: #fff;
+}
+
+.plan-option__was {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: #6d6d6d;
+  text-decoration-thickness: 1.5px;
+}
+
+.plan-option__unit {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: #818181;
+}
+
+.plan-option__save {
+  padding: 2px 8px;
+  border-radius: 40px;
+  background: rgba(30, 185, 120, 0.14);
+  border: 1px solid rgba(30, 185, 120, 0.35);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: #1eb978;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }

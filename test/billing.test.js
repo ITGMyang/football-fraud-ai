@@ -6,6 +6,7 @@ import {
   BILLING_PLANS,
   billingAccess,
   billingPlan,
+  priorPriceVisible,
   publicBillingPlans,
   reconcilePendingBillingOrders
 } from '../src/billing.js';
@@ -29,9 +30,44 @@ test('billing plans keep prices and durations on the server', () => {
     { id: 'month', amountCents: 2499, durationHours: 720 }
   ]);
   assert.equal(billingPlan('unknown'), null);
-  assert.deepEqual(publicBillingPlans()[0], {
-    id: 'day', name: '24-Hour Pass', price: '1.99', currency: 'USDT', durationHours: 24, recommended: false
+  assert.deepEqual(publicBillingPlans(Date.parse('2026-08-01T00:00:00Z'))[0], {
+    id: 'day',
+    name: '24-Hour Pass',
+    price: '1.99',
+    previousPrice: '2.99',
+    discountPercent: 33,
+    currency: 'USDT',
+    durationHours: 24,
+    recommended: false
   });
+});
+
+test('the struck-through price stops being shown a month after the change', () => {
+  // A price we no longer charge can be shown as the prior price only while it is
+  // recent. Left up, "was 2.99" would describe a month in which nobody could buy at
+  // 2.99, and this is exactly the banner that stays up because nobody owns it.
+  const dayAfter = publicBillingPlans(Date.parse('2026-08-01T00:00:00Z'));
+  assert.equal(dayAfter[0].previousPrice, '2.99');
+  assert.equal(dayAfter[0].discountPercent, 33);
+  assert.equal(priorPriceVisible(Date.parse('2026-08-29T00:00:00Z')), true);
+
+  const later = publicBillingPlans(Date.parse('2026-09-30T00:00:00Z'));
+  assert.equal(priorPriceVisible(Date.parse('2026-09-30T00:00:00Z')), false);
+  for (const plan of later) {
+    assert.equal(plan.previousPrice, '');
+    assert.equal(plan.discountPercent, 0);
+    // The price itself never depends on the date.
+    assert.equal(plan.price, publicBillingPlans(Date.parse('2026-08-01T00:00:00Z')).find((p) => p.id === plan.id).price);
+  }
+});
+
+test('every advertised prior price is one that was really charged', () => {
+  // The struck-through number is a claim about our own history, so it may only ever
+  // be higher than today's price - never an invented anchor.
+  for (const plan of BILLING_PLANS) {
+    assert.ok(plan.previousAmountCents > plan.amountCents, `${plan.id} prior price must be higher`);
+  }
+  assert.deepEqual(BILLING_PLANS.map((plan) => plan.previousAmountCents), [299, 1199, 2999]);
 });
 
 test('a longer pass is always the cheaper hour', () => {

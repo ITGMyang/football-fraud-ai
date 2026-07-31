@@ -2,25 +2,49 @@
 // per hour. What a pass actually costs us is driven by predictions rather than hours -
 // a live one runs three models - and the daily limits in prediction-policy.js are what
 // bound that, so the two have to be read together.
+//
+// previousAmountCents is a struck-through price on the site, which is a claim about
+// what we used to charge. It must only ever name a price that was really charged -
+// these three were, until PRICE_CHANGED_ON.
+export const PRICE_CHANGED_ON = '2026-07-31';
+
+// After this the old price stops being shown, on its own, without anyone remembering
+// to remove it. A permanent "was 2.99" is false advertising the moment 1.99 has been
+// the only price you could buy at for a month, and it is exactly the kind of banner
+// that stays up for a year because nobody owns it.
+const PRIOR_PRICE_WINDOW_DAYS = 30;
+
 export const BILLING_PLANS = Object.freeze([
-  Object.freeze({ id: 'day', name: '24-Hour Pass', amountCents: 199, durationHours: 24, recommended: false }),
-  Object.freeze({ id: 'week', name: 'Weekly Pass', amountCents: 999, durationHours: 7 * 24, recommended: false }),
-  Object.freeze({ id: 'month', name: 'Monthly Pass', amountCents: 2499, durationHours: 30 * 24, recommended: true })
+  Object.freeze({ id: 'day', name: '24-Hour Pass', amountCents: 199, previousAmountCents: 299, durationHours: 24, recommended: false }),
+  Object.freeze({ id: 'week', name: 'Weekly Pass', amountCents: 999, previousAmountCents: 1199, durationHours: 7 * 24, recommended: false }),
+  Object.freeze({ id: 'month', name: 'Monthly Pass', amountCents: 2499, previousAmountCents: 2999, durationHours: 30 * 24, recommended: true })
 ]);
+
+export function priorPriceVisible(now = Date.now()) {
+  const changedAt = Date.parse(`${PRICE_CHANGED_ON}T00:00:00Z`);
+  if (!Number.isFinite(changedAt)) return false;
+  return now - changedAt < PRIOR_PRICE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
 
 export function billingPlan(planId) {
   return BILLING_PLANS.find((plan) => plan.id === String(planId || '')) || null;
 }
 
-export function publicBillingPlans() {
-  return BILLING_PLANS.map((plan) => ({
-    id: plan.id,
-    name: plan.name,
-    price: (plan.amountCents / 100).toFixed(2),
-    currency: 'USDT',
-    durationHours: plan.durationHours,
-    recommended: plan.recommended
-  }));
+export function publicBillingPlans(now = Date.now()) {
+  const showPrior = priorPriceVisible(now);
+  return BILLING_PLANS.map((plan) => {
+    const cut = showPrior && plan.previousAmountCents > plan.amountCents;
+    return {
+      id: plan.id,
+      name: plan.name,
+      price: (plan.amountCents / 100).toFixed(2),
+      previousPrice: cut ? (plan.previousAmountCents / 100).toFixed(2) : '',
+      discountPercent: cut ? Math.round((1 - plan.amountCents / plan.previousAmountCents) * 100) : 0,
+      currency: 'USDT',
+      durationHours: plan.durationHours,
+      recommended: plan.recommended
+    };
+  });
 }
 
 export function billingAccess(entitlement = {}, now = Date.now()) {

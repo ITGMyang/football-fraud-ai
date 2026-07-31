@@ -27,6 +27,8 @@ type Plan = {
   id: string;
   name: string;
   price: string;
+  previousPrice?: string;
+  discountPercent?: number;
   currency: string;
   durationHours: number;
   recommended?: boolean;
@@ -1544,7 +1546,18 @@ function Plans({ access, checkout, onClose }: {
                   <div className="plan-option__titles">
                     {plan.recommended && <p className="plan-option__flag">Recommended</p>}
                     <p className="plan-option__label">{plan.name}</p>
-                    <p className="plan-option__price">{plan.price} {plan.currency}</p>
+                    <p className="plan-option__price">
+                      <span className="plan-option__now">{plan.price} {plan.currency}</span>
+                      {plan.previousPrice && (
+                        <s className="plan-option__was">
+                          <span className="sr-only">Was </span>{plan.previousPrice}
+                        </s>
+                      )}
+                      <span className="plan-option__unit">/ {perUnit(plan.durationHours)}</span>
+                      {plan.discountPercent ? (
+                        <span className="plan-option__save">Save {plan.discountPercent}%</span>
+                      ) : null}
+                    </p>
                   </div>
                   {isCurrent && <span className="current-pill">Current Plan</span>}
                   <span className={`duration-pill ${plan.recommended ? "duration-pill--light" : ""}`}>
@@ -1587,6 +1600,13 @@ function PredictionToast({ visible, onOpen }: { visible: boolean; onOpen: () => 
       <span>Prediction ready</span>
     </button>
   );
+}
+
+// What one pass covers, in the unit a buyer thinks in.
+function perUnit(hours: number) {
+  if (hours <= 24) return "day";
+  if (hours <= 7 * 24) return "week";
+  return "month";
 }
 
 function durationLabel(hours: number) {
