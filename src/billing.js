@@ -1,7 +1,11 @@
+// Priced so the longer pass is always the cheaper hour: 0.083, 0.059 and 0.035 USDT
+// per hour. What a pass actually costs us is driven by predictions rather than hours -
+// a live one runs three models - and the daily limits in prediction-policy.js are what
+// bound that, so the two have to be read together.
 export const BILLING_PLANS = Object.freeze([
-  Object.freeze({ id: 'day', name: '24-Hour Pass', amountCents: 299, durationHours: 24, recommended: false }),
-  Object.freeze({ id: 'week', name: 'Weekly Pass', amountCents: 1199, durationHours: 7 * 24, recommended: false }),
-  Object.freeze({ id: 'month', name: 'Monthly Pass', amountCents: 2999, durationHours: 30 * 24, recommended: true })
+  Object.freeze({ id: 'day', name: '24-Hour Pass', amountCents: 199, durationHours: 24, recommended: false }),
+  Object.freeze({ id: 'week', name: 'Weekly Pass', amountCents: 999, durationHours: 7 * 24, recommended: false }),
+  Object.freeze({ id: 'month', name: 'Monthly Pass', amountCents: 2499, durationHours: 30 * 24, recommended: true })
 ]);
 
 export function billingPlan(planId) {

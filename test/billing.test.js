@@ -24,14 +24,23 @@ const env = {
 
 test('billing plans keep prices and durations on the server', () => {
   assert.deepEqual(BILLING_PLANS.map(({ id, amountCents, durationHours }) => ({ id, amountCents, durationHours })), [
-    { id: 'day', amountCents: 299, durationHours: 24 },
-    { id: 'week', amountCents: 1199, durationHours: 168 },
-    { id: 'month', amountCents: 2999, durationHours: 720 }
+    { id: 'day', amountCents: 199, durationHours: 24 },
+    { id: 'week', amountCents: 999, durationHours: 168 },
+    { id: 'month', amountCents: 2499, durationHours: 720 }
   ]);
   assert.equal(billingPlan('unknown'), null);
   assert.deepEqual(publicBillingPlans()[0], {
-    id: 'day', name: '24-Hour Pass', price: '2.99', currency: 'USDT', durationHours: 24, recommended: false
+    id: 'day', name: '24-Hour Pass', price: '1.99', currency: 'USDT', durationHours: 24, recommended: false
   });
+});
+
+test('a longer pass is always the cheaper hour', () => {
+  // A ladder that inverts anywhere makes the shorter pass the better deal and the
+  // longer one impossible to justify, which is easy to do by editing one number.
+  const perHour = BILLING_PLANS.map((plan) => plan.amountCents / plan.durationHours);
+  for (let index = 1; index < perHour.length; index += 1) {
+    assert.ok(perHour[index] < perHour[index - 1], `${BILLING_PLANS[index].id} must cost less per hour`);
+  }
 });
 
 test('billing access distinguishes paid, free and exhausted accounts', () => {
@@ -120,7 +129,7 @@ test('checkout creation ignores client amounts and uses the selected server plan
       payload: {
         checkout_url: 'https://checkout.allscale.io/test',
         allscale_checkout_intent_id: 'intent-1',
-        amount_coins: '2.990000',
+        amount_coins: '1.990000',
         stable_coin_type: 1
       },
       request_id: 'req-1'
@@ -130,7 +139,7 @@ test('checkout creation ignores client amounts and uses the selected server plan
   assert.equal(request.url, 'https://openapi.allscale.io/v1/checkout_intents/');
   assert.deepEqual(JSON.parse(request.options.body), {
     stable_coin: 1,
-    amount_cents: 299,
+    amount_cents: 199,
     order_id: 'order-1',
     order_description: '24-Hour Pass',
     user_id: 'user-1',
