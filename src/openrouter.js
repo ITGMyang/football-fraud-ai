@@ -1,4 +1,3 @@
-import { aggregateReport, validatePrediction } from './domain.js';
 import { calculateModelCostUsd } from './model-cost.js';
 import { buildPoissonBaseline, poissonPromptSummary } from './poisson.js';
 import { buildMarketBaseline, compareToBaseline, marketPromptSummary } from './market-odds.js';
@@ -21,30 +20,6 @@ export function configuredModels(env = process.env) {
 // different provider is the kind of thing nobody thinks to check when a call fails.
 function modelProvider(env, name) {
   return cleanEnvValue(env[`MODEL_${name}_PROVIDER`] || 'openrouter').toLowerCase();
-}
-
-export async function predictMarket(market, env = process.env, fetchImpl = fetch) {
-  if (!hasAnyApiKey(env)) {
-    throw new Error('缺少模型 API Key，请配置 OPENROUTER_API_KEY / OPENAI_API_KEY / APIMART_API_KEY');
-  }
-
-  const models = configuredModels(env);
-  if (models.length === 0) throw new Error('没有配置模型，请设置 MODEL_GPT/MODEL_CLAUDE/MODEL_GEMINI/MODEL_QWEN');
-
-  const predictions = [];
-  for (const [label, model,, provider] of models) {
-    const result = await callModelWithRetry({ label, model, provider, market, env, fetchImpl });
-    predictions.push(result);
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    market,
-    predictions,
-    consensus: aggregateReport(market, predictions),
-    disclaimer: '非财务建议，非稳赢预测。模型输出仅用于概率分析和复盘。',
-    createdAt: new Date().toISOString()
-  };
 }
 
 export async function rankMarkets(markets, modelLabel = 'all', env = process.env, fetchImpl = fetch, matchContext = null, teamNews = null) {
@@ -98,66 +73,11 @@ export async function rankMarkets(markets, modelLabel = 'all', env = process.env
   };
 }
 
-async function callModelWithRetry(args) {
-  const first = await callModel(args);
-  if (!first.error) return first;
-  const second = await callModel({ ...args, retry: true });
-  return second.error ? { ...second, firstError: first.error } : second;
-}
-
 async function callRankingModelWithRetry(args) {
   const first = await callRankingModel(args);
   if (!first.error) return first;
   const second = await callRankingModel({ ...args, retry: true });
   return second.error ? { ...second, firstError: first.error } : second;
-}
-
-async function callModel({ label, model, provider, market, env, fetchImpl, retry = false }) {
-  try {
-    const client = modelClient(provider, env);
-    const request = modelRequest({
-      client,
-      provider,
-      model,
-      env,
-      system: systemPrompt(),
-      user: userPrompt(market, retry),
-      temperature: retry ? 0 : 0.2,
-      maxTokens: 4000
-    });
-    const response = await fetchImpl(request.url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${client.apiKey}`,
-        'Content-Type': 'application/json',
-        ...client.extraHeaders
-      },
-      body: JSON.stringify(request.body)
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`${client.name} ${response.status}: ${body.slice(0, 300)}`);
-    }
-
-    const data = await readModelResponse(response);
-    const content = extractModelContent(data);
-    const parsed = parseModelJson(content);
-    return {
-      modelName: label,
-      modelId: model,
-      provider: client.name,
-      usage: modelUsageFromResponse(data, { provider, model }),
-      prediction: validatePrediction(parsed, label)
-    };
-  } catch (error) {
-    return {
-      modelName: label,
-      modelId: model,
-      provider: providerLabel(provider),
-      error: error.message
-    };
-  }
 }
 
 async function callRankingModel({ label, model, provider, markets, env, fetchImpl, matchContext = null, statisticalBaseline = null, marketConsensus = null, teamNewsSummary = null, retry = false }) {
@@ -366,26 +286,6 @@ function extractJsonObject(text) {
   return source.slice(start, end + 1);
 }
 
-function systemPrompt() {
-  return [
-    '你是谨慎的足球盘口概率分析助手。',
-    '你不能声称稳赢，不能建议重注，不能忽略风险。',
-    '只输出 JSON，不要 Markdown。',
-    '字段必须是 direction, estimatedProbability, confidence, reasons, risks, abstain。',
-    'estimatedProbability 和 confidence 用 0 到 1 小数。'
-  ].join('\n');
-}
-
-function rankingSystemPrompt() {
-  return [
-    '你是谨慎的足球盘口概率排序助手。',
-    '你会看到一组已导入盘口，只能从给定 market id 中选择。',
-    '你的任务是选出你认为预测概率最高、信息相对最清楚的前 4 个盘口。',
-    'estimatedProbability 是你自己对该选择打出的命中概率，0 到 1 小数，不是赔率隐含概率。',
-    '不要承诺盈利，不要建议下注金额，不要输出 Markdown。',
-    '只输出 JSON。'
-  ].join('\n');
-}
 
 function rankingSystemPromptV2() {
   return [
@@ -551,52 +451,6 @@ function normalizeContent(content) {
   return '';
 }
 
-function userPrompt(market, retry) {
-  return JSON.stringify({
-    task: retry ? '上次输出无效。请严格返回 JSON 对象。' : '分析这条足球盘口是否存在概率价值。',
-    market,
-    requiredShape: {
-      direction: '选择方向，例如 韩国 -0.5/1 或 放弃',
-      estimatedProbability: 0.56,
-      confidence: 0.42,
-      reasons: ['最多 6 条简短理由'],
-      risks: ['最多 6 条风险'],
-      abstain: false
-    },
-    rules: [
-      '没有足够信息时 abstain=true',
-      '不要输出下注金额',
-      '不要承诺盈利',
-      '优先指出盘口、赔率、信息缺口和模型不确定性'
-    ]
-  });
-}
-
-function rankingUserPrompt(markets, matchContext, retry) {
-  return JSON.stringify({
-    task: retry ? '上次输出无效。请严格返回 JSON 对象，并只从给定 id 中选择前 4 个。' : '从这些盘口中选出预测概率最高的前 4 个，并按 estimatedProbability 从大到小排序。',
-    markets,
-    matchContext: compactMatchContext(matchContext),
-    requiredShape: {
-      picks: [
-        {
-          marketId: '必须来自 markets[].id',
-          estimatedProbability: 0.61,
-          confidence: 0.45,
-          reason: '一句话理由',
-          risks: ['最多 3 条风险']
-        }
-      ]
-    },
-    rules: [
-      '只能返回 picks 数组，最多 4 个',
-      '不要选择你无法理解的盘口',
-      'estimatedProbability 是 AI 预测概率，不是赔率换算',
-      '如果信息不足，仍可少于 4 个',
-      '按 estimatedProbability 从大到小排序'
-    ]
-  });
-}
 
 function rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline = null, marketConsensus = null, teamNewsSummary = null) {
   return JSON.stringify({
@@ -959,24 +813,6 @@ function validateRankingPicks(parsed, markets) {
   return picks.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
 }
 
-function completeRankingPicks(picks, scorePicks, markets) {
-  const completed = [...picks];
-  const seen = new Set(completed.map((pick) => pick.marketId));
-  const nonScoreCount = completed.filter((pick) => !isScoreMarket(pick.market)).length;
-
-  if (completed.length >= 4 && nonScoreCount >= 3) {
-    return completed.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
-  }
-
-  for (const pick of inferPicksFromScores(scorePicks, markets)) {
-    if (seen.has(pick.marketId)) continue;
-    seen.add(pick.marketId);
-    completed.push(pick);
-    if (completed.length >= 4) break;
-  }
-
-  return completed.sort((a, b) => b.estimatedProbability - a.estimatedProbability);
-}
 
 function alignScorePicksWithTotals(scorePicks, picks, markets) {
   const totalPick = strongestTotalPick(picks);

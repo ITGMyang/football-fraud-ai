@@ -209,13 +209,11 @@ test('weekly settlement evaluates immutable model snapshots instead of public co
 test('Cloudflare prediction route uses the optimized shared architecture', async () => {
   const worker = await import('node:fs/promises').then((fs) => fs.readFile(new URL('../worker/index.js', import.meta.url), 'utf8'));
   assert.match(worker, /resolveOptimizedPrediction/);
-  assert.equal(worker.includes('resolveSharedRanking({'), false);
 });
 
 test('local prediction route uses the same optimized shared architecture', async () => {
   const server = await import('node:fs/promises').then((fs) => fs.readFile(new URL('../src/server.js', import.meta.url), 'utf8'));
   assert.match(server, /resolveOptimizedPrediction/);
-  assert.equal(server.includes('resolveSharedRanking({'), false);
 });
 
 function memoryStorage({ settings }) {

@@ -10,7 +10,6 @@ const initialState = {
   reports: [],
   rankings: [],
   matchContexts: [],
-  sharedPredictionResults: [],
   predictionSnapshots: [],
   predictionConsensus: [],
   predictionSettings: {
@@ -100,27 +99,6 @@ export function saveRanking(ranking, { mergeLatest = false, ownerId = 'legacy' }
     .concat(db.rankings.filter((item) => (item.ownerId || 'legacy') !== ownerId));
   writeDb(db);
   return ranking;
-}
-
-export function readSharedPredictionResults(fixtureId) {
-  const db = readAllDb();
-  return (db.sharedPredictionResults || [])
-    .filter((row) => row.fixtureId === String(fixtureId))
-    .map(({ modelKey, result }) => ({ modelKey, result }));
-}
-
-export function saveSharedPredictionResults(fixtureId, results = []) {
-  const db = readAllDb();
-  if (!Array.isArray(db.sharedPredictionResults)) db.sharedPredictionResults = [];
-  for (const result of results) {
-    const modelKey = predictionModelKey(result.modelName || result.modelId);
-    const index = db.sharedPredictionResults.findIndex((row) => row.fixtureId === String(fixtureId) && row.modelKey === modelKey);
-    const row = { fixtureId: String(fixtureId), modelKey, result };
-    if (index >= 0) db.sharedPredictionResults[index] = row;
-    else db.sharedPredictionResults.push(row);
-  }
-  writeDb(db);
-  return results;
 }
 
 export function readPredictionSettings() {

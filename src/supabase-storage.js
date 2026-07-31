@@ -11,7 +11,6 @@ const TABLES = {
   systemEvents: 'system_events',
   billingOrders: 'billing_orders',
   billingEntitlements: 'billing_entitlements',
-  sharedPredictionResults: 'shared_prediction_results',
   predictionRequests: 'prediction_requests',
   predictionSnapshots: 'prediction_snapshots',
   predictionConsensus: 'prediction_consensus',
@@ -105,27 +104,6 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         created_at: ranking.createdAt || new Date().toISOString()
       }], 'owner_id,id');
       return ranking;
-    },
-
-    async readSharedPredictionResults(fixtureId) {
-      const rows = await client.selectRows(TABLES.sharedPredictionResults, 'model_key,payload', {
-        fixture_id: `eq.${fixtureId}`,
-        order: 'created_at.asc'
-      });
-      return rows.map((row) => ({ modelKey: row.model_key, result: row.payload }));
-    },
-
-    async saveSharedPredictionResults(fixtureId, results = []) {
-      if (!results.length) return [];
-      await client.upsert(TABLES.sharedPredictionResults, results.map((result) => ({
-        fixture_id: String(fixtureId),
-        model_key: predictionModelKey(result.modelName || result.modelId),
-        model_id: result.modelId || null,
-        payload: result,
-        created_at: result.generatedAt || new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })), 'fixture_id,model_key');
-      return results;
     },
 
     async readPredictionSettings() {
@@ -361,7 +339,7 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
     },
 
     async readAdminDashboardData() {
-      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, sharedPredictions, predictionRequests, predictionSnapshots, predictionConsensus, weeklyPerformance, predictionSettings] = await Promise.all([
+      const [users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements, predictionRequests, predictionSnapshots, predictionConsensus, weeklyPerformance, predictionSettings] = await Promise.all([
         client.listAuthUsers(),
         client.selectAllRows(TABLES.aiUsageEvents, '*', { order: 'created_at.desc' }),
         client.selectRows(TABLES.systemEvents, '*', { order: 'created_at.desc', limit: '500' }),
@@ -370,7 +348,6 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         client.selectRows(TABLES.matchSchedules, 'payload,updated_at', { order: 'updated_at.desc', limit: '500' }),
         client.selectAllRows(TABLES.billingOrders, '*', { order: 'created_at.desc' }),
         client.selectRows(TABLES.billingEntitlements, '*', { limit: '1000' }),
-        client.selectRows(TABLES.sharedPredictionResults, 'fixture_id,model_key,model_id,payload,created_at,updated_at', { order: 'updated_at.desc', limit: '5000' }),
         client.selectAllRows(TABLES.predictionRequests, '*', { order: 'created_at.desc' }),
         client.selectAllRows(TABLES.predictionSnapshots, '*', { order: 'generated_at.desc' }),
         client.selectAllRows(TABLES.predictionConsensus, '*', { order: 'generated_at.desc' }),
@@ -379,7 +356,7 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       ]);
       return {
         users, aiUsage, systemEvents, rankings, contexts, schedules, orders, entitlements,
-        sharedPredictions, predictionRequests, predictionSnapshots, predictionConsensus,
+        predictionRequests, predictionSnapshots, predictionConsensus,
         weeklyPerformance, predictionSettings
       };
     },
