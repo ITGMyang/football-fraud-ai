@@ -6,12 +6,24 @@ import { isAdminUser } from '../src/auth.js';
 import { buildAdminDashboard } from '../src/admin-dashboard.js';
 import { modelUsageFromResponse } from '../src/openrouter.js';
 
-test('admin access trusts app metadata and never user metadata', () => {
+test('the configured email list is the only way to be an administrator', () => {
+  const env = { ADMIN_EMAILS: 'owner@example.com, second@example.com' };
+  assert.equal(isAdminUser({ email: 'owner@example.com' }, env), true);
+  assert.equal(isAdminUser({ email: 'SECOND@Example.com' }, env), true);
+  assert.equal(isAdminUser({ email: 'member@example.com' }, env), false);
+  assert.equal(isAdminUser({}, env), false);
+
+  // Editing a user record in Supabase, or an id list nobody rereads, must not be able
+  // to add an administrator behind the list's back.
+  assert.equal(isAdminUser({ email: 'member@example.com', app_metadata: { role: 'admin' } }, env), false);
+  assert.equal(isAdminUser({ email: 'member@example.com', id: 'abc' }, { ...env, ADMIN_USER_IDS: 'abc' }), false);
+});
+
+test('with no list configured the metadata role still works for local development', () => {
   assert.equal(isAdminUser({ app_metadata: { role: 'admin' } }), true);
   assert.equal(isAdminUser({ app_metadata: { user_role: 'admin' } }), true);
+  // user_metadata is writable by the account holder, so it is never trusted.
   assert.equal(isAdminUser({ user_metadata: { role: 'admin' } }), false);
-  assert.equal(isAdminUser({ email: 'owner@example.com' }, { ADMIN_EMAILS: 'owner@example.com' }), true);
-  assert.equal(isAdminUser({ email: 'member@example.com' }, { ADMIN_EMAILS: 'owner@example.com' }), false);
 });
 
 test('model usage normalizes provider token and cost fields', () => {

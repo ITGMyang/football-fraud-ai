@@ -45,13 +45,19 @@ export async function authenticateRequest(request, env = {}, fetchImpl = fetch) 
   return { ok: true, user: await response.json() };
 }
 
+// The email allow-list is the whole answer once it is set. It used to be one of three
+// ways in, alongside a Supabase app_metadata role and an id list, so an administrator
+// could be created by editing a user record - somewhere the list nobody reads does not
+// mention. Signing in still requires a confirmed email, which is what makes an address
+// safe to trust as the identity.
 export function isAdminUser(user = {}, env = {}) {
+  const adminEmails = listEnvValues(env.ADMIN_EMAILS);
+  if (adminEmails.size) return adminEmails.has(String(user.email || '').toLowerCase());
+
+  // Unconfigured - local development only. Production sets ADMIN_EMAILS.
   const appRole = String(user.app_metadata?.role || user.app_metadata?.user_role || '').toLowerCase();
   if (appRole === 'admin') return true;
-  const adminIds = listEnvValues(env.ADMIN_USER_IDS);
-  if (adminIds.has(String(user.id || '').toLowerCase())) return true;
-  const adminEmails = listEnvValues(env.ADMIN_EMAILS);
-  return adminEmails.has(String(user.email || '').toLowerCase());
+  return listEnvValues(env.ADMIN_USER_IDS).has(String(user.id || '').toLowerCase());
 }
 
 function listEnvValues(value) {
