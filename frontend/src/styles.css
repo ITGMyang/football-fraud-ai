@@ -1186,6 +1186,118 @@ input:focus-visible {
   color: rgba(255, 255, 255, 0.45);
 }
 
+/* the user's own predictions for a past day: accuracy vs platform + matches */
+.user-day {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.user-day__eyebrow {
+  font-family: "Red Hat Display", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: linear-gradient(96.321deg, #6a927c 0.68286%, #166f4a 97.815%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.user-day__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 20px;
+  background: rgba(13, 53, 33, 0.1);
+  border: 1px solid rgba(23, 54, 38, 0.5);
+  border-radius: 16px;
+}
+
+.user-day__unlock {
+  align-self: flex-start;
+  padding: 10px 18px;
+  border-radius: 40px;
+  background: #fff;
+  color: #000;
+  font-size: 14px;
+  font-weight: 600;
+  filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.35));
+  transition: filter var(--hover), transform var(--hover);
+}
+
+.user-day__unlock:hover {
+  filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.6));
+  transform: translateY(-1px);
+}
+
+/* your% ring beside a you/platform breakdown + comparison note */
+.accuracy-compare {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.accuracy-compare__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.accuracy-compare__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.accuracy-compare__row b {
+  min-width: 62px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.accuracy-compare__row span {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.accuracy-compare__row small {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.accuracy-compare__row--platform span {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.accuracy-compare__note {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.accuracy-compare__note b {
+  color: #fff;
+}
+
+.accuracy-compare__note--good b {
+  color: #1eb978;
+}
+
+.accuracy-compare__note--upsell b {
+  color: #ffd15c;
+}
+
 /* upcoming matches — shown under an empty date, up to three match days */
 .next-day {
   display: flex;

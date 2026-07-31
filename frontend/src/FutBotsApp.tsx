@@ -889,7 +889,127 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
   );
 }
 
-function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, accuracyDays, nextDays, dayAccuracy, pendingMatchId, onStartPrediction, onOpenResult }: {
+/* the user's own predictions on a given day, with hit/miss and accuracy */
+type UserDay = { date: string; hits: number; decided: number; accuracy: number; matches: HistoryMatch[] };
+
+function userDayFor(historyGroups: HistoryGroup[], date: string): UserDay | null {
+  const group = historyGroups.find((item) => item.date === date);
+  if (!group || !group.matches.length) return null;
+  const decided = group.matches.filter((match) => match.result !== "pending");
+  const hits = decided.filter((match) => match.result === "hit").length;
+  return {
+    date,
+    hits,
+    decided: decided.length,
+    accuracy: decided.length ? hits / decided.length : 0,
+    matches: group.matches
+  };
+}
+
+function lastPredictionDay(historyGroups: HistoryGroup[]): UserDay | null {
+  for (const group of historyGroups) {
+    if (group.matches.some((match) => match.result !== "pending")) return userDayFor(historyGroups, group.date);
+  }
+  return null;
+}
+
+type Comparison = { tone: "good" | "upsell"; title: string; text: string } | null;
+
+/* Higher than the platform → praise. Lower → nudge free users to unlock
+   more; paid users get no nudge. */
+function accuracyComparison(userAcc: number, platformAcc: number | null, paid: boolean): Comparison {
+  if (platformAcc == null) return null;
+  if (userAcc >= platformAcc) return { tone: "good", title: "Great work!", text: "You beat the platform average." };
+  if (!paid) return { tone: "upsell", title: "Room to grow", text: "Unlock more matches to raise your accuracy." };
+  return null;
+}
+
+function AccuracyCompare({ userDay, platformAcc, comparison }: {
+  userDay: UserDay;
+  platformAcc: number | null;
+  comparison: Comparison;
+}) {
+  const userPct = Math.round(userDay.accuracy * 100);
+  const platPct = platformAcc != null ? Math.round(platformAcc * 100) : null;
+  return (
+    <div className="accuracy-compare">
+      <AccuracyRing key={`${userDay.date}-${userPct}`} pct={userPct} />
+      <div className="accuracy-compare__meta">
+        <span className="accuracy-compare__row"><b>You</b><span>{userPct}%</span><small>{userDay.hits}/{userDay.decided} hit</small></span>
+        {platPct != null && <span className="accuracy-compare__row accuracy-compare__row--platform"><b>Platform</b><span>{platPct}%</span></span>}
+        {comparison && (
+          <p className={`accuracy-compare__note accuracy-compare__note--${comparison.tone}`}>
+            <b>{comparison.title}</b> {comparison.text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Paid users' daily modal: last prediction day vs the platform, same
+   layout as the welcome modal. */
+function AccuracyModal({ userDay, platformAcc, paid, onClose, onView }: {
+  userDay: UserDay;
+  platformAcc: number | null;
+  paid: boolean;
+  onClose: () => void;
+  onView: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const comparison = accuracyComparison(userDay.accuracy, platformAcc, paid);
+  return (
+    <div className="welcome-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="welcome-card" role="dialog" aria-modal="true" aria-label="Your last results">
+        <div className="welcome-card__scrim" aria-hidden="true" />
+        <div className="welcome-card__head">
+          <h2>Your Last Results</h2>
+          <p>{nextDayLabel(userDay.date)}</p>
+        </div>
+        <div className="welcome-scoreday">
+          <AccuracyCompare userDay={userDay} platformAcc={platformAcc} comparison={comparison} />
+        </div>
+        <button className="welcome-card__cta" onClick={onView}>View predictions</button>
+      </section>
+    </div>
+  );
+}
+
+function UserDaySection({ userDay, platformAcc, paid, navigate, onOpenPrediction }: {
+  userDay: UserDay;
+  platformAcc: number | null;
+  paid: boolean;
+  navigate: (screen: Screen) => void;
+  onOpenPrediction: (item: HistoryMatch) => void;
+}) {
+  const comparison = accuracyComparison(userDay.accuracy, platformAcc, paid);
+  return (
+    <section className="user-day" aria-label="Your predictions for this day">
+      <div className="user-day__eyebrow">Your Predictions</div>
+      {userDay.decided > 0 && (
+        <div className="user-day__summary">
+          <AccuracyCompare userDay={userDay} platformAcc={platformAcc} comparison={comparison} />
+          {comparison?.tone === "upsell" && (
+            <button className="user-day__unlock" onClick={() => navigate("plans")}>Unlock more matches</button>
+          )}
+        </div>
+      )}
+      <div className="pcards">
+        {userDay.matches.map((item) => (
+          <HistoryCard item={item} key={`${item.id}-${item.ranking.createdAt}`} onOpen={() => onOpenPrediction(item)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Dashboard({ navigate, matches, rankings, loading, error, access, session, selectedDate, onDate, matchDays, accuracyDays, nextDays, dayAccuracy, historyGroups, pendingMatchId, onStartPrediction, onOpenResult, onOpenPrediction }: {
   navigate: (screen: Screen) => void;
   matches: Match[];
   rankings: RankingView[];
@@ -903,9 +1023,11 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
   accuracyDays: Set<string>;
   nextDays: { date: string; matches: Match[] }[];
   dayAccuracy: DayAccuracy | null;
+  historyGroups: HistoryGroup[];
   pendingMatchId: string;
   onStartPrediction: (match: Match) => void;
   onOpenResult: (match: Match) => void;
+  onOpenPrediction: (item: HistoryMatch) => void;
 }) {
   const [competition, setCompetition] = useState("All Competitions");
   const competitions = useMemo(() => [...new Set(matches.map((match) => match.round))], [matches]);
@@ -913,6 +1035,8 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
     ? matches
     : matches.filter((match) => match.round === competition);
   const featured = visible.find((match) => match.status !== "complete" && !rankingForMatch(rankings, match.id)) || null;
+  const paid = Boolean(access.billing?.active);
+  const userDay = selectedDate < todayShanghai() ? userDayFor(historyGroups, selectedDate) : null;
 
   return (
     <section className="screen screen--home">
@@ -939,6 +1063,16 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
           {error && <p className="app-note app-note--error" role="alert">{error}</p>}
           <div className="predictions">
             <h2>Predictions</h2>
+            {userDay ? (
+              <UserDaySection
+                userDay={userDay}
+                platformAcc={dayAccuracy?.accuracy ?? null}
+                paid={paid}
+                navigate={navigate}
+                onOpenPrediction={onOpenPrediction}
+              />
+            ) : (
+              <>
             {dayAccuracy && (
               <section className="day-accuracy" aria-label="Prediction accuracy for this day">
                 <AccuracyRing key={dayAccuracy.date} pct={Math.round(dayAccuracy.accuracy * 100)} />
@@ -1006,6 +1140,8 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                     ))}
                   </div>
                 )}
+              </>
+            )}
               </>
             )}
           </div>
@@ -1662,9 +1798,11 @@ export default function FutBotsApp() {
   const [dayAccuracy, setDayAccuracy] = useState<DayAccuracy | null>(null);
   const [accuracyDays, setAccuracyDays] = useState<Set<string>>(() => new Set());
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [accuracyModal, setAccuracyModal] = useState<{ userDay: UserDay; platformAcc: number | null } | null>(null);
+  const [accountReady, setAccountReady] = useState(false);
   const [nextDaysPending, setNextDaysPending] = useState(false);
   const [matchDaysProbed, setMatchDaysProbed] = useState(false);
-  const welcomeChecked = useRef(false);
+  const dailyModalChecked = useRef(false);
 
   const historyDepth = useRef(0);
   const historyReady = useRef(false);
@@ -1796,6 +1934,8 @@ export default function FutBotsApp() {
       setHistoryContexts(contextHistory.contexts || []);
     } catch (accountError) {
       setError(userFacingError(accountError, "Unable to load account."));
+    } finally {
+      setAccountReady(true);
     }
   }, [api]);
 
@@ -1953,19 +2093,17 @@ export default function FutBotsApp() {
 
   useEffect(() => { applyScreenTint(screen); }, [screen]);
 
-  /* Show the welcome modal on the dashboard at most once every 30 minutes. */
-  useEffect(() => {
-    if (welcomeChecked.current) return;
-    if (screen !== "dashboard" || loading) return;
-    welcomeChecked.current = true;
-    const lastSeen = Number(localStorage.getItem("futbots.welcomeSeenAt") || 0);
-    if (Date.now() - lastSeen >= 30 * 60 * 1000) setWelcomeOpen(true);
-  }, [screen, loading]);
-
-  const dismissWelcome = useCallback(() => {
-    localStorage.setItem("futbots.welcomeSeenAt", String(Date.now()));
-    setWelcomeOpen(false);
+  const markDailyModalSeen = useCallback(() => {
+    localStorage.setItem("futbots.dailyModalSeen", todayShanghai());
   }, []);
+  const dismissWelcome = useCallback(() => {
+    markDailyModalSeen();
+    setWelcomeOpen(false);
+  }, [markDailyModalSeen]);
+  const dismissAccuracyModal = useCallback(() => {
+    markDailyModalSeen();
+    setAccuracyModal(null);
+  }, [markDailyModalSeen]);
 
   /* The day's Free Score Day, or the next upcoming one with its date. */
   const scoreDay = useMemo<ScoreDay | null>(() => {
@@ -1996,6 +2134,29 @@ export default function FutBotsApp() {
     () => predictionHistory(rankings, historyContexts) as HistoryGroup[],
     [historyContexts, rankings]
   );
+
+  /* Once per Shanghai day on the dashboard: paid users see their last-day
+     accuracy vs the platform; everyone else sees the welcome modal. */
+  useEffect(() => {
+    if (dailyModalChecked.current) return;
+    if (screen !== "dashboard" || loading || !accountReady) return;
+    dailyModalChecked.current = true;
+    if (localStorage.getItem("futbots.dailyModalSeen") === todayShanghai()) return;
+    if (access.billing?.active) {
+      const last = lastPredictionDay(historyGroups);
+      if (!last) return;
+      void (async () => {
+        let platformAcc: number | null = null;
+        try {
+          const data = await api(`/api/analytics/day?date=${encodeURIComponent(last.date)}`);
+          if (data.day?.total) platformAcc = data.day.accuracy;
+        } catch { /* comparison is best-effort */ }
+        setAccuracyModal({ userDay: last, platformAcc });
+      })();
+      return;
+    }
+    setWelcomeOpen(true);
+  }, [screen, loading, accountReady, access.billing?.active, historyGroups, api]);
 
   const signInProvider = async (provider: "google" | "custom:telegram") => {
     if (!client || !config) throw new Error("Authentication is still starting.");
@@ -2161,7 +2322,7 @@ export default function FutBotsApp() {
   };
 
   const screenNode = screen === "dashboard" ? (
-    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} accuracyDays={accuracyDays} nextDays={nextDays} dayAccuracy={dayAccuracy} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} />
+    <Dashboard navigate={navigate} matches={matches} rankings={rankings} loading={loading} error={error} access={access} session={session} selectedDate={selectedDate} onDate={setSelectedDate} matchDays={matchDays} accuracyDays={accuracyDays} nextDays={nextDays} dayAccuracy={dayAccuracy} historyGroups={historyGroups} pendingMatchId={analysisPending ? selectedMatch?.id || "" : ""} onStartPrediction={startPrediction} onOpenResult={openResult} onOpenPrediction={openHistoryPrediction} />
   ) : screen === "details" ? (
     <Details navigate={navigate} onBack={goBack} match={selectedMatch} ranking={selectedRanking} showResult={showSelectedResult} analyzing={analysisPending} error={error} onPredict={() => selectedMatch && startPrediction(selectedMatch)} onSeeResult={() => setShowSelectedResult(true)} />
   ) : (
@@ -2185,6 +2346,18 @@ export default function FutBotsApp() {
             dismissWelcome();
             if (scoreDay?.isToday) startPrediction(scoreDay.match);
             else if (scoreDay) setSelectedDate(scoreDay.date);
+          }}
+        />
+      )}
+      {accuracyModal && screen === "dashboard" && (
+        <AccuracyModal
+          userDay={accuracyModal.userDay}
+          platformAcc={accuracyModal.platformAcc}
+          paid={Boolean(access.billing?.active)}
+          onClose={dismissAccuracyModal}
+          onView={() => {
+            dismissAccuracyModal();
+            setSelectedDate(accuracyModal.userDay.date);
           }}
         />
       )}
