@@ -535,6 +535,38 @@ code {
   margin-top: 6px;
 }
 
+.a-gate__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.a-gate__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #7f9d8c;
+}
+
+.a-gate__form input {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.a-gate__form input:focus-visible {
+  outline: 2px solid rgba(122, 226, 176, 0.55);
+  outline-offset: 1px;
+}
+
 /* ---- fixture inspector ---- */
 
 .a-modal {

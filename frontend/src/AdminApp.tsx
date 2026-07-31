@@ -1020,6 +1020,12 @@ export default function AdminApp() {
   const [fixtureLoading, setFixtureLoading] = useState(false);
   const [fixtureError, setFixtureError] = useState('');
 
+  // The console has its own hostname, so it has its own browser session: signing in on
+  // the public site leaves nothing behind here. It signs in on its own.
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
+
   const t = useMemo(() => createTranslator(language), [language]);
 
   useEffect(() => {
@@ -1154,6 +1160,41 @@ export default function AdminApp() {
     setAuthorized(null);
   };
 
+  const signInWithGoogle = async () => {
+    if (!client) return;
+    setError('');
+    setSigningIn(true);
+    try {
+      // Back to this origin, not the public site: the implicit flow returns the token
+      // in the URL hash and only this origin can store it.
+      const { error: authError } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${location.origin}/` }
+      });
+      if (authError) throw authError;
+    } catch (signInError) {
+      setError(userFacingError(signInError, t('signInFailed')));
+      setSigningIn(false);
+    }
+  };
+
+  const signInWithPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client) return;
+    setError('');
+    setSigningIn(true);
+    try {
+      const { data, error: authError } = await client.auth.signInWithPassword({ email, password });
+      if (authError) throw authError;
+      setSession(data.session);
+      setPassword('');
+    } catch (signInError) {
+      setError(userFacingError(signInError, t('signInFailed')));
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
   const languageToggle = (
     <div className="a-lang" role="group" aria-label="Language">
       {(['en', 'zh'] as const).map((code) => (
@@ -1190,10 +1231,34 @@ export default function AdminApp() {
             <h1>{session ? t('adminOnlyTitle') : t('signInTitle')}</h1>
             <p>{session ? t('adminOnlyBody') : t('signInBody')}</p>
             {error && <p className="a-error" role="alert">{error}</p>}
-            <div className="a-gate__actions">
-              <a className="a-btn" href="/login">{t('goSignIn')}</a>
-              {session && <button className="a-btn a-btn--ghost" type="button" onClick={signOut}>{t('signOut')}</button>}
-            </div>
+            {session ? (
+              <div className="a-gate__actions">
+                <button className="a-btn a-btn--ghost" type="button" onClick={signOut}>{t('signOut')}</button>
+              </div>
+            ) : (
+              <>
+                <div className="a-gate__actions">
+                  <button className="a-btn" type="button" onClick={signInWithGoogle} disabled={signingIn || !client}>
+                    {t('signInGoogle')}
+                  </button>
+                </div>
+                <form className="a-gate__form" onSubmit={signInWithPassword}>
+                  <label>
+                    <span>{t('email')}</span>
+                    <input type="email" value={email} autoComplete="username" required
+                      onChange={(event) => setEmail(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>{t('password')}</span>
+                    <input type="password" value={password} autoComplete="current-password" required
+                      onChange={(event) => setPassword(event.target.value)} />
+                  </label>
+                  <button className="a-btn a-btn--ghost" type="submit" disabled={signingIn || !client}>
+                    {signingIn ? t('signingIn') : t('signInEmail')}
+                  </button>
+                </form>
+              </>
+            )}
           </section>
         </main>
       </CopyContext.Provider>

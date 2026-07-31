@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
+import { serveBundle } from '../src/asset-response.js';
 import test from 'node:test';
 
 import * as frontendApi from '../frontend/src/api.js';
@@ -320,16 +321,19 @@ test('the app shell and the admin console are the only two served shells', async
 });
 
 test('a cached shell can never outlive the hashed bundle it names', async () => {
-  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  const [worker, assetResponse] = await Promise.all([
+    readFile(new URL('../worker/index.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/asset-response.js', import.meta.url), 'utf8')
+  ]);
 
   // Both shells go through one helper so their caching cannot drift apart.
   assert.match(worker, /serveShell\(env, url, request, '\/admin\.html'\)/);
   assert.match(worker, /serveShell\(env, url, request, '\/index\.html'\)/);
   // no-cache still allows storage; no-store plus the CDN header is what the edge obeys.
-  assert.match(worker, /'Cache-Control': 'no-store, must-revalidate'/);
-  assert.match(worker, /'CDN-Cache-Control': 'no-store'/);
+  assert.match(assetResponse, /'Cache-Control': 'no-store, must-revalidate'/);
+  assert.match(assetResponse, /'CDN-Cache-Control': 'no-store'/);
   // Headers are rebuilt, not copied: an inherited ETag let revalidation keep the stale body.
-  assert.doesNotMatch(worker, /new Headers\(shell(Response)?\.headers\)/);
+  assert.doesNotMatch(assetResponse, /new Headers\(shell(Response)?\.headers\)/);
 });
 
 test('prediction cards keep metadata, teams, and actions aligned at tablet widths', async () => {
@@ -473,18 +477,13 @@ test('the previous build stays deployed so stale HTML cannot break', async () =>
   assert.match(script, /refusing to touch public\/build/);
 
   // The shells must reach the Worker, or its no-store headers never apply.
-  assert.match(wrangler, /"run_worker_first": \[/);
-  assert.ok(wrangler.includes('"/"'), 'the app shell must run through the Worker');
-  assert.ok(wrangler.includes('"/admin"'), 'the console shell must run through the Worker');
-  assert.ok(wrangler.includes('"/api/*"'), 'the API must run through the Worker');
-  assert.ok(wrangler.includes('"/build/*"'), 'bundles must run through the Worker to get a real 404');
+  assert.match(wrangler, /"run_worker_first": \["\/\*"\]/);
 });
 
 test('a bundle that no longer exists 404s instead of returning the app shell', async () => {
   const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
   assert.match(worker, /url\.pathname\.startsWith\('\/build\/'\)\) return serveBundle/);
 
-  const serveBundle = new Function('return ' + worker.slice(worker.indexOf('async function serveBundle')).match(/async function serveBundle[\s\S]*?\n}\n/)[0])();
   const shellFallback = { ASSETS: { fetch: async () => new Response('<!doctype html>', { headers: { 'Content-Type': 'text/html' } }) } };
   const realBundle = { ASSETS: { fetch: async () => new Response('export{}', { headers: { 'Content-Type': 'text/javascript' } }) } };
 

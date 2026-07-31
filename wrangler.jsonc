@@ -10,6 +10,10 @@
     {
       "pattern": "futbots.cc",
       "custom_domain": true
+    },
+    {
+      "pattern": "admin.futbots.cc",
+      "custom_domain": true
     }
   ],
   "assets": {
@@ -17,23 +21,11 @@
     "binding": "ASSETS",
     "html_handling": "none",
     "not_found_handling": "single-page-application",
-    // Listing the routes explicitly: the boolean form did not reach the Worker for
-    // HTML paths, so the shell was answered by the asset layer with its own caching.
-    "run_worker_first": [
-      "/",
-      "/admin",
-      "/login",
-      "/analytics",
-      "/backend",
-      "/data",
-      "/history",
-      "/auth/*",
-      "/match/*",
-      "/api/*",
-      "/media/*",
-      // A deleted bundle must 404 rather than fall through to index.html.
-      "/build/*"
-    ]
+    // Everything goes through the Worker. The region check and the hostname split both
+    // have to see every request, and a path the asset layer answers on its own is a
+    // path where neither applies. The boolean form of this setting did not reach the
+    // Worker for HTML paths, so the route list says the same thing explicitly.
+    "run_worker_first": ["/*"]
   },
   "vars": {
     "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
@@ -41,6 +33,9 @@
     "APIMART_BASE_URL": "https://api.apimart.ai/api/v1",
     "ALLSCALE_BASE_URL": "https://openapi.allscale.io",
     "AUTH_SITE_URL": "https://futbots.cc",
+    // Setting this moves the console off the public site. Unset - local development -
+    // keeps it at /admin on the same origin.
+    "ADMIN_HOSTNAME": "admin.futbots.cc",
     "TELEGRAM_AUTH_ENABLED": "true",
     "API_FOOTBALL_BASE_URL": "https://api-football-proxy.64-186-226-161.sslip.io",
     "API_FOOTBALL_LEAGUES": "1,15,17,39,140,78,135,61,2,3,188,307,169,170,171",

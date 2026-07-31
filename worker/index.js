@@ -24,6 +24,9 @@ import { contextKey, findExistingContext, hasLineupPlayers } from '../src/contex
 import { buildAnalytics, shouldRefreshForAnalytics } from '../src/evaluation.js';
 import { authConfig } from '../src/auth.js';
 import { authorizeApiRequest, guestPredictionCookie } from '../src/guest-access.js';
+import { regionDenial } from '../src/region-access.js';
+import { adminConsoleUrl, allowedOnAdminHost, isAdminHost } from '../src/admin-host.js';
+import { notFound, serveBundle, serveShell } from '../src/asset-response.js';
 import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.js';
 import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
 import { buildAdminDashboard, summarizeDayAccuracy } from '../src/admin-dashboard.js';
@@ -61,6 +64,16 @@ export default {
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
+      const denial = regionDenial(request, url);
+      if (denial) return denial;
+
+      // The two hostnames share this Worker but not their surfaces: the console host
+      // answers only what the console needs, and the public host does not admit that
+      // the console exists.
+      const onAdminHost = isAdminHost(url, env);
+      if (onAdminHost && !allowedOnAdminHost(url.pathname)) return notFound();
+      if (!onAdminHost && url.pathname.startsWith('/api/admin/')) return notFound();
+
       if (request.method === 'GET' && url.pathname === '/api/auth/config') return json(authConfig(env));
       if (request.method === 'GET' && url.pathname === '/auth/telegram/.well-known/openid-configuration') {
         return proxyTelegramDiscovery(url.origin);
@@ -99,10 +112,12 @@ export default {
       }
       const apiResponse = await routeApi(request, env, access);
       if (apiResponse) return apiResponse;
-      if (request.method === 'GET' && RETIRED_CONSOLE_ROUTES.has(url.pathname)) {
-        return Response.redirect(new URL('/admin', url.origin).toString(), 301);
+      if (request.method === 'GET' && onAdminHost && (url.pathname === '/' || url.pathname === '/admin')) {
+        return serveShell(env, url, request, '/admin.html');
       }
-      if (request.method === 'GET' && url.pathname === '/admin') {
+      if (request.method === 'GET' && !onAdminHost && (url.pathname === '/admin' || RETIRED_CONSOLE_ROUTES.has(url.pathname))) {
+        const consoleUrl = adminConsoleUrl(env);
+        if (consoleUrl) return Response.redirect(consoleUrl, 301);
         return serveShell(env, url, request, '/admin.html');
       }
       if (request.method === 'GET' && (APP_SHELL_ROUTES.has(url.pathname) || url.pathname.startsWith('/match/'))) {
@@ -145,37 +160,6 @@ export default {
     })());
   }
 };
-
-// The shell names a content-hashed bundle, so a cached copy outlives the file it
-// points at: the next deploy deletes that bundle, the stale HTML still asks for it,
-// and the SPA fallback answers with HTML that the browser tries to run as JavaScript.
-// Nothing renders and the page goes black. Build the headers from scratch - copying
-// the asset response carried its ETag, which let revalidation keep serving the stale
-// body - and use no-store plus CDN-Cache-Control, which is the header Cloudflare's
-// own edge honours.
-async function serveShell(env, url, request, shellPath) {
-  const shell = await env.ASSETS.fetch(new Request(new URL(shellPath, url.origin), request));
-  return new Response(shell.body, {
-    status: shell.status,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store, must-revalidate',
-      'CDN-Cache-Control': 'no-store'
-    }
-  });
-}
-
-// The SPA fallback answers anything it cannot find with index.html, including a
-// bundle that no longer exists - so the browser gets 200 text/html for a <script>
-// and runs the markup as JavaScript. A 404 lets it fail as a failed script load
-// instead, which the error boundary and a plain reload can both recover from.
-async function serveBundle(env, request) {
-  const asset = await env.ASSETS.fetch(request);
-  if (asset.ok && (asset.headers.get('Content-Type') || '').includes('text/html')) {
-    return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-  }
-  return asset;
-}
 
 async function routeApi(request, env, access) {
   const url = new URL(request.url);
