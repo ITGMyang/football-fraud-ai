@@ -454,3 +454,27 @@ test('production frontend assets use content hashes so releases cannot reuse sta
   assert.match(config, /app: fileURLToPath/);
   assert.match(config, /admin: fileURLToPath/);
 });
+
+test('the previous build stays deployed so stale HTML cannot break', async () => {
+  const [script, pkg, wrangler] = await Promise.all([
+    readFile(new URL('../scripts/prune-build.js', import.meta.url), 'utf8'),
+    readFile(new URL('../package.json', import.meta.url), 'utf8'),
+    readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
+  ]);
+
+  // Content hashing only helps if old and new coexist; deleting the previous bundle
+  // turns any stale HTML into a request for a file that no longer exists.
+  assert.match(JSON.parse(pkg).scripts['build:frontend'], /node scripts\/prune-build\.js$/);
+  assert.match(script, /KEEP_GENERATIONS = 3/);
+  assert.match(script, /generations\.json/);
+  // A no-op rebuild must not evict the retained generations.
+  assert.match(script, /generation\.join\('\|'\) !== current\.join\('\|'\)/);
+  // Refusing to prune on an unreadable shell keeps a bad parse from wiping the build.
+  assert.match(script, /refusing to touch public\/build/);
+
+  // The shells must reach the Worker, or its no-store headers never apply.
+  assert.match(wrangler, /"run_worker_first": \[/);
+  assert.ok(wrangler.includes('"/"'), 'the app shell must run through the Worker');
+  assert.ok(wrangler.includes('"/admin"'), 'the console shell must run through the Worker');
+  assert.ok(wrangler.includes('"/api/*"'), 'the API must run through the Worker');
+});

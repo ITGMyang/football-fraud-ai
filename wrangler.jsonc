@@ -17,7 +17,21 @@
     "binding": "ASSETS",
     "html_handling": "none",
     "not_found_handling": "single-page-application",
-    "run_worker_first": true
+    // Listing the routes explicitly: the boolean form did not reach the Worker for
+    // HTML paths, so the shell was answered by the asset layer with its own caching.
+    "run_worker_first": [
+      "/",
+      "/admin",
+      "/login",
+      "/analytics",
+      "/backend",
+      "/data",
+      "/history",
+      "/auth/*",
+      "/match/*",
+      "/api/*",
+      "/media/*"
+    ]
   },
   "vars": {
     "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",

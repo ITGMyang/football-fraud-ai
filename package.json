@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:frontend": "vite --config frontend/vite.config.js",
-    "build:frontend": "vite build --config frontend/vite.config.js",
+    "build:frontend": "vite build --config frontend/vite.config.js && node scripts/prune-build.js",
     "lint": "eslint frontend/src --max-warnings=0",
     "typecheck": "tsc -p frontend/tsconfig.json --noEmit",
     "start": "node src/server.js",

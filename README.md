@@ -106,6 +106,16 @@ npm run cf:dry-run
 npm run cf:deploy
 ```
 
+## 构建产物保留策略
+
+`npm run build:frontend` 构建后会跑 [`scripts/prune-build.js`](scripts/prune-build.js)，**保留最近 3 次构建的 bundle**，而不是只留当前这一次。
+
+原因：内容哈希的意义就是新旧并存。如果每次部署都删掉上一版 bundle，任何拿着旧 HTML 的人——边缘缓存的副本、已经打开的标签页、浏览器前进后退——请求的文件就不存在了，SPA 兜底会返回 HTML，浏览器把 HTML 当 JavaScript 执行，页面直接黑屏。这个失效模式和 CDN 缓存配置无关，**部署前几分钟打开页面的用户照样会中招**。
+
+`public/build/generations.json` 记录保留了哪几代。重复构建同样的源码不会推进代数，否则几次空构建就会把保留的旧版全挤掉。
+
+另外 `wrangler.jsonc` 的 `run_worker_first` 用的是**显式路由列表**而不是 `true`：布尔写法下 HTML 路径不会进 Worker，`/` 和 `/admin` 会被静态资源层直接应答，Worker 设的 `no-store` 响应头根本发不出去。
+
 ## GitHub 自动部署
 
 `.github/workflows/deploy-cloudflare.yml` 会在每次 push 到 `main` 后自动执行测试、lint、类型检查、生产依赖审计和前端构建。所有检查通过后，才会部署 Cloudflare Worker。
