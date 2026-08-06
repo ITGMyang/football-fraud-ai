@@ -375,7 +375,7 @@ async function routeApi(request, env, access) {
   }
 
   if (request.method === 'GET' && url.pathname === '/api/football/matches') {
-    const competitionId = url.searchParams.get('competitionId') || '1';
+    const competitionId = url.searchParams.get('competitionId') || 'all';
     const date = url.searchParams.get('date') || undefined;
     let cached;
     if (competitionId === 'all') {

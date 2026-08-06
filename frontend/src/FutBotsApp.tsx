@@ -818,10 +818,13 @@ function MatchTime({ match }: { match: Match }) {
   );
 }
 
-function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
+function MatchCard({ match, ranking, analyzing, busy, onStart, onSee }: {
   match: Match;
   ranking: RankingView | null;
   analyzing: boolean;
+  // Another match is mid-prediction. The server queues one at a time and rejects the
+  // rest for ninety seconds, so an enabled button here only buys the user an error.
+  busy: boolean;
   onStart: () => void;
   onSee: () => void;
 }) {
@@ -880,9 +883,9 @@ function MatchCard({ match, ranking, analyzing, onStart, onSee }: {
       {match.status === "complete" ? (
         <span className="see-link" role="presentation">Predictions closed</span>
       ) : (
-        <button className="glow-btn glow-btn--dark" onClick={onStart}>
+        <button className="glow-btn glow-btn--dark" onClick={onStart} disabled={busy}>
           <img src="/assets/figma-sparkle-black.svg" alt="" />
-          Start Predicting
+          {busy ? "One at a time" : "Start Predicting"}
         </button>
       )}
     </article>
@@ -1098,6 +1101,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                     match={match}
                     ranking={rankingForMatch(rankings, match.id) as RankingView | null}
                     analyzing={pendingMatchId === match.id}
+                    busy={Boolean(pendingMatchId) && pendingMatchId !== match.id}
                     onStart={() => onStartPrediction(match)}
                     onSee={() => onOpenResult(match)}
                   />
@@ -1131,6 +1135,7 @@ function Dashboard({ navigate, matches, rankings, loading, error, access, sessio
                               match={match}
                               ranking={rankingForMatch(rankings, match.id) as RankingView | null}
                               analyzing={pendingMatchId === match.id}
+                              busy={Boolean(pendingMatchId) && pendingMatchId !== match.id}
                               onStart={() => onStartPrediction(match)}
                               onSee={() => onOpenResult(match)}
                             />
@@ -2208,6 +2213,9 @@ export default function FutBotsApp() {
   // Starting from a match card runs the prediction in place: the card swaps to its
   // spinner, the user keeps browsing, and the toast brings them to the result.
   function startPrediction(match: Match) {
+    // A second tap before React has re-rendered would otherwise reach the server and
+    // come back as a rate limit, which reads as a fault rather than as "wait".
+    if (analysisPending) return;
     setError("");
     setSelectedMatch(match);
     setSelectedRanking(rankingForMatch(rankings, match.id) as RankingView | null);

@@ -7,9 +7,18 @@ import {
 } from './api-football.js';
 import { createSupabaseStorage } from './supabase-storage.js';
 
+// Leagues chosen for how well the provider covers them, not for how big they are:
+// a prediction is only as good as the statistics behind it, and a competition with
+// thin data produces confident-looking noise. Ids are API-Football's.
 export const DEFAULT_API_FOOTBALL_LEAGUES = [
-  '1', '15', '17', '39', '140', '78', '135', '61',
-  '2', '3', '188', '307', '169', '170', '171'
+  // Europe's big five, plus the two continental cups they feed.
+  '39', '140', '78', '135', '61', '2', '3',
+  // Europe beyond the big five, all with full pre-match statistics.
+  '94', '88', '203', '144', '235', '179',
+  // The Americas.
+  '253', '262', '71', '128',
+  // Asia-Pacific.
+  '98', '292', '188'
 ];
 
 export function configuredApiFootballLeagues(env = {}) {

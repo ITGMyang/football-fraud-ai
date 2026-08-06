@@ -1492,6 +1492,18 @@ input:focus-visible {
   transition: filter var(--hover), transform var(--hover);
 }
 
+/* One prediction at a time: the server queues them and rejects the rest for ninety
+   seconds, so the button says so instead of letting the user earn a rate limit. */
+.glow-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+.glow-btn:disabled:hover {
+  transform: none;
+}
+
 .glow-btn:hover {
   filter: drop-shadow(0px 0px 26px rgba(255, 255, 255, 0.7));
   transform: translateY(-1px);

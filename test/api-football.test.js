@@ -17,6 +17,7 @@ import {
   aggregateApiFootballSchedules,
   buildApiFootballSchedules,
   configuredApiFootballLeagues,
+  DEFAULT_API_FOOTBALL_LEAGUES,
   enrichContextsWithScheduleTeams,
   filterApiFootballSchedules,
   isOddsCheckDue,
@@ -591,4 +592,25 @@ test('Cloudflare routes and cron use API-Football exclusively', async () => {
   assert.doesNotMatch(worker, /fetchDongqiudi|refreshDongqiudi|\/api\/dongqiudi/);
   assert.match(config, /"API_FOOTBALL_LEAGUES"/);
   assert.doesNotMatch(config, /DONGQIUDI_COMPETITIONS/);
+});
+
+test('the league list is the one the product decided on, in both places it is written', async () => {
+  const [wrangler, source] = await Promise.all([
+    readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
+    readFile(new URL('../src/api-football-cache.js', import.meta.url), 'utf8')
+  ]);
+  const deployed = wrangler.match(/"API_FOOTBALL_LEAGUES": "([^"]+)"/)[1].split(',');
+
+  // The deployed variable and the in-code default drifting apart means local runs and
+  // production quietly cover different competitions.
+  assert.deepEqual(deployed, DEFAULT_API_FOOTBALL_LEAGUES);
+  assert.equal(new Set(deployed).size, deployed.length, 'a repeated id is a wasted API call');
+
+  // Dropped on purpose: out of season, or too thin on data to predict from.
+  for (const retired of ['1', '15', '17', '307', '169', '170', '171']) {
+    assert.equal(deployed.includes(retired), false, `league ${retired} was retired`);
+  }
+  // League 1 is gone, so a bare request must not default to it.
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  assert.match(worker, /searchParams\.get\('competitionId'\) \|\| 'all'/);
 });
