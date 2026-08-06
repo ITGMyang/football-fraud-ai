@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildWeightedConsensus,
   buildWeeklySettlementFromSnapshots,
+  PREDICTION_PIPELINE_VERSION,
   resolveOptimizedPrediction,
   settleWeeklyModelPerformance
 } from '../src/prediction-strategy.js';
@@ -319,4 +320,38 @@ test('every configured model can be named by a settings row', async () => {
   for (const key of new Set(keys)) {
     assert.match(strategy, new RegExp(`\\n  ${key}: '`), `${key} is missing from DEFAULT_ALIASES`);
   }
+});
+
+test('a consensus from an older pipeline is regenerated rather than served', async () => {
+  const stale = {
+    phase: 'early',
+    ranking: { id: 'old', results: [{ modelName: 'Qwen', picks: [] }], pipelineVersion: '2026-01-01.something-else' }
+  };
+  let generated = 0;
+  const storage = {
+    ...memoryStorage({ settings: { championModelKey: 'qwen', liveModelKeys: [], modelWeights: {} } }),
+    readCurrentPredictionConsensus: async () => stale
+  };
+  const rankFn = async () => {
+    generated += 1;
+    return { results: [{ modelName: 'Qwen', modelId: 'qwen/test', picks: [], scorePicks: [], bttsPick: null }] };
+  };
+
+  // Changing how a prediction is computed makes every stored one stale, and serving it
+  // anyway shows the user a pick the current pipeline would not make.
+  const result = await resolveOptimizedPrediction({
+    fixtureId: '1', storage, rankFn, env: { MODEL_QWEN: 'qwen/test' }, matchContext: {}
+  });
+
+  assert.equal(generated, 1, 'the stale consensus must not be served');
+  assert.equal(result.cacheHit, false);
+  assert.equal(result.ranking.pipelineVersion, PREDICTION_PIPELINE_VERSION);
+
+  // And one from the current pipeline is still reused, or every request would pay again.
+  stale.ranking.pipelineVersion = PREDICTION_PIPELINE_VERSION;
+  const reused = await resolveOptimizedPrediction({
+    fixtureId: '1', storage, rankFn, env: { MODEL_QWEN: 'qwen/test' }, matchContext: {}
+  });
+  assert.equal(generated, 1);
+  assert.equal(reused.cacheHit, true);
 });

@@ -5,6 +5,18 @@ import { contextKey } from './context-utils.js';
 import { buildPoissonBaseline } from './poisson.js';
 import { buildMarketBaseline, compareToBaseline } from './market-odds.js';
 
+// Bump this whenever a change alters what a prediction would say. A published
+// consensus records the version that produced it, and one from an older pipeline is
+// not served as if it were current - it regenerates the next time somebody asks for
+// that fixture, rather than every stored prediction being recomputed at once for
+// fixtures nobody is looking at.
+//
+// 2026-08-06: handicap markets are built from the line the market quotes. Before this,
+// a match with no odds read was offered an invented handicap, and one with odds was
+// offered whichever rows arrived first, so a published pick could name a line no
+// bookmaker had.
+export const PREDICTION_PIPELINE_VERSION = '2026-08-06.handicap-main-line';
+
 const DEFAULT_SETTINGS = Object.freeze({
   championModelKey: 'qwen',
   liveModelKeys: ['gpt', 'claude', 'gemini'],
@@ -36,7 +48,7 @@ export async function resolveOptimizedPrediction({
 }) {
   const phase = predictionPhase(matchContext, now);
   const current = await storage.readCurrentPredictionConsensus(fixtureId);
-  if (current?.phase === phase && current.ranking) {
+  if (current?.phase === phase && current.ranking && current.ranking.pipelineVersion === PREDICTION_PIPELINE_VERSION) {
     return {
       cacheHit: true,
       freshResults: [],
@@ -142,6 +154,7 @@ export async function resolveOptimizedPrediction({
       marketComparison: compareToBaseline(marketBaseline, poissonBaseline),
       createdAt: new Date(now).toISOString(),
       predictionPhase: phase,
+      pipelineVersion: PREDICTION_PIPELINE_VERSION,
       disclaimer: 'AI predictions are probabilistic and are not financial advice.'
     };
     await storage.publishPredictionConsensus({
