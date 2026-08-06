@@ -305,3 +305,18 @@ function evaluationRows(modelName, total, hits) {
     hit: index < hits
   }));
 }
+
+test('every configured model can be named by a settings row', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const [openrouter, strategy] = await Promise.all([
+    readFile(new URL('../src/openrouter.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/prediction-strategy.js', import.meta.url), 'utf8')
+  ]);
+
+  // A key that configuredModels can produce but the alias table does not know would
+  // resolve to the raw key, and the model call would fail with "model not found".
+  const keys = [...openrouter.matchAll(/env\.MODEL_([A-Z]+)\b/g)].map((match) => match[1].toLowerCase());
+  for (const key of new Set(keys)) {
+    assert.match(strategy, new RegExp(`\\n  ${key}: '`), `${key} is missing from DEFAULT_ALIASES`);
+  }
+});

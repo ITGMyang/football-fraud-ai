@@ -17,7 +17,8 @@ export function configuredModels(env = process.env) {
     [cleanEnvValue(env.MODEL_GPT_LABEL) || 'GPT', cleanEnvValue(env.MODEL_GPT), 'GPT', modelProvider(env, 'GPT')],
     [cleanEnvValue(env.MODEL_CLAUDE_LABEL) || 'Claude', cleanEnvValue(env.MODEL_CLAUDE), 'Claude', modelProvider(env, 'CLAUDE')],
     [cleanEnvValue(env.MODEL_GEMINI_LABEL) || 'Gemini', cleanEnvValue(env.MODEL_GEMINI), 'Gemini', modelProvider(env, 'GEMINI')],
-    [cleanEnvValue(env.MODEL_QWEN_LABEL) || 'Qwen', cleanEnvValue(env.MODEL_QWEN), 'Qwen', modelProvider(env, 'QWEN')]
+    [cleanEnvValue(env.MODEL_QWEN_LABEL) || 'Qwen', cleanEnvValue(env.MODEL_QWEN), 'Qwen', modelProvider(env, 'QWEN')],
+    [cleanEnvValue(env.MODEL_DEEPSEEK_LABEL) || 'DeepSeek', cleanEnvValue(env.MODEL_DEEPSEEK), 'DeepSeek', modelProvider(env, 'DEEPSEEK')]
   ].filter(([, model]) => model);
 }
 

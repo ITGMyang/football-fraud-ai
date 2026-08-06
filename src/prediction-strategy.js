@@ -11,11 +11,14 @@ const DEFAULT_SETTINGS = Object.freeze({
   modelWeights: {}
 });
 
+// Only used when the env names no label for a key, so a settings row naming a model
+// still resolves. Every key configuredModels can produce belongs here.
 const DEFAULT_ALIASES = Object.freeze({
   gpt: 'GPT',
   claude: 'Claude',
   gemini: 'Gemini',
-  qwen: 'Qwen'
+  qwen: 'Qwen',
+  deepseek: 'DeepSeek'
 });
 
 export async function resolveOptimizedPrediction({
