@@ -3,6 +3,12 @@ import { buildPoissonBaseline, poissonPromptSummary } from './poisson.js';
 import { buildMarketBaseline, compareToBaseline, marketPromptSummary } from './market-odds.js';
 import { fetchTeamNews, teamNewsPromptSummary } from './team-news.js';
 
+// A reasoning model spends this budget on its chain of thought before it writes a
+// single character of the answer, so the budget has to cover both. At 2200 the
+// champion model burned the whole allowance thinking, returned finish_reason=length
+// with empty content, and every prediction failed - while still being billed.
+const COMPLETION_TOKEN_BUDGET = 8000;
+
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];
 
@@ -91,7 +97,7 @@ async function callRankingModel({ label, model, provider, markets, env, fetchImp
       system: rankingSystemPromptV2(),
       user: rankingUserPromptV2(markets, matchContext, retry, statisticalBaseline, marketConsensus, teamNewsSummary),
       temperature: retry ? 0 : 0.15,
-      maxTokens: 2200
+      maxTokens: COMPLETION_TOKEN_BUDGET
     });
     const response = await fetchImpl(request.url, {
       method: 'POST',
@@ -314,14 +320,6 @@ function completionTokenLimit(provider, limit) {
     : { max_tokens: limit };
 }
 
-function completionTokenBudget(provider, fallback, model = '') {
-  const normalizedProvider = String(provider).toLowerCase();
-  const normalizedModel = String(model).toLowerCase();
-  if (normalizedProvider === 'openai') return 8000;
-  if (normalizedProvider === 'apimart' && normalizedModel.includes('gemini')) return 8000;
-  return fallback;
-}
-
 function modelTemperature(provider, value) {
   return String(provider).toLowerCase() === 'openai'
     ? {}
@@ -336,7 +334,7 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
         model,
         instructions: system,
         input: user,
-        max_output_tokens: completionTokenBudget(provider, maxTokens, model),
+        max_output_tokens: maxTokens,
         text: { format: { type: 'json_object' } }
       }
     };
@@ -347,7 +345,7 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
     body: {
       model,
       ...modelTemperature(provider, temperature),
-      ...completionTokenLimit(provider, completionTokenBudget(provider, maxTokens, model)),
+      ...completionTokenLimit(provider, maxTokens),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user }
@@ -356,7 +354,14 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
       // OpenRouter only returns usage.cost when accounting is requested. Without it
       // every OpenRouter model reports a zero spend in the console.
       ...(String(provider).toLowerCase() === 'openrouter'
-        ? { usage: { include: true }, ...openRouterProviderRouting(env) }
+        ? {
+          usage: { include: true },
+          // Measured on the champion model: low effort cut reasoning from 3059 to
+          // 2423 tokens and 65s to 57s, with the same answer. Ignored by models that
+          // do not reason.
+          reasoning: { effort: 'low' },
+          ...openRouterProviderRouting(env)
+        }
         : {})
     }
   };

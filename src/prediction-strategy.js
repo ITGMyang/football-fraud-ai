@@ -109,7 +109,19 @@ export async function resolveOptimizedPrediction({
     }));
     await storage.appendPredictionSnapshots(snapshots);
     const successfulResults = generated.filter((result) => result && !result.error);
-    if (!successfulResults.length) throw new Error('No prediction model returned a valid result');
+    if (!successfulResults.length) {
+      // Every model failing is a total outage, and it used to leave no trace: the model
+      // errors were swallowed into the result objects and the caller only ever saw
+      // "no valid result", which says nothing about why. Say what each model said.
+      const reasons = generated.filter(Boolean).map((result) => `${result.modelName}: ${result.error}`);
+      console.error(JSON.stringify({
+        event: 'prediction_all_models_failed',
+        fixtureId: String(fixtureId),
+        phase,
+        reasons
+      }));
+      throw new Error(`No prediction model returned a valid result (${reasons.join('; ')})`);
+    }
 
     const publicResult = phase === 'live'
       ? { ...buildWeightedConsensus(successfulResults, settings.modelWeights), predictionPhase: phase }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rankMarkets } from '../src/openrouter.js';
 import { buildMarket } from '../src/domain.js';
+import { readFile } from 'node:fs/promises';
 
 test('ranks markets from one model and keeps top four sorted by AI probability', async () => {
   const markets = [
@@ -1230,4 +1231,36 @@ test('a fixture without odds still ranks, with no market block in the prompt', a
   assert.equal(ranking.marketBaseline.available, false);
   assert.equal(ranking.marketComparison, null);
   assert.equal(ranking.results[0].error, undefined);
+});
+
+test('the token budget covers a model that thinks before it answers', async () => {
+  const source = await readFile(new URL('../src/openrouter.js', import.meta.url), 'utf8');
+
+  // A reasoning model spends the completion budget on its chain of thought first. At
+  // 2200 the champion model used the whole allowance thinking, returned empty content
+  // with finish_reason=length, and every prediction failed while still being billed.
+  assert.match(source, /const COMPLETION_TOKEN_BUDGET = 8000;/);
+  assert.match(source, /maxTokens: COMPLETION_TOKEN_BUDGET/);
+  assert.doesNotMatch(source, /maxTokens: \d+/);
+});
+
+test('an OpenRouter request asks for the full budget and bounds the thinking', async () => {
+  let sent = null;
+  await rankMarkets(
+    [buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })],
+    'Qwen',
+    { OPENROUTER_API_KEY: 'key', OPENROUTER_BASE_URL: 'https://openrouter.test/v1', MODEL_QWEN: 'qwen/qwen3.7-max', MODEL_QWEN_PROVIDER: 'openrouter' },
+    async (url, options) => {
+      sent = JSON.parse(options.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"picks":[]}' }, finish_reason: 'stop' }] }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    },
+    null,
+    { searched: false, reason: 'test' }
+  );
+
+  assert.equal(sent.max_tokens, 8000);
+  // Headroom without a bound on the thinking is just a bigger bill.
+  assert.deepEqual(sent.reasoning, { effort: 'low' });
 });
