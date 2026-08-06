@@ -542,17 +542,11 @@ function contextCandidateMarkets(context) {
   const scores = ['0:0', '0:1', '1:1', '1:2', '0:2', '1:0', '2:1', '2:2', '3:0', '0:3', '3:1', '1:3', '4:0', '0:4'];
   const liveHandicapMarkets = liveHandicapMarketsFromContext(context, home, away, matchName);
   const liveTotalMarkets = liveTotalMarketsFromContext(context, matchName);
-  const fallbackHandicapMarkets = [
-    { id: 'ctx-handicap-home-plus-0.5', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: home, line: '+0.5', odds: null },
-    { id: 'ctx-handicap-away-minus-0.5', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: away, line: '-0.5', odds: null },
-    { id: 'ctx-handicap-home-plus-1', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: home, line: '+1', odds: null },
-    { id: 'ctx-handicap-away-minus-1', matchName, marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8', selection: away, line: '-1', odds: null }
-  ];
   return [
     { id: 'ctx-moneyline-home', matchName, marketType: '\u8db3\u7403 \u80dc\u5e73\u8d1f', selection: home, line: '\u80dc\u5e73\u8d1f', odds: null },
     { id: 'ctx-moneyline-draw', matchName, marketType: '\u8db3\u7403 \u80dc\u5e73\u8d1f', selection: '\u5e73\u5c40', line: '\u80dc\u5e73\u8d1f', odds: null },
     { id: 'ctx-moneyline-away', matchName, marketType: '\u8db3\u7403 \u80dc\u5e73\u8d1f', selection: away, line: '\u80dc\u5e73\u8d1f', odds: null },
-    ...(liveHandicapMarkets.length ? liveHandicapMarkets : fallbackHandicapMarkets),
+    ...liveHandicapMarkets,
     ...(liveTotalMarkets.length ? liveTotalMarkets : [
       { id: 'ctx-total-over-2.5', matchName, marketType: '\u8db3\u7403 \u5927\u5c0f\u7403', selection: '\u5927', line: '2.5', odds: null },
       { id: 'ctx-total-under-2.5', matchName, marketType: '\u8db3\u7403 \u5927\u5c0f\u7403', selection: '\u5c0f', line: '2.5', odds: null },
@@ -563,40 +557,82 @@ function contextCandidateMarkets(context) {
   ];
 }
 
-function liveHandicapMarketsFromContext(context, home, away, matchName) {
-  const rows = context?.index?.live?.asia || [];
-  const seen = new Set();
-  const markets = [];
+// The handicap offered to the model is the market's own line, taken from the odds.
+//
+// It used to be whichever rows happened to come first, plus a fixed fallback of home
+// +0.5/+1 and away -0.5/-1 when no odds had been read. That fallback gave the home
+// team plus lines and the away team minus lines whatever the match looked like, so a
+// home favourite giving half a goal was offered "+1" - the wrong side and the wrong
+// number - and two identical-looking matches could come out with opposite signs.
+//
+// A handicap that names no line the market quotes cannot be checked against anything,
+// so when there are no odds there is no handicap market rather than an invented one.
+// Which side gives goals is what the line text says, and that is authoritative: the
+// sign convention on lineValue is not the same in every feed, so reading the number
+// alone flips the favourite in half the sources.
+function homeSignedLine(row = {}) {
+  const value = Number(row?.lineValue);
+  if (!Number.isFinite(value)) return null;
+  const text = String(row?.line || '');
+  if (/\u53d7/.test(text)) return Math.abs(value);
+  if (/\u8ba9/.test(text)) return -Math.abs(value);
+  // No text to go on: a bare positive number is the goals the home team gives away.
+  return -value;
+}
+
+export function mainHandicapLine(rows = []) {
+  const byLine = new Map();
   for (const row of rows) {
-    const lineInfo = handicapLinesFromLiveRow(row);
-    if (!lineInfo) continue;
-    const homeKey = `home:${lineInfo.homeLine}`;
-    if (!seen.has(homeKey)) {
-      seen.add(homeKey);
-      markets.push({
-        id: `ctx-live-handicap-home-${slugLine(lineInfo.homeLine)}`,
-        matchName,
-        marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8',
-        selection: home,
-        line: lineInfo.homeLine,
-        odds: numericOrNull(row.home)
-      });
-    }
-    const awayKey = `away:${lineInfo.awayLine}`;
-    if (!seen.has(awayKey)) {
-      seen.add(awayKey);
-      markets.push({
-        id: `ctx-live-handicap-away-${slugLine(lineInfo.awayLine)}`,
-        matchName,
-        marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8',
-        selection: away,
-        line: lineInfo.awayLine,
-        odds: numericOrNull(row.away)
-      });
-    }
-    if (markets.length >= 6) break;
+    const line = homeSignedLine(row);
+    const home = Number(row?.home);
+    const away = Number(row?.away);
+    // Prices may be decimal or Hong Kong, so only "quoted at all" can be checked here.
+    if (line === null || !(home > 0) || !(away > 0)) continue;
+    const bucket = byLine.get(line) || { line, books: 0, spread: 0, home: 0, away: 0 };
+    bucket.books += 1;
+    bucket.spread += Math.abs(home - away);
+    bucket.home += home;
+    bucket.away += away;
+    byLine.set(line, bucket);
   }
-  return markets;
+  if (!byLine.size) return null;
+  // The main line is the one most books quote; when they tie, the one whose two prices
+  // sit closest together, which is what makes a line the market's line.
+  const best = [...byLine.values()]
+    .map((bucket) => ({ ...bucket, spread: bucket.spread / bucket.books }))
+    .sort((left, right) => right.books - left.books || left.spread - right.spread)[0];
+  return {
+    line: best.line,
+    homeOdds: Math.round((best.home / best.books) * 100) / 100,
+    awayOdds: Math.round((best.away / best.books) * 100) / 100,
+    books: best.books
+  };
+}
+
+function liveHandicapMarketsFromContext(context, home, away, matchName) {
+  const main = mainHandicapLine(context?.index?.live?.asia || []);
+  if (!main) return [];
+  // lineValue is signed from the home side, so the away team's line is its mirror.
+  const homeLine = formatSignedLine(main.line);
+  const awayLine = formatSignedLine(-main.line);
+  return [
+    {
+      id: `ctx-handicap-home-${slugLine(homeLine)}`,
+      matchName,
+      marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8',
+      selection: home,
+      line: homeLine,
+      odds: main.homeOdds
+    },
+    {
+      id: `ctx-handicap-away-${slugLine(awayLine)}`,
+      matchName,
+      marketType: '\u8db3\u7403 \u4e9a\u6d32\u8ba9\u5206\u76d8',
+      selection: away,
+      line: awayLine,
+      odds: main.awayOdds
+    }
+  ];
 }
 
 function liveTotalMarketsFromContext(context, matchName) {
@@ -628,16 +664,6 @@ function liveTotalMarketsFromContext(context, matchName) {
   return markets;
 }
 
-function handicapLinesFromLiveRow(row = {}) {
-  const absLine = Math.abs(Number(row.lineValue));
-  if (!Number.isFinite(absLine) || absLine <= 0) return null;
-  const text = String(row.line || '');
-  if (/\u53d7/.test(text)) return { homeLine: formatSignedLine(absLine), awayLine: formatSignedLine(-absLine) };
-  if (/\u8ba9/.test(text)) return { homeLine: formatSignedLine(-absLine), awayLine: formatSignedLine(absLine) };
-  const signed = Number(row.lineValue);
-  return { homeLine: formatSignedLine(-signed), awayLine: formatSignedLine(signed) };
-}
-
 function formatSignedLine(value) {
   const rounded = Math.round(Number(value) * 100) / 100;
   const text = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/0+$/, '').replace(/\.$/, '');
@@ -646,8 +672,8 @@ function formatSignedLine(value) {
 
 function slugLine(line) {
   return String(line)
-    .replace('+', 'plus-')
-    .replace('-', 'minus-')
+    .replace(/^\+/, 'plus-')
+    .replace(/^-/, 'minus-')
     .replace(/[./\s]+/g, '-');
 }
 

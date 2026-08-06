@@ -474,20 +474,23 @@ function moneylineRow(company, values = []) {
   return row.home || row.line || row.away ? row : null;
 }
 
+// lineValue is always the handicap from the home side, whichever side the bookmaker
+// happens to list first. Seeding it from an Away entry left the sign inverted for any
+// bookmaker that quotes only one side, and inverted is worse than missing: it names
+// the wrong team as the one giving goals.
 function handicapRows(company, values = []) {
   const grouped = new Map();
   for (const item of values) {
     const match = String(item?.value || '').match(/^(Home|Away)\s+([+-]?\d+(?:\.\d+)?)$/i);
     if (!match) continue;
     const side = match[1].toLowerCase();
-    const line = Number(match[2]);
-    const key = String(Math.abs(line));
-    const row = grouped.get(key) || { market: '让球', company: company || '', home: '', line: line < 0 ? '让' : '受让', lineValue: String(line), away: '', updatedAt: '' };
+    const quoted = Number(match[2]);
+    const homeLine = side === 'home' ? quoted : -quoted;
+    const key = String(Math.abs(quoted));
+    const row = grouped.get(key) || { market: '让球', company: company || '', home: '', line: '', lineValue: '', away: '', updatedAt: '' };
     row[side] = item.odd || '';
-    if (side === 'home') {
-      row.line = line < 0 ? '让' : '受让';
-      row.lineValue = String(line);
-    }
+    row.line = homeLine < 0 ? '让' : '受让';
+    row.lineValue = String(homeLine);
     grouped.set(key, row);
   }
   return [...grouped.values()];

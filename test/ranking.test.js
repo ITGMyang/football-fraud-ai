@@ -1264,3 +1264,69 @@ test('an OpenRouter request asks for the full budget and bounds the thinking', a
   // Headroom without a bound on the thinking is just a bigger bill.
   assert.deepEqual(sent.reasoning, { effort: 'low' });
 });
+
+test('the handicap offered is the line the market actually quotes, on the right side', async () => {
+  // Reported from the site: a home favourite giving half a goal came out as "+1", and
+  // a home favourite giving two and a quarter came out as "-1". Neither number was a
+  // line any bookmaker had quoted, and the signs disagreed with each other.
+  let sent = [];
+  const capture = async (_url, options) => {
+    sent = JSON.parse(JSON.parse(options.body).messages[1].content).markets;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"picks":[]}' }, finish_reason: 'stop' }] }));
+  };
+  const env = { OPENROUTER_API_KEY: 'test', MODEL_GPT: 'openai/test' };
+
+  // Home gives 0.5, quoted by three books; a stray 1.5 row quoted once must not win.
+  await rankMarkets([], 'GPT', env, capture, {
+    teams: ['Maccabi Tel Aviv', 'CSKA Sofia'],
+    matchName: 'Maccabi Tel Aviv v CSKA Sofia',
+    index: { live: { asia: [
+      { company: 'A', home: '1.93', line: '让', lineValue: '-0.5', away: '1.90' },
+      { company: 'B', home: '1.95', line: '让', lineValue: '-0.5', away: '1.88' },
+      { company: 'C', home: '1.90', line: '让', lineValue: '-0.5', away: '1.92' },
+      { company: 'A', home: '2.90', line: '让', lineValue: '-1.5', away: '1.40' }
+    ] } }
+  });
+
+  const handicaps = sent.filter((market) => /handicap/.test(market.id)).map((m) => `${m.selection} ${m.line}`);
+  assert.deepEqual(handicaps, ['Maccabi Tel Aviv -0.5', 'CSKA Sofia +0.5']);
+});
+
+test('a quarter-goal favourite keeps its own line rather than a rounded one', async () => {
+  let sent = [];
+  const capture = async (_url, options) => {
+    sent = JSON.parse(JSON.parse(options.body).messages[1].content).markets;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"picks":[]}' }, finish_reason: 'stop' }] }));
+  };
+
+  await rankMarkets([], 'GPT', { OPENROUTER_API_KEY: 'test', MODEL_GPT: 'openai/test' }, capture, {
+    teams: ['Benfica', 'Heart Of Midlothian'],
+    matchName: 'Benfica v Heart Of Midlothian',
+    index: { live: { asia: [
+      { company: 'A', home: '1.90', line: '让', lineValue: '-2.25', away: '1.92' },
+      { company: 'B', home: '1.88', line: '让', lineValue: '-2.25', away: '1.94' }
+    ] } }
+  });
+
+  const handicaps = sent.filter((market) => /handicap/.test(market.id)).map((m) => `${m.selection} ${m.line}`);
+  assert.deepEqual(handicaps, ['Benfica -2.25', 'Heart Of Midlothian +2.25']);
+});
+
+test('with no odds there is no handicap market rather than an invented one', async () => {
+  let sent = [];
+  const capture = async (_url, options) => {
+    sent = JSON.parse(JSON.parse(options.body).messages[1].content).markets;
+    return new Response(JSON.stringify({ choices: [{ message: { content: '{"picks":[]}' }, finish_reason: 'stop' }] }));
+  };
+
+  await rankMarkets([], 'GPT', { OPENROUTER_API_KEY: 'test', MODEL_GPT: 'openai/test' }, capture, {
+    teams: ['A', 'B'],
+    matchName: 'A v B',
+    index: { live: { asia: [] } }
+  });
+
+  // The old fallback offered the home team +0.5/+1 and the away team -0.5/-1 whatever
+  // the match looked like, which is where the wrong side and the wrong number came from.
+  assert.deepEqual(sent.filter((market) => /handicap/.test(market.id)), []);
+  assert.ok(sent.some((market) => /moneyline/.test(market.id)), 'the rest of the card still stands');
+});

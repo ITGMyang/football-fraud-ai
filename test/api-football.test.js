@@ -658,3 +658,27 @@ test('with no history date left to backfill the rotation is just the upcoming da
   assert.deepEqual(slice.rotation, ['2026-08-06', '2026-08-07', '2026-08-08']);
   assert.equal(slice.isHistory, false);
 });
+
+test('the handicap line is signed from the home side whichever side the book lists', async () => {
+  const oddsOnly = (values) => async (url) => {
+    const path = new URL(url).pathname;
+    if (path === '/fixtures') return response([fixture]);
+    if (path === '/odds') return response([{ bookmakers: [{ name: 'Bet365', bets: [{ name: 'Asian Handicap', values }] }] }]);
+    return response([]);
+  };
+
+  // Seeding the row from an Away entry left the sign inverted for any bookmaker that
+  // quotes one side only, and inverted names the wrong team as the one giving goals.
+  const awayFirst = await fetchApiFootballContext('123456', { apiKey: 'test-key' }, oddsOnly([
+    { value: 'Away +1.25', odd: '1.85' },
+    { value: 'Home -1.25', odd: '1.95' }
+  ]));
+  const awayOnly = await fetchApiFootballContext('123456', { apiKey: 'test-key' }, oddsOnly([
+    { value: 'Away +1.25', odd: '1.85' }
+  ]));
+
+  assert.equal(awayFirst.index.live.asia[0].lineValue, '-1.25');
+  assert.equal(awayFirst.index.live.asia[0].line, '\u8ba9');
+  assert.equal(awayOnly.index.live.asia[0].lineValue, '-1.25');
+  assert.equal(awayOnly.index.live.asia[0].line, '\u8ba9');
+});
