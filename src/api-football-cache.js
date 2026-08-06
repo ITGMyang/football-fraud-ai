@@ -33,6 +33,16 @@ export function filterApiFootballSchedules(schedules = []) {
   return schedules.filter((schedule) => schedule?.source === 'api-football');
 }
 
+// Retiring a league stops it being refreshed, but its rows stay in the database and
+// kept appearing on the site indefinitely - the config said one thing and users saw
+// another. The configured list is what is visible, and rows for a league added back
+// later are still there waiting.
+export function visibleApiFootballSchedules(schedules = [], env = {}) {
+  const configured = new Set(configuredApiFootballLeagues(env).map(String));
+  return filterApiFootballSchedules(schedules)
+    .filter((schedule) => configured.has(String(schedule.competitionId)));
+}
+
 export function enrichContextsWithScheduleTeams(contexts = [], schedules = []) {
   const matchesById = new Map(
     filterApiFootballSchedules(schedules)

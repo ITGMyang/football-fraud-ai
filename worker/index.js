@@ -12,7 +12,8 @@ import {
   filterApiFootballSchedules,
   isOddsCheckDue,
   mergeScheduleDate,
-  refreshApiFootballScheduleCache
+  refreshApiFootballScheduleCache,
+  visibleApiFootballSchedules
 } from '../src/api-football-cache.js';
 import { rankMarkets } from '../src/openrouter.js';
 import {
@@ -344,7 +345,7 @@ async function routeApi(request, env, access) {
   if (request.method === 'GET' && url.pathname === '/api/backend/schedules') {
     if (access.role !== 'user') return json({ error: 'Sign in to view the data console' }, 401);
     return json({
-      schedules: filterApiFootballSchedules(await storage.listMatchSchedules()),
+      schedules: visibleApiFootballSchedules(await storage.listMatchSchedules(), env),
       generatedAt: new Date().toISOString()
     });
   }
@@ -379,10 +380,10 @@ async function routeApi(request, env, access) {
     const date = url.searchParams.get('date') || undefined;
     let cached;
     if (competitionId === 'all') {
-      let schedules = filterApiFootballSchedules(await storage.listMatchSchedules());
+      let schedules = visibleApiFootballSchedules(await storage.listMatchSchedules(), env);
       if (!schedules.length) {
         await refreshScheduleAndRecord(env, storage, workerFetch);
-        schedules = filterApiFootballSchedules(await storage.listMatchSchedules());
+        schedules = visibleApiFootballSchedules(await storage.listMatchSchedules(), env);
       }
       cached = aggregateApiFootballSchedules(schedules, date);
     } else {

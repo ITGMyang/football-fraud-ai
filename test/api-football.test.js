@@ -23,6 +23,7 @@ import {
   isOddsCheckDue,
   mergeScheduleDate,
   mergeScheduleMatches,
+  visibleApiFootballSchedules,
   mergeScheduleSnapshot,
   selectHistoryBackfillDate,
   upcomingRefreshDates
@@ -613,4 +614,22 @@ test('the league list is the one the product decided on, in both places it is wr
   // League 1 is gone, so a bare request must not default to it.
   const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
   assert.match(worker, /searchParams\.get\('competitionId'\) \|\| 'all'/);
+});
+
+test('a retired league stops being shown even though its rows remain', () => {
+  const schedules = [
+    { source: 'api-football', competitionId: '39', matches: [{ matchId: 'a' }] },
+    { source: 'api-football', competitionId: '169', matches: [{ matchId: 'b' }] },
+    { source: 'dongqiudi', competitionId: '39', matches: [{ matchId: 'c' }] }
+  ];
+  const env = { API_FOOTBALL_LEAGUES: '39,140' };
+
+  // Retiring a league stops the refresh writing it, but the rows already stored kept
+  // being served, so the config said one thing and the site showed another.
+  assert.deepEqual(visibleApiFootballSchedules(schedules, env).map((row) => row.competitionId), ['39']);
+  // Rows for a retired league are kept, not deleted, so adding it back needs no backfill.
+  assert.deepEqual(
+    visibleApiFootballSchedules(schedules, { API_FOOTBALL_LEAGUES: '39,169' }).map((row) => row.competitionId),
+    ['39', '169']
+  );
 });
