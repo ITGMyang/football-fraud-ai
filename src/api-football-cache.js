@@ -21,6 +21,16 @@ export const DEFAULT_API_FOOTBALL_LEAGUES = [
   '98', '292', '188'
 ];
 
+// Leaves room inside the 50-subrequest limit for pagination and the Supabase reads and
+// writes that bracket the refresh.
+const ODDS_CALLS_PER_RUN = 20;
+
+function rotateByClock(items, offset) {
+  if (items.length <= 1) return items;
+  const start = ((offset % items.length) + items.length) % items.length;
+  return [...items.slice(start), ...items.slice(0, start)];
+}
+
 export function configuredApiFootballLeagues(env = {}) {
   const configured = String(env.API_FOOTBALL_LEAGUES || '')
     .split(',')
@@ -142,54 +152,54 @@ export function upcomingRefreshDates(today = todayInShanghai()) {
   return [0, 1, 2].map((offset) => offsetDate(today, offset));
 }
 
-export async function refreshApiFootballScheduleCache(env, fetchImpl = fetch) {
+// A Worker gets 50 subrequests per invocation on this plan. One date costs a fixtures
+// call plus a paginated odds call for every league playing that day, so refreshing
+// today, the next two days and a history date in one go stopped fitting the moment the
+// league list grew - "Too many subrequests by single Worker invocation", and the
+// refresh died part-way. Each run now takes one date; the cron fires every twenty
+// minutes, so all four are still covered within the hour, and merging means the dates
+// a run does not touch keep the fixtures they already had.
+export function refreshSliceFor(schedules = [], today = todayInShanghai(), now = Date.now()) {
+  const historyDate = selectHistoryBackfillDate(schedules, today);
+  const rotation = [...upcomingRefreshDates(today), historyDate].filter(Boolean);
+  const slot = Math.floor(now / (20 * 60 * 1000)) % rotation.length;
+  const date = rotation[slot];
+  return { date, isHistory: date === historyDate, rotation };
+}
+
+export async function refreshApiFootballScheduleCache(env, fetchImpl = fetch, now = Date.now()) {
   const workerFetch = (input, init) => fetchImpl(input, init);
   const storage = createSupabaseStorage(env, workerFetch);
-  const date = todayInShanghai();
+  const today = todayInShanghai();
   const fetchedAt = new Date().toISOString();
   const configuredLeagues = configuredApiFootballLeagues(env);
   const existing = await storage.listMatchSchedules();
-  const current = await fetchVerifiedSchedulesForDate(env, date, configuredLeagues, workerFetch, fetchedAt);
-  let schedules = mergeScheduleSets(existing, current.schedules, configuredLeagues);
-  let apiCalls = current.apiCalls;
-  let futureFixturesWithOdds = 0;
+  const slice = refreshSliceFor(existing, today, now);
   const errors = [];
+  let schedules = mergeScheduleSets(existing, [], configuredLeagues);
+  let refreshedDate = null;
 
-  for (const futureDate of upcomingRefreshDates(date).slice(1)) {
-    try {
-      const future = await fetchVerifiedSchedulesForDate(env, futureDate, configuredLeagues, workerFetch, fetchedAt);
-      schedules = mergeScheduleSets(schedules, future.schedules, configuredLeagues);
-      apiCalls += future.apiCalls;
-      futureFixturesWithOdds += future.fixturesWithOdds;
-    } catch (error) {
-      errors.push({ date: futureDate, error: error.message });
-    }
+  try {
+    refreshedDate = await fetchVerifiedSchedulesForDate(env, slice.date, configuredLeagues, workerFetch, fetchedAt);
+    schedules = mergeScheduleSets(schedules, refreshedDate.schedules, configuredLeagues);
+    await storage.upsertMatchSchedules(schedules);
+  } catch (error) {
+    errors.push({ date: slice.date, error: error.message });
   }
-  await storage.upsertMatchSchedules(schedules);
 
-  const historyDate = selectHistoryBackfillDate(schedules, date);
-  let history = null;
-  if (historyDate) {
-    try {
-      history = await fetchVerifiedSchedulesForDate(env, historyDate, configuredLeagues, workerFetch, fetchedAt);
-      schedules = mergeScheduleSets(schedules, history.schedules, configuredLeagues);
-      apiCalls += history.apiCalls;
-      await storage.upsertMatchSchedules(schedules);
-    } catch (error) {
-      errors.push({ date: historyDate, error: error.message });
-    }
-  }
   return {
     source: 'api-football',
-    date,
-    refreshDates: upcomingRefreshDates(date),
+    date: today,
+    refreshedDate: slice.date,
+    isHistoryBackfill: slice.isHistory,
+    refreshDates: slice.rotation,
     fetchedAt,
-    apiCalls,
-    fixtures: current.fixtures,
-    fixturesWithOdds: current.fixturesWithOdds,
-    futureFixturesWithOdds,
-    historyDate,
-    historyFixturesWithOdds: history?.fixturesWithOdds || 0,
+    apiCalls: refreshedDate?.apiCalls || 0,
+    fixtures: refreshedDate?.fixtures || 0,
+    fixturesWithOdds: refreshedDate?.fixturesWithOdds || 0,
+    skippedLeagues: refreshedDate?.skippedLeagues || [],
+    historyDate: slice.isHistory ? slice.date : '',
+    historyFixturesWithOdds: slice.isHistory ? (refreshedDate?.fixturesWithOdds || 0) : 0,
     refreshed: schedules.map((schedule) => ({
       competitionId: schedule.competitionId,
       matches: schedule.matches.length,
@@ -213,8 +223,18 @@ async function fetchVerifiedSchedulesForDate(env, date, configuredLeagues, fetch
       activeLeagues.set(String(match.competitionId), match.season || undefined);
     }
   }
+  // Odds calls are paginated, so even one date can run past the subrequest limit on a
+  // busy day. Cap them and rotate which leagues go first, so no league is permanently
+  // the one that gets dropped.
+  const ordered = rotateByClock([...activeLeagues], Math.floor(Date.now() / (20 * 60 * 1000)));
+  const attempted = ordered.slice(0, ODDS_CALLS_PER_RUN);
+  const skippedLeagues = ordered.slice(ODDS_CALLS_PER_RUN).map(([leagueId]) => leagueId);
+  if (skippedLeagues.length) {
+    console.warn(JSON.stringify({ event: 'api_football_odds_calls_capped', date, skippedLeagues }));
+  }
+
   const oddsFixtureIds = new Set();
-  for (const [leagueId, season] of activeLeagues) {
+  for (const [leagueId, season] of attempted) {
     const leagueFixtureIds = await fetchApiFootballOddsFixtureIds({
       date,
       leagueId,
@@ -228,7 +248,8 @@ async function fetchVerifiedSchedulesForDate(env, date, configuredLeagues, fetch
   const matchesWithOdds = filterMatchesWithOdds(all.matches, oddsFixtureIds);
   return {
     schedules: buildApiFootballSchedules(matchesWithOdds, configuredLeagues, date, fetchedAt),
-    apiCalls: 1 + activeLeagues.size,
+    apiCalls: 1 + attempted.length,
+    skippedLeagues,
     fixtures: all.matches.length,
     fixturesWithOdds: matchesWithOdds.length
   };

@@ -23,6 +23,7 @@ import {
   isOddsCheckDue,
   mergeScheduleDate,
   mergeScheduleMatches,
+  refreshSliceFor,
   visibleApiFootballSchedules,
   mergeScheduleSnapshot,
   selectHistoryBackfillDate,
@@ -632,4 +633,28 @@ test('a retired league stops being shown even though its rows remain', () => {
     visibleApiFootballSchedules(schedules, { API_FOOTBALL_LEAGUES: '39,169' }).map((row) => row.competitionId),
     ['39', '169']
   );
+});
+
+test('a refresh run takes one date, and the rotation covers them all', () => {
+  const today = '2026-08-06';
+  const schedules = [{ source: 'api-football', competitionId: '39', oddsCheckedDates: {}, matches: [] }];
+  const slot = 20 * 60 * 1000;
+
+  // Refreshing four dates in one invocation ran past the 50-subrequest limit once the
+  // league list grew, and the whole refresh died part-way through.
+  const picked = [0, 1, 2, 3, 4].map((index) => refreshSliceFor(schedules, today, index * slot).date);
+  assert.equal(new Set(picked.slice(0, 4)).size, 4, 'four consecutive runs cover four distinct dates');
+  assert.equal(picked[4], picked[0], 'and then it comes round again');
+  assert.ok(picked.includes(today));
+  assert.ok(picked.includes('2026-08-07'));
+  assert.ok(picked.includes('2026-08-08'));
+});
+
+test('with no history date left to backfill the rotation is just the upcoming days', () => {
+  const covered = { '2026-07-31': true, '2026-08-01': true, '2026-08-02': true, '2026-08-03': true, '2026-08-04': true, '2026-08-05': true };
+  const schedules = [{ source: 'api-football', competitionId: '39', oddsCheckedDates: covered, matches: [] }];
+  const slice = refreshSliceFor(schedules, '2026-08-06', 0);
+
+  assert.deepEqual(slice.rotation, ['2026-08-06', '2026-08-07', '2026-08-08']);
+  assert.equal(slice.isHistory, false);
 });
