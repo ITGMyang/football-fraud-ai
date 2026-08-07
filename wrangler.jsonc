@@ -63,6 +63,16 @@
     // Worker would not survive. This one answered in 22s for $0.0012.
     "MODEL_DEEPSEEK": "deepseek/deepseek-chat",
     "MODEL_DEEPSEEK_PROVIDER": "openrouter",
-    "MODEL_DEEPSEEK_LABEL": "DeepSeek"
+    "MODEL_DEEPSEEK_LABEL": "DeepSeek",
+    // Expert pipeline roles. Anthropic, Google and OpenAI answer 403 on this
+    // OpenRouter account, so those three go direct; the other two do not.
+    "MODEL_KIMI": "moonshotai/kimi-k3",
+    "MODEL_KIMI_PROVIDER": "openrouter",
+    "MODEL_KIMI_LABEL": "Kimi K3",
+    // The document names deepseek-reasoner, which OpenRouter rejects as an invalid
+    // model id; deepseek-r1 is the reasoning model it does serve.
+    "MODEL_DEEPSEEK_AUDIT": "deepseek/deepseek-r1",
+    "MODEL_DEEPSEEK_AUDIT_PROVIDER": "openrouter",
+    "MODEL_DEEPSEEK_AUDIT_LABEL": "DeepSeek R1"
   }
 }

@@ -170,6 +170,34 @@ function englishPredictionMarket(market = {}) {
   return market;
 }
 
+export async function callModelForJson({ provider, model, env, fetchImpl = fetch, system, user, temperature = 0.1, maxTokens = COMPLETION_TOKEN_BUDGET }) {
+  try {
+    const client = modelClient(provider, env);
+    const request = modelRequest({ client, provider, model, env, system, user, temperature, maxTokens });
+    const response = await fetchImpl(request.url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${client.apiKey}`,
+        'Content-Type': 'application/json',
+        ...client.extraHeaders
+      },
+      body: JSON.stringify(request.body)
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`${client.name} ${response.status}: ${body.slice(0, 200)}`);
+    }
+    const data = await readModelResponse(response);
+    return {
+      ok: true,
+      data: parseModelJson(extractModelContent(data)),
+      usage: modelUsageFromResponse(data, { provider, model })
+    };
+  } catch (error) {
+    return { ok: false, error: error.message, usage: null };
+  }
+}
+
 export function modelUsageFromResponse(data = {}, options = {}) {
   const usage = data.usage || data.usageMetadata || data.response?.usage || {};
   const inputTokens = numberField(usage.prompt_tokens, usage.input_tokens, usage.promptTokenCount);
