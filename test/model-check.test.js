@@ -31,8 +31,11 @@ test('each configured model is pinged through its own provider', async () => {
   ]);
   assert.equal(calls[1].auth, 'Bearer apimart-key');
   assert.deepEqual(result.checks.map((row) => row.provider), ['OpenRouter', 'APIMart', 'OpenRouter']);
-  // A ping must stay a ping: the whole point is that checking costs almost nothing.
-  for (const call of calls) assert.equal(call.body.max_tokens, 16);
+  // A ping asks for the same budget a prediction gets. Sixteen tokens looked cheap and
+  // was not: a reasoning model cannot begin inside it, and GPT answered 500 rather than
+  // saying so. Only tokens actually produced are billed, so asking for {"ok":true}
+  // stays cheap on a model that does not reason.
+  for (const call of calls) assert.equal(call.body.max_tokens, 8000);
 });
 
 test('a blocked region is reported with the provider and the upstream wording', async () => {
@@ -118,16 +121,18 @@ test('the check sends what a prediction sends, with the key cleaned the same way
   const openai = sent.find((call) => call.url.includes('openai.test'));
   assert.match(openai.url, /\/responses$/);
   assert.equal(openai.body.max_tokens, undefined);
-  assert.equal(openai.body.max_output_tokens, 16);
+  assert.equal(openai.body.max_output_tokens, 8000);
 
   const openrouter = sent.find((call) => call.url.includes('openrouter.test'));
   assert.match(openrouter.url, /\/chat\/completions$/);
-  assert.equal(openrouter.body.max_tokens, 16);
+  assert.equal(openrouter.body.max_tokens, 8000);
 });
 
 test('the check has no request code of its own to drift from the real one', async () => {
   const source = await readFile(new URL('../src/model-check.js', import.meta.url), 'utf8');
-  assert.match(source, /import \{ configuredModels, modelClient, modelRequest \}/);
+  // Client, request shape and token budget all come from the prediction path.
+  assert.match(source, /modelClient, modelRequest \} from '\.\/openrouter\.js'/);
+  assert.match(source, /maxTokens: COMPLETION_TOKEN_BUDGET/);
   // Its own copy of the client is what let the two drift apart in the first place.
   assert.doesNotMatch(source, /baseUrl:|apiKey: env\./);
 });

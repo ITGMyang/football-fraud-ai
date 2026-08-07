@@ -7,7 +7,7 @@ import { fetchTeamNews, teamNewsPromptSummary } from './team-news.js';
 // single character of the answer, so the budget has to cover both. At 2200 the
 // champion model burned the whole allowance thinking, returned finish_reason=length
 // with empty content, and every prediction failed - while still being billed.
-const COMPLETION_TOKEN_BUDGET = 8000;
+export const COMPLETION_TOKEN_BUDGET = 8000;
 
 const SCORE_PICK_COUNT = 4;
 const SCORE_PICK_TYPES = ['mainline', 'mainline', 'market_fit', 'aggressive'];

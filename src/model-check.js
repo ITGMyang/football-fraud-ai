@@ -1,4 +1,4 @@
-import { configuredModels, modelClient, modelRequest } from './openrouter.js';
+import { COMPLETION_TOKEN_BUDGET, configuredModels, modelClient, modelRequest } from './openrouter.js';
 
 // A minimal live ping of every configured model, built by the same client and request
 // code a prediction uses. Its own copy of that code reported every provider as
@@ -24,7 +24,12 @@ export async function checkModels(env = process.env, fetchImpl = fetch, now = ()
         system: 'Reply with JSON.',
         user: 'Return the JSON {"ok":true}.',
         temperature: 0,
-        maxTokens: 16
+        // The same budget a prediction gets. Sixteen tokens looked like a cheap ping
+        // and is not one: a reasoning model cannot even begin inside it, and GPT
+        // answered 500 rather than saying so. A cap is not a spend - only tokens
+        // actually produced are billed - so a ping asking for {"ok":true} stays cheap
+        // on a model that does not reason, and costs what it costs on one that does.
+        maxTokens: COMPLETION_TOKEN_BUDGET
       });
       const response = await fetchImpl(request.url, {
         method: 'POST',
