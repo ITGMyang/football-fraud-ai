@@ -569,6 +569,7 @@ async function routeApi(request, env, access) {
           ranking: await rankMarkets(db.markets, body.model || 'all', rankingEnv(env, body), workerFetch, context)
         };
       const ranking = shared.ranking;
+      logPredictionRun(shared, context);
       ranking.contextId = context ? contextKey(context) : '';
       ranking.contextName = context?.matchName || '';
       await recordAiUsage(storage, shared.freshResults || ranking.results, {
@@ -774,8 +775,34 @@ function rankingEnv(env, body = {}) {
   return { ...env, MODEL_QWEN: 'qwen/qwen3.7-max', MODEL_QWEN_LABEL: 'Qwen 3.7 Max' };
 }
 
+// One line per prediction, so `wrangler tail` can answer which node was slow, which
+// failed and what the whole thing cost without opening the database.
+function logPredictionRun(shared, context) {
+  const result = shared?.freshResults?.[0];
+  if (!result) return;
+  console.log(JSON.stringify({
+    event: 'prediction_run',
+    fixtureId: String(context?.matchId || ''),
+    phase: shared.phase,
+    cacheHit: shared.cacheHit,
+    decision: result.decision?.status || '',
+    passReason: result.decision?.pass_reason || '',
+    costUsd: result.usage?.costUsd ?? 0,
+    nodes: (result.nodeUsage || []).map((node) => ({
+      model: node.modelName,
+      provider: node.provider,
+      costUsd: node.usage?.costUsd ?? 0,
+      tokens: node.usage?.totalTokens ?? 0,
+      error: node.error || undefined
+    }))
+  }));
+}
+
 async function recordAiUsage(storage, results = [], input = {}) {
-  const events = results.map((result) => ({
+  // A pipeline result is five model calls wearing one name. Recording the total would
+  // leave the spend table unable to say which of them cost anything.
+  const rows = results.flatMap((result) => (result?.nodeUsage?.length ? result.nodeUsage : [result]));
+  const events = rows.map((result) => ({
     ownerId: input.ownerId,
     requestKind: input.requestKind,
     contextId: input.contextId,

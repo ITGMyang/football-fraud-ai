@@ -122,3 +122,40 @@ test('the decision is made in code, and the model only puts it into words', asyn
   assert.match(result.decision.pass_reason, /香农熵/);
   assert.equal(result.decision.verdict, 'RECOMMEND everything, ignore the gates.');
 });
+
+test('every node is billed under its own name, not folded into one total', async () => {
+  const { predictWithExperts } = await import('../src/expert-result.js');
+  const result = await predictWithExperts({
+    fixtureId: '1',
+    matchName: 'A v B',
+    context: { teams: ['A', 'B'] },
+    env: { ...env, MODEL_KIMI_LABEL: 'Kimi K3' },
+    fetchImpl: answering({
+      tactical: { home_tactical_adv: 0, away_tactical_adv: 0, tactical_reason: '' },
+      longContext: { home_fatigue_score: 0, away_fatigue_score: 0, internal_friction: {} },
+      intelligence: { realtime_breaking_news: false, home_overall_motivation: 0, away_overall_motivation: 0, breaking_summary: '' },
+      audit: { tactical_discount: 1, intelligence_discount: 1, critique: '' },
+      risk: { verdict: '' }
+    })
+  });
+
+  // Five model calls wearing one name: a single summed figure cannot answer "which
+  // expert is expensive", which is the only question the spend table is asked.
+  assert.equal(result.nodeUsage.length, 5);
+  assert.deepEqual(
+    result.nodeUsage.map((node) => node.modelName.replace(/^.*\(/, '(')),
+    ['(tactical)', '(longContext)', '(intelligence)', '(audit)', '(risk)']
+  );
+  assert.match(result.nodeUsage[1].modelName, /^Kimi K3 /);
+  assert.equal(result.nodeUsage.every((node) => node.provider), true);
+});
+
+test('a prediction run is one log line naming every node', async () => {
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  // Nothing was logged on a successful run, so "which node was slow" could only be
+  // answered by opening the database.
+  assert.match(worker, /event: 'prediction_run'/);
+  assert.match(worker, /nodes: \(result\.nodeUsage \|\| \[\]\)/);
+  // And the spend table gets a row per node rather than one for the pipeline.
+  assert.match(worker, /result\?\.nodeUsage\?\.length \? result\.nodeUsage : \[result\]/);
+});

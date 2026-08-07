@@ -112,6 +112,15 @@ export function expertResult(report, { home, away, matchName, handicapLine, tota
     provider: 'FutBots',
     generatedAt: new Date().toISOString(),
     usage: totalUsage(report.usage),
+    // Per node as well as in total: one summed figure cannot answer "which expert is
+    // expensive", which is the only question the spend table is asked.
+    nodeUsage: (report.usage || []).map((entry) => ({
+      modelName: `${entry.label || entry.model} (${entry.role})`,
+      modelId: entry.model,
+      provider: entry.provider,
+      usage: entry.usage,
+      error: entry.ok ? '' : entry.error
+    })),
     picks,
     scorePicks,
     bttsPick,
