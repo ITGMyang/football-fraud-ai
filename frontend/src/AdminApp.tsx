@@ -665,10 +665,6 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
   return (
     <>
       <div className="a-metrics">
-        {/* Kept as a scoreboard, not a switch: one pipeline answers every fixture now,
-            so neither of these two chooses anything. Saying so here is the point. */}
-        <Metric label={t('championModel')} value={architecture.championModelKey} note={t('championNote')} tone="warn" />
-        <Metric label={t('liveModels')} value={architecture.liveModelKeys.join(', ') || '—'} note={t('liveNote')} tone="warn" />
         <Metric label={t('matchesInPool')} value={count(sharedPool.totalMatches)} note={t('poolNote', { n: count(sharedPool.totalResults) })} />
         <Metric label={t('snapshots')} value={count(architecture.snapshotCount)} note={t('snapshotsNote', { n: count(architecture.currentConsensusCount) })} />
       </div>
@@ -729,7 +725,6 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
               <td>{count(row.hits)}</td>
               <td>{ratio(row.accuracy)}</td>
               <td>{row.eligible ? <Status tone="ok">{t('yes')}</Status> : <Status tone="idle">{t('tooFew')}</Status>}</td>
-              <td>{row.isChampion && <Status tone="ok">{t('champion')}</Status>}</td>
             </tr>
           ))}
         </Table>

@@ -622,7 +622,6 @@ async function settlePreviousWeekIfDue(storage, now = new Date()) {
   await storage.saveWeeklyModelPerformance(settlement);
   await storage.recordSystemEvent('weekly_model_settlement', {
     weekStart: previousWeekStart,
-    championModelKey: settlement.championModelKey,
     models: settlement.rows.length,
     samples: settlement.rows.reduce((sum, row) => sum + row.samples, 0)
   });

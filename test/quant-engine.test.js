@@ -29,6 +29,10 @@ test('the matrix is a probability distribution and every market reads off it', (
   assert.ok(Math.abs(outcome - 1) < 1e-3);
   // A half-goal handicap is the same question as winning the match.
   assert.equal(probabilities['AH_-0.5_Home'], probabilities['1X2_Win']);
+  // The card shows four scorelines; three left a visible gap.
+  assert.equal(probabilities.Top_Scores.length, 4);
+  const ordered = probabilities.Top_Scores.map((entry) => entry.prob);
+  assert.deepEqual(ordered, [...ordered].sort((left, right) => right - left));
 });
 
 test('expert opinion moves the goal expectations, discounted and clamped', () => {

@@ -17,26 +17,6 @@ import { buildMarketBaseline, compareToBaseline } from './market-odds.js';
 // bookmaker had.
 export const PREDICTION_PIPELINE_VERSION = '2026-08-06.expert-pipeline';
 
-// Scored and stored, but nothing selects with them any more: one pipeline answers
-// every fixture, so there is no model to choose between. The weekly settlement still
-// writes a champion because how each model scored is worth keeping, and the console
-// labels it as a record rather than a switch.
-const DEFAULT_SETTINGS = Object.freeze({
-  championModelKey: 'qwen',
-  liveModelKeys: ['gpt', 'claude', 'gemini'],
-  modelWeights: {}
-});
-
-// Only used when the env names no label for a key, so a settings row naming a model
-// still resolves. Every key configuredModels can produce belongs here.
-const DEFAULT_ALIASES = Object.freeze({
-  gpt: 'GPT',
-  claude: 'Claude',
-  gemini: 'Gemini',
-  qwen: 'Qwen',
-  deepseek: 'DeepSeek'
-});
-
 export async function resolveOptimizedPrediction({
   fixtureId,
   contextName = '',
@@ -235,14 +215,21 @@ export function settleWeeklyModelPerformance(evaluations = [], {
     row.accuracy = row.samples ? row.hits / row.samples : 0;
     groups.set(modelKey, row);
   }
+  // How each model scored, and nothing more. Crowning one of them meant something
+  // when a champion ran the next week's predictions; one pipeline answers every
+  // fixture now, so a crown would only suggest a choice that is not being made.
   const rows = [...groups.values()].map((row) => ({
     ...row,
-    eligible: row.samples >= minimumSamples,
-    isChampion: false
-  })).sort((a, b) => b.accuracy - a.accuracy || b.samples - a.samples || a.modelKey.localeCompare(b.modelKey));
-  const champion = rows.find((row) => row.eligible) || null;
-  if (champion) champion.isChampion = true;
-  return { weekStart, minimumSamples, championModelKey: champion?.modelKey || '', rows };
+    eligible: row.samples >= minimumSamples
+  })).sort((a, b) => (
+    // Rows with enough samples first: two from two is 100% and means nothing, and
+    // sorting on accuracy alone puts it above a model that answered twenty times.
+    Number(b.eligible) - Number(a.eligible)
+    || b.accuracy - a.accuracy
+    || b.samples - a.samples
+    || a.modelKey.localeCompare(b.modelKey)
+  ));
+  return { weekStart, minimumSamples, rows };
 }
 
 export function buildWeeklySettlementFromSnapshots({
@@ -323,13 +310,6 @@ function aggregateSelections(weightedResults, totalWeight, listFn, keyFn) {
   })).sort((a, b) => b.estimatedProbability - a.estimatedProbability || b.consensusSupport - a.consensusSupport);
 }
 
-function normalizeSettings(value = {}) {
-  return {
-    championModelKey: predictionModelKey(value?.championModelKey || DEFAULT_SETTINGS.championModelKey),
-    liveModelKeys: [...new Set((value?.liveModelKeys || DEFAULT_SETTINGS.liveModelKeys).map(predictionModelKey))].filter(Boolean),
-    modelWeights: value?.modelWeights && typeof value.modelWeights === 'object' ? value.modelWeights : {}
-  };
-}
 
 
 function positiveWeight(value) {

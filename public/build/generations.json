@@ -2,6 +2,13 @@
   "keep": 3,
   "generations": [
     [
+      "admin-DAChvNg9.js",
+      "admin-DU9B-HtZ.css",
+      "app-BFziOyRX.css",
+      "app-DxgRfat-.js",
+      "chunk-api-nM8Zh-F-.js"
+    ],
+    [
       "admin-BzCO6pLp.js",
       "admin-DU9B-HtZ.css",
       "app-BFziOyRX.css",
@@ -13,13 +20,6 @@
       "admin-qiIpY31f.js",
       "app-BFziOyRX.css",
       "app-DxgRfat-.js",
-      "chunk-api-nM8Zh-F-.js"
-    ],
-    [
-      "admin-DU9B-HtZ.css",
-      "admin-qiIpY31f.js",
-      "app-CAtFRe8v.js",
-      "app-bOhBiydK.css",
       "chunk-api-nM8Zh-F-.js"
     ]
   ]

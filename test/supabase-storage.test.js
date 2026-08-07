@@ -46,7 +46,7 @@ test('Supabase stores immutable prediction snapshots and publishes one current c
     const requestUrl = String(url);
     requests.push({ url: requestUrl, options });
     if (requestUrl.includes('/prediction_settings?')) {
-      return new Response(JSON.stringify([{ key: 'default', champion_model_key: 'claude', live_model_keys: ['gpt', 'claude', 'gemini'], model_weights: { claude: 1.2 } }]));
+      return new Response(JSON.stringify([{ key: 'default', model_weights: { claude: 1.2 } }]));
     }
     if (requestUrl.includes('/prediction_consensus?') && (!options.method || options.method === 'GET')) {
       return new Response(JSON.stringify([{ id: 'consensus-1', fixture_id: '123', phase: 'live', payload: { results: [] }, is_current: true }]));
@@ -76,7 +76,6 @@ test('Supabase stores immutable prediction snapshots and publishes one current c
   });
   await storage.releasePredictionGeneration('11111111-1111-4111-8111-111111111111');
 
-  assert.equal(settings.championModelKey, 'claude');
   assert.deepEqual(settings.liveModelKeys, ['gpt', 'claude', 'gemini']);
   assert.equal(current.fixtureId, '123');
   const snapshotInsert = requests.find(({ url, options }) => url.includes('/prediction_snapshots') && options.method === 'POST');

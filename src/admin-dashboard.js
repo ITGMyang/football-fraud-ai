@@ -114,15 +114,11 @@ function summarizePredictionArchitecture({
       samples: Number(row.samples) || 0,
       hits: Number(row.hits) || 0,
       accuracy: Number(row.accuracy) || 0,
-      eligible: Boolean(row.eligible),
-      isChampion: Boolean(row.is_champion ?? row.isChampion)
+      eligible: Boolean(row.eligible)
     }))
     .sort((a, b) => b.accuracy - a.accuracy);
 
   return {
-    championModelKey: settings.champion_model_key || settings.championModelKey || 'qwen',
-    liveModelKeys: settings.live_model_keys || settings.liveModelKeys || ['gpt', 'claude', 'gemini'],
-    modelWeights: settings.model_weights || settings.modelWeights || {},
     snapshotCount: predictionSnapshots.length,
     consensusCount: predictionConsensus.length,
     currentConsensusCount: currentConsensus.length,

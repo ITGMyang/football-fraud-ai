@@ -55,7 +55,9 @@ export function fitGoalExpectations({ baseHomeXg, baseAwayXg, tactical = {}, int
   };
 }
 
-export function marketProbabilities(matrix, { handicapLine = -0.5, totalLine = 2.5, scoreCount = 3 } = {}) {
+// Four scorelines, not the document's three: the card has room for four and showing
+// three leaves a visible gap. This is a display count, not one of the risk thresholds.
+export function marketProbabilities(matrix, { handicapLine = -0.5, totalLine = 2.5, scoreCount = 4 } = {}) {
   let win = 0;
   let draw = 0;
   let loss = 0;

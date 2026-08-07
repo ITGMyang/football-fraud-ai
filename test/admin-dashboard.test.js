@@ -362,7 +362,6 @@ test('admin dashboard summarizes optimized prediction architecture records', () 
   const dashboard = buildAdminDashboard({
     predictionSettings: [{
       key: 'default',
-      champion_model_key: 'claude',
       live_model_keys: ['gpt', 'claude', 'gemini'],
       model_weights: { claude: 1.2 }
     }],
@@ -401,15 +400,13 @@ test('admin dashboard summarizes optimized prediction architecture records', () 
       hits: 16,
       accuracy: 2 / 3,
       eligible: true,
-      is_champion: true
+      eligible: true
     }]
   }, Date.parse('2026-07-25T12:00:00Z'));
 
-  assert.equal(dashboard.predictionArchitecture.championModelKey, 'claude');
-  assert.deepEqual(dashboard.predictionArchitecture.liveModelKeys, ['gpt', 'claude', 'gemini']);
   assert.equal(dashboard.predictionArchitecture.snapshotCount, 2);
   assert.equal(dashboard.predictionArchitecture.currentConsensusCount, 1);
-  assert.equal(dashboard.predictionArchitecture.latestWeek.rows[0].isChampion, true);
+  assert.equal(dashboard.predictionArchitecture.latestWeek.rows[0].eligible, true);
   // The per-fixture view lives in the pool now; the architecture block is settings only.
   assert.equal(dashboard.predictionArchitecture.matches, undefined);
   assert.equal(dashboard.sharedPool.matches[0].fixtureId, '123');

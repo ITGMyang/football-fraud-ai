@@ -12,11 +12,7 @@ const initialState = {
   matchContexts: [],
   predictionSnapshots: [],
   predictionConsensus: [],
-  predictionSettings: {
-    championModelKey: 'qwen',
-    liveModelKeys: ['gpt', 'claude', 'gemini'],
-    modelWeights: {}
-  },
+  predictionSettings: { modelWeights: {} },
   predictionGenerationLeases: []
 };
 

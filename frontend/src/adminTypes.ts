@@ -63,7 +63,6 @@ export type WeeklyModelRow = {
   hits: number;
   accuracy: number;
   eligible: boolean;
-  isChampion: boolean;
 };
 
 export type AccuracyEvaluation = {
@@ -156,8 +155,6 @@ export type Dashboard = {
   accuracy: Accuracy;
   sharedPool: { totalMatches: number; totalResults: number; matches: SharedPoolMatch[] };
   predictionArchitecture: {
-    championModelKey: string;
-    liveModelKeys: string[];
     modelWeights: Record<string, number>;
     snapshotCount: number;
     consensusCount: number;

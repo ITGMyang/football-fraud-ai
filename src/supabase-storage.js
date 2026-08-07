@@ -133,7 +133,6 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       });
       const row = rows[0] || {};
       return {
-        championModelKey: row.champion_model_key || 'qwen',
         liveModelKeys: Array.isArray(row.live_model_keys) ? row.live_model_keys : ['gpt', 'claude', 'gemini'],
         modelWeights: row.model_weights && typeof row.model_weights === 'object' ? row.model_weights : {}
       };
@@ -214,16 +213,9 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         hits: row.hits,
         accuracy: row.accuracy,
         eligible: row.eligible,
-        is_champion: row.isChampion,
         metrics: { categories: row.categories, minimumSamples: settlement.minimumSamples },
         updated_at: new Date().toISOString()
       })), 'week_start,model_key');
-      if (settlement.championModelKey) {
-        await client.updateRows(TABLES.predictionSettings, {
-          champion_model_key: settlement.championModelKey,
-          updated_at: new Date().toISOString()
-        }, { key: 'eq.default' });
-      }
       return settlement;
     },
 

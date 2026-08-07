@@ -65,7 +65,6 @@ test('a pipeline that produced no market is an outage, and says why', async () =
 test('two simultaneous users share one fixture generation lease', async () => {
   const storage = memoryStorage({
     settings: {
-      championModelKey: 'claude',
       liveModelKeys: ['gpt', 'claude', 'gemini'],
       modelWeights: {}
     }
@@ -110,7 +109,7 @@ test('weighted consensus rewards agreement and keeps four unique score predictio
   assert.match(consensus.picks[0].reason, /weighted consensus/i);
 });
 
-test('weekly settlement selects the best eligible model and ignores tiny samples', () => {
+test('weekly settlement records how each model scored and ignores tiny samples', () => {
   const evaluations = [
     ...evaluationRows('Claude', 20, 15),
     ...evaluationRows('GPT', 20, 12),
@@ -122,7 +121,9 @@ test('weekly settlement selects the best eligible model and ignores tiny samples
     minimumSamples: 20
   });
 
-  assert.equal(result.championModelKey, 'claude');
+  // Two from two is 100% and means nothing; it must not head the table.
+  assert.equal(result.rows[0].modelKey, 'claude');
+  assert.equal(result.rows.at(-1).modelKey, 'gemini');
   assert.equal(result.rows.find((row) => row.modelKey === 'gemini').eligible, false);
   assert.equal(result.rows.find((row) => row.modelKey === 'claude').accuracy, 0.75);
 });
@@ -152,7 +153,7 @@ test('weekly settlement evaluates immutable model snapshots instead of public co
     minimumSamples: 1
   });
 
-  assert.equal(result.championModelKey, 'claude');
+  assert.equal(result.rows[0].modelKey, 'claude');
   assert.ok(result.rows[0].samples >= 2);
 });
 
@@ -256,20 +257,6 @@ function evaluationRows(modelName, total, hits) {
   }));
 }
 
-test('every configured model can be named by a settings row', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const [openrouter, strategy] = await Promise.all([
-    readFile(new URL('../src/openrouter.js', import.meta.url), 'utf8'),
-    readFile(new URL('../src/prediction-strategy.js', import.meta.url), 'utf8')
-  ]);
-
-  // A key that configuredModels can produce but the alias table does not know would
-  // resolve to the raw key, and the model call would fail with "model not found".
-  const keys = [...openrouter.matchAll(/env\.MODEL_([A-Z]+)\b/g)].map((match) => match[1].toLowerCase());
-  for (const key of new Set(keys)) {
-    assert.match(strategy, new RegExp(`\\n  ${key}: '`), `${key} is missing from DEFAULT_ALIASES`);
-  }
-});
 
 test('a consensus from an older pipeline is regenerated rather than served', async () => {
   const stale = {
@@ -278,7 +265,7 @@ test('a consensus from an older pipeline is regenerated rather than served', asy
   };
   let generated = 0;
   const storage = {
-    ...memoryStorage({ settings: { championModelKey: 'qwen', liveModelKeys: [], modelWeights: {} } }),
+    ...memoryStorage({ settings: {} }),
     readCurrentPredictionConsensus: async () => stale
   };
   const predictFn = async () => {
@@ -305,22 +292,17 @@ test('a consensus from an older pipeline is regenerated rather than served', asy
   assert.equal(reused.cacheHit, true);
 });
 
-test('the champion setting is a record, not a switch', async () => {
+test('the weekly settlement is a scoreboard with no crown on it', async () => {
   const { readFile } = await import('node:fs/promises');
-  const [strategy, copy] = await Promise.all([
-    readFile(new URL('../src/prediction-strategy.js', import.meta.url), 'utf8'),
-    readFile(new URL('../frontend/src/adminCopy.ts', import.meta.url), 'utf8')
-  ]);
+  const strategy = await readFile(new URL('../src/prediction-strategy.js', import.meta.url), 'utf8');
 
-  // Nothing may read these to decide what runs. A console that shows "champion:
-  // Claude" while the pipeline answers every fixture is worse than showing nothing.
-  assert.doesNotMatch(strategy, /settings\.championModelKey/);
-  assert.doesNotMatch(strategy, /settings\.liveModelKeys/);
-  assert.match(copy, /reference only/);
-  assert.match(copy, /no longer chooses anything/);
+  // Crowning a model meant something when the champion ran the next week's
+  // predictions. One pipeline answers every fixture now, so a crown would only
+  // suggest a choice that is not being made.
+  assert.doesNotMatch(strategy, /championModelKey|isChampion/);
+  assert.doesNotMatch(strategy, /liveModelKeys/);
 
-  // A prediction ignores them even when they are set to something eye-catching.
-  const storage = memoryStorage({ settings: { championModelKey: 'gpt', liveModelKeys: ['claude', 'gemini', 'gpt'] } });
+  const storage = memoryStorage({ settings: {} });
   const result = await resolveOptimizedPrediction({
     fixtureId: 'fixture-settings', contextName: 'A v B', storage, matchContext: {},
     predictFn: async () => expertAnswer()

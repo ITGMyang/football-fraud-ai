@@ -63,7 +63,7 @@ test('expert opinion reaches the maths only through the goal expectations', asyn
   assert.equal(result.audit_trail.breaking_summary, 'Away keeper out');
   // Every market is derived, so the five answers are consistent by construction.
   assert.ok(Math.abs(result.probabilities['1X2_Win'] + result.probabilities['1X2_Draw'] + result.probabilities['1X2_Loss'] - 1) < 1e-3);
-  assert.equal(result.probabilities.Top_Scores.length, 3);
+  assert.equal(result.probabilities.Top_Scores.length, 4);
   assert.ok(result.market_comparison['1X2_Win'].ev !== null);
 });
 
