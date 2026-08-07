@@ -362,7 +362,9 @@ function modelRequest({ client, provider, model, system, user, temperature, maxT
       body: {
         model,
         instructions: system,
-        input: user,
+        // OpenAI refuses json_object unless the input itself mentions json, and the
+        // input here is often a serialised payload that never says the word.
+        input: /json/i.test(user) ? user : `${user}\n\nRespond with JSON only.`,
         max_output_tokens: maxTokens,
         text: { format: { type: 'json_object' } }
       }

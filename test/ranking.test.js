@@ -1330,3 +1330,25 @@ test('with no odds there is no handicap market rather than an invented one', asy
   assert.deepEqual(sent.filter((market) => /handicap/.test(market.id)), []);
   assert.ok(sent.some((market) => /moneyline/.test(market.id)), 'the rest of the card still stands');
 });
+
+test('an OpenAI request always mentions json, because OpenAI refuses it otherwise', async () => {
+  let sent = null;
+  await rankMarkets(
+    [buildMarket({ id: 'a', matchName: 'A v B', marketType: '足球 胜平负', selection: 'A', line: '胜平负', odds: 2 })],
+    'GPT',
+    { OPENAI_API_KEY: 'key', OPENAI_BASE_URL: 'https://openai.test/v1', MODEL_GPT: 'gpt-5.5', MODEL_GPT_PROVIDER: 'openai' },
+    async (_url, options) => {
+      sent = JSON.parse(options.body);
+      return new Response(JSON.stringify({ output: [{ content: [{ text: '{"picks":[]}' }] }] }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    },
+    null,
+    { searched: false, reason: 'test' }
+  );
+
+  // "Response input messages must contain the word 'json'" - a serialised payload
+  // often never says it, and the whole call fails on a rule about wording.
+  assert.match(sent.input, /json/i);
+  assert.equal(sent.text.format.type, 'json_object');
+});
