@@ -416,3 +416,37 @@ test('admin dashboard summarizes optimized prediction architecture records', () 
   assert.equal(dashboard.sharedPool.matches[0].phase, 'live');
   assert.equal(dashboard.sharedPool.matches[0].matchName, 'Alpha v Beta');
 });
+
+test('the console can read what each prediction run cost, per expert node', () => {
+  const dashboard = buildAdminDashboard({
+    systemEvents: [
+      {
+        event_type: 'prediction_run',
+        created_at: '2026-08-07T06:00:00Z',
+        payload: {
+          fixtureId: '1558583',
+          matchName: 'Standard Liege v Cercle Brugge',
+          phase: 'early',
+          decision: 'PASS',
+          passReason: 'entropy',
+          costUsd: 0.02472,
+          nodes: [
+            { model: 'Claude 4.8 (tactical)', provider: 'apimart', costUsd: 0.00266, tokens: 400, error: '' },
+            { model: 'GPT 5.5 (risk)', provider: 'openai', costUsd: 0.0092, tokens: 856, error: 'timeout' }
+          ]
+        }
+      },
+      { event_type: 'api_football_refresh', created_at: '2026-08-07T05:00:00Z', payload: { apiCalls: 9, errors: [] } }
+    ]
+  }, Date.parse('2026-08-07T07:00:00Z'));
+
+  // console.log is a live stream; closing the tail loses the run. This is the copy the
+  // console reads, and it must not sweep up unrelated system events.
+  assert.equal(dashboard.predictionRuns.length, 1);
+  const [run] = dashboard.predictionRuns;
+  assert.equal(run.matchName, 'Standard Liege v Cercle Brugge');
+  assert.equal(run.costUsd, 0.02472);
+  assert.equal(run.nodes.length, 2);
+  assert.equal(run.failed, 1, 'a node that failed is counted, not hidden');
+  assert.equal(run.nodes[1].error, 'timeout');
+});

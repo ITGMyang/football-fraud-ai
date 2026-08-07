@@ -15,8 +15,7 @@ const TABLES = {
   predictionSnapshots: 'prediction_snapshots',
   predictionConsensus: 'prediction_consensus',
   modelWeeklyPerformance: 'model_weekly_performance',
-  predictionSettings: 'prediction_settings',
-  trafficSources: 'traffic_sources'
+  predictionSettings: 'prediction_settings'
 };
 
 export function createSupabaseStorage(env, fetchImpl = fetch) {
@@ -105,25 +104,6 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
         created_at: ranking.createdAt || new Date().toISOString()
       }], 'owner_id,id');
       return ranking;
-    },
-
-    // Counting a visit must never hold up the page or break it. The caller runs this
-    // after the response is on its way, and a failure is dropped on purpose.
-    async recordTrafficSource({ day, source, referrerHost = '', campaign = '' }) {
-      await client.rpc('record_traffic_source', {
-        p_day: day,
-        p_source: source,
-        p_referrer_host: referrerHost,
-        p_campaign: campaign
-      });
-    },
-
-    async readTrafficSources(sinceDay) {
-      return client.selectRows(TABLES.trafficSources, 'day,source,referrer_host,campaign,views', {
-        day: `gte.${sinceDay}`,
-        order: 'views.desc',
-        limit: '5000'
-      });
     },
 
     async readPredictionSettings() {

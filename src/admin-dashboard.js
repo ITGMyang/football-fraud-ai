@@ -28,6 +28,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
   const selectedUsage = aiUsage.filter((row) => dateKey(row.created_at) === requestedDate);
   const todayUsageSummary = summarizeUsage(todayUsage);
   const todayPredictionRequests = predictionRequests.filter((row) => dateKey(row.created_at) === today);
+  const predictionRuns = summarizePredictionRuns(systemEvents);
   const todayRefreshes = systemEvents.filter((row) => row.event_type === 'api_football_refresh' && dateKey(row.created_at) === today);
   const latestRefresh = [...systemEvents]
     .filter((row) => row.event_type === 'api_football_refresh')
@@ -42,6 +43,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
 
   return {
     generatedAt: new Date(now).toISOString(),
+    predictionRuns,
     core: {
       apiFootballCallsToday: sum(todayRefreshes, (row) => row.payload?.apiCalls),
       apiFootballDailyLimit: positiveNumber(input.apiFootballDailyLimit),
@@ -645,4 +647,33 @@ function shanghaiDateOf(value) {
   const parsed = new Date(value || '');
   if (Number.isNaN(parsed.getTime())) return String(value || '').slice(0, 10);
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(parsed);
+}
+
+// Each generated prediction, with what every expert node cost. A run that was served
+// from cache is not here because nothing ran; the pool hit is counted elsewhere.
+function summarizePredictionRuns(systemEvents = [], limit = 40) {
+  return systemEvents
+    .filter((row) => row.event_type === 'prediction_run')
+    .slice(0, limit)
+    .map((row) => {
+      const payload = row.payload || {};
+      const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
+      return {
+        at: row.created_at || '',
+        fixtureId: String(payload.fixtureId || ''),
+        matchName: String(payload.matchName || ''),
+        phase: String(payload.phase || ''),
+        decision: String(payload.decision || ''),
+        passReason: String(payload.passReason || ''),
+        costUsd: Number(payload.costUsd) || 0,
+        failed: nodes.filter((node) => node.error).length,
+        nodes: nodes.map((node) => ({
+          model: String(node.model || ''),
+          provider: String(node.provider || ''),
+          costUsd: Number(node.costUsd) || 0,
+          tokens: Number(node.tokens) || 0,
+          error: String(node.error || '')
+        }))
+      };
+    });
 }

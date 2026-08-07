@@ -143,6 +143,7 @@ export type RevenuePeriod = { count: number; amountUsd: number };
 export type OrderStatusCounts = { pending: number; completed: number; failed: number };
 
 export type Dashboard = {
+  predictionRuns: PredictionRun[];
   generatedAt: string;
   core: CoreMetrics;
   models: UsageModelRow[];
@@ -204,15 +205,24 @@ export type TrafficCountry = {
   share: number;
 };
 
-export type TrafficSource = {
-  source: string;
-  views: number;
-  share: number;
+export type PredictionRunNode = {
+  model: string;
+  provider: string;
+  costUsd: number;
+  tokens: number;
+  error: string;
 };
 
-export type TrafficReferrer = TrafficSource & {
-  referrerHost: string;
-  campaign: string;
+export type PredictionRun = {
+  at: string;
+  fixtureId: string;
+  matchName: string;
+  phase: string;
+  decision: string;
+  passReason: string;
+  costUsd: number;
+  failed: number;
+  nodes: PredictionRunNode[];
 };
 
 export type Traffic = {
@@ -234,9 +244,6 @@ export type Traffic = {
   };
   daily?: TrafficDay[];
   countries?: TrafficCountry[];
-  total?: number;
-  sources?: TrafficSource[];
-  referrers?: TrafficReferrer[];
 };
 
 // Shape of GET /api/backend/schedules — the API-Football cache written by the cron.

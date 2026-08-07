@@ -93,21 +93,6 @@ function countryLabel(code: string, language: Language = 'en') {
   return `${flag} ${name}`;
 }
 
-// The classifier's own words are the keys; anything it grows later still renders.
-const SOURCE_COPY: Record<string, CopyKey> = {
-  search: 'srcSearch',
-  social: 'srcSocial',
-  assistant: 'srcAssistant',
-  referral: 'srcReferral',
-  campaign: 'srcCampaign',
-  direct: 'srcDirect'
-};
-
-function sourceLabel(source: string, t: Translate) {
-  const key = SOURCE_COPY[source];
-  return key ? t(key) : source;
-}
-
 function fixtureIdOf(match: ScheduleMatch) {
   return String(match.matchId || match.id || '');
 }
@@ -359,35 +344,6 @@ function TrafficTab({ traffic, days, loading, error, language, onDays }: {
               <td>{count(day.pageViews)}</td>
               <td>{bytes(day.bytes)}</td>
               <td>{day.threats ? <Status tone="bad">{count(day.threats)}</Status> : '0'}</td>
-            </tr>
-          ))}
-        </Table>
-      </Module>
-
-      <Module title={t('sourcesTitle')} eyebrow={t('trafficEyebrow')} note={t('sourcesNote')}>
-        <Table head={[t('colSource'), t('colViews'), t('colShare'), '']} empty={t('sourcesEmpty')}>
-          {(traffic?.sources || []).map((row) => (
-            <tr key={row.source}>
-              <td><strong>{sourceLabel(row.source, t)}</strong></td>
-              <td>{count(row.views)}</td>
-              <td>{ratio(row.share)}</td>
-              <td className="a-bar-cell">
-                <span className="a-bar"><span className="a-bar__fill" style={{ width: `${row.share * 100}%` }} /></span>
-              </td>
-            </tr>
-          ))}
-        </Table>
-      </Module>
-
-      <Module title={t('referrersTitle')} eyebrow={t('trafficEyebrow')}>
-        <Table head={[t('colReferrer'), t('colSource'), t('colCampaign'), t('colViews'), t('colShare')]} empty={t('sourcesEmpty')}>
-          {(traffic?.referrers || []).filter((row) => row.source !== 'direct').map((row) => (
-            <tr key={`${row.source}|${row.referrerHost}|${row.campaign}`}>
-              <td><strong>{row.referrerHost || '—'}</strong></td>
-              <td>{sourceLabel(row.source, t)}</td>
-              <td>{row.campaign || '—'}</td>
-              <td>{count(row.views)}</td>
-              <td>{ratio(row.share)}</td>
             </tr>
           ))}
         </Table>
@@ -653,7 +609,7 @@ function ModelsTab({ dashboard, onDate, busy, check, checking, checkError, onChe
 function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
   const t = useT();
   const [query, setQuery] = useState('');
-  const { sharedPool, predictionArchitecture: architecture } = dashboard;
+  const { sharedPool, predictionArchitecture: architecture, predictionRuns } = dashboard;
 
   const poolRows = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -668,6 +624,38 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
         <Metric label={t('matchesInPool')} value={count(sharedPool.totalMatches)} note={t('poolNote', { n: count(sharedPool.totalResults) })} />
         <Metric label={t('snapshots')} value={count(architecture.snapshotCount)} note={t('snapshotsNote', { n: count(architecture.currentConsensusCount) })} />
       </div>
+
+      <Module title={t('runsTitle')} eyebrow={t('runsEyebrow')} note={t('runsNote')}>
+        <Table head={[t('colWhen'), t('colMatch'), t('colDecision'), t('colNodes'), t('colRunCost')]} empty={t('runsEmpty')}>
+          {(predictionRuns || []).map((run) => (
+            <tr key={`${run.at}|${run.fixtureId}`}>
+              <td>{when(run.at)}<small>{run.phase}</small></td>
+              <td>
+                <strong>{run.matchName || run.fixtureId}</strong>
+                <small>{run.fixtureId}</small>
+              </td>
+              <td>
+                <Status tone={run.decision === 'RECOMMEND' ? 'ok' : 'idle'}>{run.decision || '—'}</Status>
+                {run.passReason && <small>{run.passReason}</small>}
+              </td>
+              <td>
+                {run.nodes.map((node) => (
+                  <small key={node.model}>
+                    {node.error
+                      ? <Status tone="bad">{node.model}</Status>
+                      : `${node.model} · ${money(node.costUsd)} · ${count(node.tokens)}`}
+                    {node.error ? ` ${node.error.slice(0, 60)}` : ''}
+                  </small>
+                ))}
+              </td>
+              <td>
+                <strong>{money(run.costUsd)}</strong>
+                {run.failed > 0 && <Status tone="bad">{run.failed}</Status>}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </Module>
 
       <Module title={t('sharedPool')} eyebrow={t('cacheHits')} note={t('sharedPoolNote')}>
         <div className="a-filters">
