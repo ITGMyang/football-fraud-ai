@@ -11,11 +11,10 @@ import { buildMarketBaseline, compareToBaseline } from './market-odds.js';
 // that fixture, rather than every stored prediction being recomputed at once for
 // fixtures nobody is looking at.
 //
-// 2026-08-06: handicap markets are built from the line the market quotes. Before this,
-// a match with no odds read was offered an invented handicap, and one with odds was
-// offered whichever rows arrived first, so a published pick could name a line no
-// bookmaker had.
-export const PREDICTION_PIPELINE_VERSION = '2026-08-06.expert-pipeline';
+// "What a prediction would say" includes how much of it there is: the scoreline count
+// changed and the version did not, so fixtures already answered kept serving three
+// while new ones got four. Anything that changes the output belongs in this string.
+export const PREDICTION_PIPELINE_VERSION = '2026-08-06.expert-pipeline.4-scores';
 
 export async function resolveOptimizedPrediction({
   fixtureId,
