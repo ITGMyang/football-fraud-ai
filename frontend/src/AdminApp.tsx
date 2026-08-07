@@ -665,8 +665,10 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
   return (
     <>
       <div className="a-metrics">
-        <Metric label={t('championModel')} value={architecture.championModelKey} note={t('championNote')} />
-        <Metric label={t('liveModels')} value={architecture.liveModelKeys.join(', ') || '—'} note={t('liveNote')} />
+        {/* Kept as a scoreboard, not a switch: one pipeline answers every fixture now,
+            so neither of these two chooses anything. Saying so here is the point. */}
+        <Metric label={t('championModel')} value={architecture.championModelKey} note={t('championNote')} tone="warn" />
+        <Metric label={t('liveModels')} value={architecture.liveModelKeys.join(', ') || '—'} note={t('liveNote')} tone="warn" />
         <Metric label={t('matchesInPool')} value={count(sharedPool.totalMatches)} note={t('poolNote', { n: count(sharedPool.totalResults) })} />
         <Metric label={t('snapshots')} value={count(architecture.snapshotCount)} note={t('snapshotsNote', { n: count(architecture.currentConsensusCount) })} />
       </div>

@@ -17,6 +17,10 @@ import { buildMarketBaseline, compareToBaseline } from './market-odds.js';
 // bookmaker had.
 export const PREDICTION_PIPELINE_VERSION = '2026-08-06.expert-pipeline';
 
+// Scored and stored, but nothing selects with them any more: one pipeline answers
+// every fixture, so there is no model to choose between. The weekly settlement still
+// writes a champion because how each model scored is worth keeping, and the console
+// labels it as a record rather than a switch.
 const DEFAULT_SETTINGS = Object.freeze({
   championModelKey: 'qwen',
   liveModelKeys: ['gpt', 'claude', 'gemini'],

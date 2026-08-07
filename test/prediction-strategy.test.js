@@ -304,3 +304,26 @@ test('a consensus from an older pipeline is regenerated rather than served', asy
   assert.equal(generated, 1);
   assert.equal(reused.cacheHit, true);
 });
+
+test('the champion setting is a record, not a switch', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const [strategy, copy] = await Promise.all([
+    readFile(new URL('../src/prediction-strategy.js', import.meta.url), 'utf8'),
+    readFile(new URL('../frontend/src/adminCopy.ts', import.meta.url), 'utf8')
+  ]);
+
+  // Nothing may read these to decide what runs. A console that shows "champion:
+  // Claude" while the pipeline answers every fixture is worse than showing nothing.
+  assert.doesNotMatch(strategy, /settings\.championModelKey/);
+  assert.doesNotMatch(strategy, /settings\.liveModelKeys/);
+  assert.match(copy, /reference only/);
+  assert.match(copy, /no longer chooses anything/);
+
+  // A prediction ignores them even when they are set to something eye-catching.
+  const storage = memoryStorage({ settings: { championModelKey: 'gpt', liveModelKeys: ['claude', 'gemini', 'gpt'] } });
+  const result = await resolveOptimizedPrediction({
+    fixtureId: 'fixture-settings', contextName: 'A v B', storage, matchContext: {},
+    predictFn: async () => expertAnswer()
+  });
+  assert.equal(result.ranking.results[0].modelId, 'futbots-expert-pipeline');
+});
