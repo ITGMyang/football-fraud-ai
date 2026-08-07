@@ -247,7 +247,7 @@ function stripJsonFence(content) {
   return String(content).replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
 }
 
-function modelClient(provider = 'openrouter', env = process.env) {
+export function modelClient(provider = 'openrouter', env = process.env) {
   if (provider === 'apimart') {
     const apiKey = cleanEnvValue(env.APIMART_API_KEY);
     if (!apiKey) throw new Error('缺少 APIMART_API_KEY，GPT 模型无法通过 APIMart 调用');
@@ -355,7 +355,7 @@ function modelTemperature(provider, value) {
     : { temperature: value };
 }
 
-function modelRequest({ client, provider, model, system, user, temperature, maxTokens, env = {} }) {
+export function modelRequest({ client, provider, model, system, user, temperature, maxTokens, env = {} }) {
   if (String(provider).toLowerCase() === 'openai') {
     return {
       url: `${client.baseUrl}/responses`,
