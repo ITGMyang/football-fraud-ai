@@ -776,6 +776,7 @@ function predictionRunRecord(shared, context) {
     phase: shared.phase,
     cacheHit: shared.cacheHit,
     decision: result.decision?.status || '',
+    degraded: Boolean(shared.degraded),
     passReason: result.decision?.pass_reason || '',
     costUsd: result.usage?.costUsd ?? 0,
     matchName: context?.matchName || '',

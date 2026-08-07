@@ -159,3 +159,27 @@ test('a prediction run is one log line naming every node', async () => {
   // And the spend table gets a row per node rather than one for the pipeline.
   assert.match(worker, /result\?\.nodeUsage\?\.length \? result\.nodeUsage : \[result\]/);
 });
+
+test('only an expert that reaches the maths marks the run degraded', async () => {
+  const stubs = {
+    tactical: { home_tactical_adv: 0, away_tactical_adv: 0, tactical_reason: '' },
+    longContext: { home_fatigue_score: 0, away_fatigue_score: 0, internal_friction: {} },
+    intelligence: { realtime_breaking_news: false, home_overall_motivation: 0, away_overall_motivation: 0, breaking_summary: '' },
+    audit: { tactical_discount: 1, intelligence_discount: 1, critique: '' },
+    risk: { verdict: 'ok' }
+  };
+  const run = (failing) => runExpertPipeline({
+    fixtureId: '1', matchName: 'A v B', baseline: BASE, marketOdds: ODDS, env,
+    fetchImpl: answering(Object.fromEntries(
+      Object.entries(stubs).map(([role, reply]) => [role, role === failing ? undefined : reply])
+    ))
+  });
+
+  // The risk node words a decision the code already made and cannot move a number, so
+  // losing it costs a sentence rather than an answer.
+  assert.equal((await run('risk')).audit_trail.degraded, false);
+  for (const role of ['tactical', 'longContext', 'intelligence', 'audit']) {
+    assert.equal((await run(role)).audit_trail.degraded, true, `${role} feeds the maths`);
+  }
+  assert.equal((await run(null)).audit_trail.degraded, false);
+});

@@ -128,21 +128,28 @@ export async function resolveOptimizedPrediction({
       pipelineVersion: PREDICTION_PIPELINE_VERSION,
       disclaimer: 'AI predictions are probabilistic and are not financial advice.'
     };
-    await storage.publishPredictionConsensus({
-      id: crypto.randomUUID(),
-      fixtureId: String(fixtureId),
-      phase,
-      ranking,
-      sourceSnapshotIds: snapshots.filter((snapshot) => !snapshot.result.error).map((snapshot) => snapshot.id),
-      generatedAt: ranking.createdAt
-    });
+    // A run that lost an expert is answered, but not shared. Publishing it would serve
+    // everyone after it a weaker answer at cache speed, with nothing on screen to say
+    // so, until the lineups land or the version moves - and an expert outage is usually
+    // over in minutes. The next reader pays for a fresh run instead.
+    if (!result.degraded) {
+      await storage.publishPredictionConsensus({
+        id: crypto.randomUUID(),
+        fixtureId: String(fixtureId),
+        phase,
+        ranking,
+        sourceSnapshotIds: snapshots.filter((snapshot) => !snapshot.result.error).map((snapshot) => snapshot.id),
+        generatedAt: ranking.createdAt
+      });
+    }
 
     return {
       cacheHit: false,
       freshResults: [result],
       ranking,
       phase,
-      source: 'expert-pipeline'
+      degraded: Boolean(result.degraded),
+      source: result.degraded ? 'expert-pipeline-degraded' : 'expert-pipeline'
     };
   } finally {
     if (usesLease) await storage.releasePredictionGeneration(leaseId);

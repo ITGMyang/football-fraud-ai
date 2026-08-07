@@ -13,6 +13,7 @@
 import { callModelForJson } from './openrouter.js';
 import {
   EXPERT_ROLES,
+  MATERIAL_ROLES,
   runAuditExpert,
   runIntelligenceExpert,
   runLongContextExpert,
@@ -132,7 +133,11 @@ export async function runExpertPipeline({
       tactical_discount: audit.tacticalDiscount,
       intelligence_discount: audit.intelligenceDiscount,
       critique: audit.critique,
-      failed_experts: usage.filter((entry) => !entry.ok).map((entry) => `${entry.role}: ${entry.error}`)
+      failed_experts: usage.filter((entry) => !entry.ok).map((entry) => `${entry.role}: ${entry.error}`),
+      // Measured on a real fixture: losing every expert moved the home win from 54.3%
+      // to 50.0%, which at evens is the difference between +8.6% expected value and
+      // none. The shape of the answer survives; the edge does not.
+      degraded: usage.some((entry) => !entry.ok && MATERIAL_ROLES.includes(entry.role))
     },
     usage
   };

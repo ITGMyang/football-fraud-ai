@@ -13,6 +13,11 @@
 // OpenRouter account cannot reach Anthropic, Google or OpenAI, which answer 403 there,
 // so those three go to the providers that do answer.
 
+// Nodes whose answer reaches the maths. The risk node is not among them: it words a
+// decision the code has already made and cannot move a probability, so losing it costs
+// a sentence rather than an answer.
+export const MATERIAL_ROLES = Object.freeze(['tactical', 'longContext', 'intelligence', 'audit']);
+
 export const EXPERT_ROLES = Object.freeze({
   tactical: { env: 'CLAUDE', fallbackModel: 'claude-opus-4-8', fallbackProvider: 'apimart' },
   longContext: { env: 'KIMI', fallbackModel: 'moonshotai/kimi-k3', fallbackProvider: 'openrouter' },

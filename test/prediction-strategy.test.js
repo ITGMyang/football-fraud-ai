@@ -309,3 +309,46 @@ test('the weekly settlement is a scoreboard with no crown on it', async () => {
   });
   assert.equal(result.ranking.results[0].modelId, 'futbots-expert-pipeline');
 });
+
+test('a run that lost an expert is answered but not shared', async () => {
+  const storage = memoryStorage({ settings: {} });
+  let runs = 0;
+  const input = {
+    fixtureId: 'fixture-degraded',
+    contextName: 'A v B',
+    matchContext: {},
+    storage,
+    predictFn: async () => { runs += 1; return expertAnswer({ degraded: true }); }
+  };
+
+  const first = await resolveOptimizedPrediction(input);
+  const second = await resolveOptimizedPrediction(input);
+
+  // Publishing it would serve everyone after it a weaker answer at cache speed, with
+  // nothing on screen to say so, and an expert outage is usually over in minutes.
+  assert.equal(first.degraded, true);
+  assert.equal(first.source, 'expert-pipeline-degraded');
+  assert.equal(storage.consensus.length, 0, 'nothing may reach the shared pool');
+  assert.equal(runs, 2, 'the next reader runs it again rather than inheriting it');
+  // The caller is still answered, and both attempts are recorded.
+  assert.ok(first.ranking.results[0].picks.length > 0);
+  assert.equal(storage.snapshots.length, 2);
+});
+
+test('a full run is shared, so the second reader pays nothing', async () => {
+  const storage = memoryStorage({ settings: {} });
+  let runs = 0;
+  const input = {
+    fixtureId: 'fixture-clean',
+    contextName: 'A v B',
+    matchContext: {},
+    storage,
+    predictFn: async () => { runs += 1; return expertAnswer(); }
+  };
+
+  await resolveOptimizedPrediction(input);
+  const second = await resolveOptimizedPrediction(input);
+  assert.equal(runs, 1);
+  assert.equal(second.cacheHit, true);
+  assert.equal(storage.consensus.length, 1);
+});

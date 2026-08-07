@@ -124,6 +124,7 @@ export function expertResult(report, { home, away, matchName, handicapLine, tota
     picks,
     scorePicks,
     bttsPick,
+    degraded: Boolean(report.audit_trail?.degraded),
     decision: report.decision,
     expectedGoals: report.expected_goals,
     marketComparison: report.market_comparison,
