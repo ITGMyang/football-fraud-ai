@@ -19,7 +19,7 @@ test('without a configured hostname nothing is treated as the console host', () 
 });
 
 test('the console host answers only what the console needs', () => {
-  for (const path of ['/', '/admin', '/api/auth/config', '/api/admin/dashboard', '/build/admin.js', '/assets/back.svg', '/media/team-crests/33.png']) {
+  for (const path of ['/', '/admin', '/api/auth/config', '/api/admin/dashboard', '/api/backend/schedules', '/api/backend/fixtures/1', '/build/admin.js', '/assets/back.svg', '/media/team-crests/33.png']) {
     assert.equal(allowedOnAdminHost(path), true, `${path} should be served`);
   }
   // The public app must not be reachable there, or the split buys nothing.
@@ -39,7 +39,10 @@ test('the Worker splits the two hostnames and hides the console from the public 
   assert.match(worker, /if \(onAdminHost && !allowedOnAdminHost\(url\.pathname\)\) return notFound\(\);/);
   // /api/admin/* answering on the public hostname would leave the console reachable
   // there even with the shell moved.
-  assert.match(worker, /if \(!onAdminHost && url\.pathname\.startsWith\('\/api\/admin\/'\)\) return notFound\(\);/);
+  assert.match(worker, /CONSOLE_API_PREFIXES\.some\(\(prefix\) => url\.pathname\.startsWith\(prefix\)\)\) return notFound\(\);/);
+  // /api/backend/* is the data console's own endpoint and belongs with /api/admin/*:
+  // leaving it out 404'd the console on its own hostname and left it open on the site.
+  assert.match(worker, /const CONSOLE_API_PREFIXES = \['\/api\/admin\/', '\/api\/backend\/'\];/);
   assert.match(worker, /onAdminHost && \(url\.pathname === '\/' \|\| url\.pathname === '\/admin'\)/);
   assert.match(worker, /if \(consoleUrl\) return Response\.redirect\(consoleUrl, 301\);/);
 });
@@ -49,4 +52,13 @@ test('every request reaches the Worker, or neither the region check nor the spli
   assert.match(wrangler, /"run_worker_first": \["\/\*"\]/);
   assert.match(wrangler, /"pattern": "admin\.futbots\.cc"/);
   assert.match(wrangler, /"ADMIN_HOSTNAME": "admin\.futbots\.cc"/);
+});
+
+test('console data needs an administrator, not merely an account', async () => {
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  const consoleRoutes = worker.slice(worker.indexOf("'/api/backend/schedules'"), worker.indexOf("'/api/analytics/refresh'"));
+
+  // Both routes only asked for a signed-in account, so any user could read the whole
+  // schedule cache, and spend an API-Football request on any fixture they named.
+  assert.equal((consoleRoutes.match(/isAdminUser\(access\.user, env\)/g) || []).length, 2);
 });

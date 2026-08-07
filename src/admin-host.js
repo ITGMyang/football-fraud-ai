@@ -5,7 +5,7 @@
 // Everything the console needs and nothing else. The public app must not be reachable
 // on the console hostname, or the split buys nothing.
 const ADMIN_HOST_PATHS = new Set(['/', '/admin', '/api/auth/config']);
-const ADMIN_HOST_PREFIXES = ['/api/admin/', '/build/', '/assets/', '/media/'];
+const ADMIN_HOST_PREFIXES = ['/api/admin/', '/api/backend/', '/build/', '/assets/', '/media/'];
 
 export function adminHostname(env = {}) {
   return String(env.ADMIN_HOSTNAME || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');

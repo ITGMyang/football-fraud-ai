@@ -46,6 +46,8 @@ import {
   verifyAllScaleWebhook
 } from '../src/allscale.js';
 
+const CONSOLE_API_PREFIXES = ['/api/admin/', '/api/backend/'];
+
 const APP_SHELL_ROUTES = new Set([
   '/',
   '/auth/callback',
@@ -73,7 +75,9 @@ export default {
       // the console exists.
       const onAdminHost = isAdminHost(url, env);
       if (onAdminHost && !allowedOnAdminHost(url.pathname)) return notFound();
-      if (!onAdminHost && url.pathname.startsWith('/api/admin/')) return notFound();
+      // The console's endpoints, like the console itself, do not exist on the public
+      // hostname - including /api/backend/*, which only it calls.
+      if (!onAdminHost && CONSOLE_API_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return notFound();
 
       if (request.method === 'GET' && url.pathname === '/api/auth/config') return json(authConfig(env));
       if (request.method === 'GET' && url.pathname === '/auth/telegram/.well-known/openid-configuration') {
@@ -321,6 +325,7 @@ async function routeApi(request, env, access) {
   }
   if (request.method === 'GET' && url.pathname === '/api/backend/schedules') {
     if (access.role !== 'user') return json({ error: 'Sign in to view the data console' }, 401);
+    if (!isAdminUser(access.user, env)) return json({ error: 'Administrator access required' }, 403);
     return json({
       schedules: visibleApiFootballSchedules(await storage.listMatchSchedules(), env),
       generatedAt: new Date().toISOString()
@@ -329,6 +334,9 @@ async function routeApi(request, env, access) {
   const backendFixtureMatch = url.pathname.match(/^\/api\/backend\/fixtures\/(\d+)$/);
   if (request.method === 'GET' && backendFixtureMatch) {
     if (access.role !== 'user') return json({ error: 'Sign in to view match details' }, 401);
+    // Each call spends an API-Football request, so it is not something any signed-in
+    // account should be able to trigger for an arbitrary fixture.
+    if (!isAdminUser(access.user, env)) return json({ error: 'Administrator access required' }, 403);
     const context = await fetchApiFootballContext(backendFixtureMatch[1], apiFootballContextOptions(env, storage), workerFetch);
     return json({ context, generatedAt: new Date().toISOString() });
   }
