@@ -9,108 +9,57 @@ import {
   settleWeeklyModelPerformance
 } from '../src/prediction-strategy.js';
 
-test('early prediction calls only the weekly champion and then reuses the public result', async () => {
-  const storage = memoryStorage({
-    settings: {
-      championModelKey: 'claude',
-      liveModelKeys: ['gpt', 'claude', 'gemini'],
-      modelWeights: { gpt: 1, claude: 1.2, gemini: 1 }
-    }
-  });
-  const calls = [];
-  const rankFn = async (_markets, model) => {
-    calls.push(model);
-    return ranking([modelResult(model, 'home')]);
+function expertAnswer(overrides = {}) {
+  return {
+    modelName: 'FutBots Expert Pipeline',
+    modelId: 'futbots-expert-pipeline',
+    provider: 'FutBots',
+    picks: [{ marketId: 'm', market: { marketType: 'Moneyline', selection: 'Alpha', line: '1X2' }, estimatedProbability: 0.55, confidence: 0.55 }],
+    scorePicks: [{ score: '1-0', estimatedProbability: 0.12 }],
+    bttsPick: { selection: 'No', estimatedProbability: 0.52 },
+    decision: { status: 'PASS', pass_reason: 'entropy' },
+    report: { decision: { status: 'PASS' } },
+    ...overrides
   };
+}
+
+test('one pipeline run answers the fixture, and the next reader is served the same answer', async () => {
+  const storage = memoryStorage({ settings: {} });
+  let runs = 0;
   const input = {
-    fixtureId: 'fixture-early',
+    fixtureId: 'fixture-1',
     contextName: 'Alpha v Beta',
-    markets: [],
-    matchContext: { kickoff: '2026-07-25T12:00:00Z', lineup: { players: [] } },
+    matchContext: { kickoff: '2026-07-25T12:00:00Z' },
     now: Date.parse('2026-07-25T08:00:00Z'),
     storage,
-    rankFn
+    predictFn: async () => { runs += 1; return expertAnswer(); }
   };
 
   const first = await resolveOptimizedPrediction(input);
   const second = await resolveOptimizedPrediction(input);
 
-  assert.deepEqual(calls, ['Claude']);
+  assert.equal(runs, 1, 'the second reader must not pay for the same fixture again');
   assert.equal(first.cacheHit, false);
   assert.equal(second.cacheHit, true);
-  assert.equal(first.ranking.results.length, 1);
-  assert.equal(first.ranking.results[0].predictionPhase, 'early');
+  assert.equal(first.source, 'expert-pipeline');
+  assert.equal(storage.snapshots.length, 1, 'one pipeline, one snapshot');
+  // The document's own report travels with the ranking for the console to read.
+  assert.equal(first.ranking.expertReport.decision.status, 'PASS');
+});
+
+test('a pipeline that produced no market is an outage, and says why', async () => {
+  const storage = memoryStorage({ settings: {} });
+  const empty = expertAnswer({ picks: [], scorePicks: [], auditTrail: { failed_experts: ['tactical: down', 'audit: down'] } });
+
+  await assert.rejects(
+    resolveOptimizedPrediction({
+      fixtureId: 'fixture-2', contextName: 'A v B', storage, matchContext: {},
+      predictFn: async () => empty
+    }),
+    /tactical: down/
+  );
+  // The failed attempt is still recorded, or an outage leaves no trace to debug.
   assert.equal(storage.snapshots.length, 1);
-  assert.equal(storage.consensus.length, 1);
-});
-
-test('live prediction runs three configured models concurrently and publishes one consensus', async () => {
-  const storage = memoryStorage({
-    settings: {
-      championModelKey: 'qwen',
-      liveModelKeys: ['gpt', 'claude', 'gemini'],
-      modelWeights: { gpt: 1, claude: 1.25, gemini: 0.8 }
-    }
-  });
-  let active = 0;
-  let maximumActive = 0;
-  const rankFn = async (_markets, model) => {
-    active += 1;
-    maximumActive = Math.max(maximumActive, active);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    active -= 1;
-    return ranking([modelResult(model, model === 'Gemini' ? 'draw' : 'home')]);
-  };
-
-  const result = await resolveOptimizedPrediction({
-    fixtureId: 'fixture-live',
-    contextName: 'Alpha v Beta',
-    markets: [],
-    matchContext: {
-      kickoff: '2026-07-25T12:00:00Z',
-      lineup: { players: [{ id: 1 }] }
-    },
-    now: Date.parse('2026-07-25T11:15:00Z'),
-    storage,
-    rankFn
-  });
-
-  assert.equal(maximumActive, 3);
-  assert.equal(storage.snapshots.length, 3);
-  assert.equal(result.ranking.results.length, 1);
-  assert.equal(result.ranking.results[0].modelName, 'FutBots Consensus');
-  assert.equal(result.ranking.results[0].predictionPhase, 'live');
-  assert.equal(result.ranking.results[0].picks[0].market.selection, 'Alpha');
-});
-
-test('live prediction retains failed model snapshots and builds consensus from successful models', async () => {
-  const storage = memoryStorage({
-    settings: {
-      championModelKey: 'qwen',
-      liveModelKeys: ['gpt', 'claude', 'gemini'],
-      modelWeights: {}
-    }
-  });
-  const result = await resolveOptimizedPrediction({
-    fixtureId: 'fixture-partial-live',
-    markets: [],
-    matchContext: {
-      kickoff: '2026-07-25T12:00:00Z',
-      lineup: { players: [{ id: 1 }] }
-    },
-    now: Date.parse('2026-07-25T11:15:00Z'),
-    storage,
-    rankFn: async (_markets, model) => {
-      if (model === 'Claude') throw new Error('provider timeout');
-      if (model === 'Gemini') return ranking([{ modelName: model, modelId: 'gemini', error: 'invalid JSON' }]);
-      return ranking([modelResult(model, 'home')]);
-    }
-  });
-
-  assert.equal(storage.snapshots.length, 3);
-  assert.equal(storage.snapshots.filter((row) => row.result.error).length, 2);
-  assert.equal(storage.consensus[0].sourceSnapshotIds.length, 1);
-  assert.equal(result.ranking.results[0].sourceModels.length, 1);
 });
 
 test('two simultaneous users share one fixture generation lease', async () => {
@@ -131,10 +80,10 @@ test('two simultaneous users share one fixture generation lease', async () => {
     storage,
     waitIntervalMs: 2,
     waitAttempts: 30,
-    rankFn: async (_markets, model) => {
+    predictFn: async () => {
       calls += 1;
       await new Promise((resolve) => setTimeout(resolve, 12));
-      return ranking([modelResult(model, 'home')]);
+      return expertAnswer();
     }
   };
 
@@ -332,15 +281,15 @@ test('a consensus from an older pipeline is regenerated rather than served', asy
     ...memoryStorage({ settings: { championModelKey: 'qwen', liveModelKeys: [], modelWeights: {} } }),
     readCurrentPredictionConsensus: async () => stale
   };
-  const rankFn = async () => {
+  const predictFn = async () => {
     generated += 1;
-    return { results: [{ modelName: 'Qwen', modelId: 'qwen/test', picks: [], scorePicks: [], bttsPick: null }] };
+    return expertAnswer();
   };
 
   // Changing how a prediction is computed makes every stored one stale, and serving it
   // anyway shows the user a pick the current pipeline would not make.
   const result = await resolveOptimizedPrediction({
-    fixtureId: '1', storage, rankFn, env: { MODEL_QWEN: 'qwen/test' }, matchContext: {}
+    fixtureId: '1', storage, predictFn, matchContext: {}
   });
 
   assert.equal(generated, 1, 'the stale consensus must not be served');
@@ -350,7 +299,7 @@ test('a consensus from an older pipeline is regenerated rather than served', asy
   // And one from the current pipeline is still reused, or every request would pay again.
   stale.ranking.pipelineVersion = PREDICTION_PIPELINE_VERSION;
   const reused = await resolveOptimizedPrediction({
-    fixtureId: '1', storage, rankFn, env: { MODEL_QWEN: 'qwen/test' }, matchContext: {}
+    fixtureId: '1', storage, predictFn, matchContext: {}
   });
   assert.equal(generated, 1);
   assert.equal(reused.cacheHit, true);

@@ -1,4 +1,4 @@
-import { configuredModels } from './openrouter.js';
+import { predictWithExperts } from './expert-result.js';
 import { predictionModelKey, predictionPhase } from './prediction-cache.js';
 import { buildAnalytics } from './evaluation.js';
 import { contextKey } from './context-utils.js';
@@ -15,7 +15,7 @@ import { buildMarketBaseline, compareToBaseline } from './market-odds.js';
 // a match with no odds read was offered an invented handicap, and one with odds was
 // offered whichever rows arrived first, so a published pick could name a line no
 // bookmaker had.
-export const PREDICTION_PIPELINE_VERSION = '2026-08-06.handicap-main-line';
+export const PREDICTION_PIPELINE_VERSION = '2026-08-06.expert-pipeline';
 
 const DEFAULT_SETTINGS = Object.freeze({
   championModelKey: 'qwen',
@@ -40,7 +40,7 @@ export async function resolveOptimizedPrediction({
   env = process.env,
   fetchImpl = fetch,
   storage,
-  rankFn,
+  predictFn = predictWithExperts,
   matchContext = null,
   now = Date.now(),
   waitIntervalMs = 250,
@@ -90,60 +90,48 @@ export async function resolveOptimizedPrediction({
   const marketBaseline = buildMarketBaseline(matchContext);
 
   try {
-    const settings = normalizeSettings(await storage.readPredictionSettings?.());
-    const modelKeys = phase === 'live'
-      ? settings.liveModelKeys.slice(0, 3)
-      : [settings.championModelKey];
-    const aliases = configuredModelAliases(env);
-    const generated = await Promise.all(modelKeys.map(async (modelKey) => {
-      const modelName = aliases.get(modelKey) || DEFAULT_ALIASES[modelKey] || modelKey;
-      try {
-        const ranking = await rankFn(markets, modelName, env, fetchImpl, matchContext);
-        const result = (ranking.results || []).find((item) => !item.error) || ranking.results?.[0];
-        return result
-          ? { ...result, predictionPhase: phase }
-          : { modelName, modelId: modelKey, error: 'Model returned no result', predictionPhase: phase };
-      } catch (error) {
-        return {
-          modelName,
-          modelId: modelKey,
-          error: error instanceof Error ? error.message : String(error),
-          predictionPhase: phase,
-          generatedAt: new Date(now).toISOString()
-        };
-      }
-    }));
-    const snapshots = generated.filter(Boolean).map((result) => ({
+    // One pipeline rather than a pool of models: the experts are specialists inside it
+    // and no model names a market, so there is nothing here to pick a winner between.
+    // The phase still matters for caching - an early answer is regenerated once the
+    // lineups land, which is when the tactical expert has something to read.
+    const expert = await predictFn({
+      fixtureId,
+      matchName: contextName,
+      context: matchContext || {},
+      env,
+      fetchImpl
+    });
+    const result = { ...expert, predictionPhase: phase, generatedAt: new Date(now).toISOString() };
+
+    const snapshots = [{
       id: crypto.randomUUID(),
       fixtureId: String(fixtureId),
       phase,
-      modelKey: predictionModelKey(result.modelName || result.modelId),
+      modelKey: predictionModelKey(result.modelId || result.modelName),
       modelId: result.modelId || null,
       result,
-      generatedAt: result.generatedAt || new Date(now).toISOString()
-    }));
+      generatedAt: result.generatedAt
+    }];
     await storage.appendPredictionSnapshots(snapshots);
-    const successfulResults = generated.filter((result) => result && !result.error);
-    if (!successfulResults.length) {
-      // Every model failing is a total outage, and it used to leave no trace: the model
-      // errors were swallowed into the result objects and the caller only ever saw
-      // "no valid result", which says nothing about why. Say what each model said.
-      const reasons = generated.filter(Boolean).map((result) => `${result.modelName}: ${result.error}`);
+
+    if (!result.picks?.length && !result.scorePicks?.length) {
+      const reasons = result.auditTrail?.failed_experts || [];
       console.error(JSON.stringify({
-        event: 'prediction_all_models_failed',
+        event: 'prediction_pipeline_empty',
         fixtureId: String(fixtureId),
         phase,
         reasons
       }));
-      throw new Error(`No prediction model returned a valid result (${reasons.join('; ')})`);
+      throw new Error(`No prediction model returned a valid result (${reasons.join('; ') || 'pipeline produced no markets'})`);
     }
 
-    const publicResult = phase === 'live'
-      ? { ...buildWeightedConsensus(successfulResults, settings.modelWeights), predictionPhase: phase }
-      : successfulResults[0];
+    const publicResult = result;
     const ranking = {
       id: crypto.randomUUID(),
       results: [publicResult],
+      // The document's own report, carried whole so the console and any later screen
+      // can show expected value, the risk verdict and who said what.
+      expertReport: expert.report || null,
       marketCount: markets.length,
       contextId: String(fixtureId),
       contextName,
@@ -168,10 +156,10 @@ export async function resolveOptimizedPrediction({
 
     return {
       cacheHit: false,
-      freshResults: successfulResults,
+      freshResults: [result],
       ranking,
       phase,
-      source: phase === 'live' ? 'weighted-consensus' : 'weekly-champion'
+      source: 'expert-pipeline'
     };
   } finally {
     if (usesLease) await storage.releasePredictionGeneration(leaseId);
@@ -339,9 +327,6 @@ function normalizeSettings(value = {}) {
   };
 }
 
-function configuredModelAliases(env) {
-  return new Map(configuredModels(env).map(([label,, alias]) => [predictionModelKey(label || alias), alias]));
-}
 
 function positiveWeight(value) {
   const number = Number(value);

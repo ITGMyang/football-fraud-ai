@@ -561,7 +561,6 @@ async function routeApi(request, env, access) {
           env: rankingEnv(env, body),
           fetchImpl: workerFetch,
           storage,
-          rankFn: rankMarkets,
           matchContext: context
         })
         : {
