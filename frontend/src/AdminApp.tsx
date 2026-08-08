@@ -16,6 +16,7 @@ import type {
   Dashboard,
   FixtureContext,
   OrderRow,
+  ResultCoverage,
   Schedule,
   ScheduleMatch,
   Traffic,
@@ -724,7 +725,7 @@ function PredictionsTab({ dashboard }: { dashboard: Dashboard }) {
 
 /* ============ TAB: ACCURACY ============ */
 
-function AccuracyTab({ accuracy }: { accuracy: Accuracy }) {
+function AccuracyTab({ accuracy, coverage }: { accuracy: Accuracy; coverage: ResultCoverage }) {
   const t = useT();
   const [category, setCategory] = useState('all');
   const [model, setModel] = useState('all');
@@ -767,6 +768,27 @@ function AccuracyTab({ accuracy }: { accuracy: Accuracy }) {
           tone={accuracy.finishedWithoutScoreCount ? 'warn' : 'ok'}
         />
       </div>
+
+      <Module title={t('coverageTitle')} eyebrow={t('coverageEyebrow')} note={t('coverageNote')}>
+        <div className="a-metrics a-metrics--tight">
+          <Metric label={t('coverageRate')} value={ratio(coverage.coverage)} note={t('coverageFilled', { n: count(coverage.lastRunFilled) })} tone={coverage.awaiting ? 'warn' : 'ok'} />
+          <Metric label={t('coverageSettled')} value={count(coverage.settled)} />
+          <Metric label={t('coverageAwaiting')} value={count(coverage.awaiting)} note={t('coverageAwaitingNote')} tone={coverage.awaiting ? 'warn' : 'ok'} />
+          <Metric label={t('coverageInPlay')} value={count(coverage.inPlay)} note={t('coverageInPlayNote')} />
+          <Metric label={t('coverageLastRun')} value={when(coverage.lastRunAt)} />
+        </div>
+        {/* A count alone cannot say whether the backfill is working through a queue or
+            stuck on the same fixtures, and only the second one needs looking at. */}
+        <Table head={[t('coverageOldest'), t('colFixtureId'), t('colKickoff')]} empty={t('coverageClear')}>
+          {coverage.oldest.map((row) => (
+            <tr key={row.fixtureId}>
+              <td><strong>{row.matchName || '—'}</strong></td>
+              <td>{row.fixtureId}</td>
+              <td>{when(row.kickoff)}</td>
+            </tr>
+          ))}
+        </Table>
+      </Module>
 
       <Module title={t('byModel')} eyebrow={t('settledOnly')}>
         <Table head={[t('colModel'), t('colSettled'), t('colHits'), t('colAccuracy')]}>
@@ -1391,7 +1413,7 @@ export default function AdminApp() {
                 />
               )}
               {tab === 'predictions' && <PredictionsTab dashboard={dashboard} />}
-              {tab === 'accuracy' && <AccuracyTab accuracy={dashboard.accuracy} />}
+              {tab === 'accuracy' && <AccuracyTab accuracy={dashboard.accuracy} coverage={dashboard.resultCoverage} />}
               {tab === 'accounts' && <AccountsTab dashboard={dashboard} />}
               </Boundary>
             </div>

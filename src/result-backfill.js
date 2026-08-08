@@ -10,11 +10,7 @@
 // history date it backfills, so this costs no provider request at all.
 
 import { filterApiFootballSchedules } from './api-football-cache.js';
-
-// A match is settled well before this, but a late kickoff, extra time and a delayed
-// provider update all sit inside it, and a score read too early is worse than one read
-// late: it would be stored as final.
-const SETTLE_DELAY_MS = 3 * 60 * 60 * 1000;
+import { isLikelyFinished, SETTLE_DELAY_MS } from './evaluation.js';
 
 // Written in one request, so this is a cap on rows rather than on subrequests.
 const MAX_PER_RUN = 200;
@@ -32,14 +28,12 @@ export function scoresFromSchedules(schedules = []) {
 }
 
 export function contextsNeedingResult(entries = [], scores = new Map(), now = Date.now()) {
-  const settled = now - SETTLE_DELAY_MS;
   const filled = [];
   for (const entry of entries) {
     const context = entry?.context;
     if (!context) continue;
     if (String(context.actualScore || '').trim()) continue;
-    const kickoff = Date.parse(context.kickoff || '');
-    if (!Number.isFinite(kickoff) || kickoff > settled) continue;
+    if (!isLikelyFinished(context, now)) continue;
     const score = scores.get(String(context.matchId || context.id || ''));
     if (!score) continue;
     filled.push({ ownerId: entry.ownerId || 'guest', context: { ...context, actualScore: score } });

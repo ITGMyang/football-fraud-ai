@@ -160,8 +160,10 @@ export default {
       // Accuracy is only as complete as the scores behind it, and nothing filled those
       // in on a schedule before - a match was settled only if whoever imported it came
       // back and opened their profile page.
-      const resultsTask = backfillMatchResults(storage).then((result) => {
-        if (result.filled || result.unresolved) console.log(JSON.stringify({ event: 'match_result_backfill', ...result }));
+      const resultsTask = backfillMatchResults(storage).then(async (result) => {
+        if (!result.filled && !result.unresolved) return;
+        console.log(JSON.stringify({ event: 'match_result_backfill', ...result }));
+        await storage.recordSystemEvent('match_result_backfill', result).catch(() => null);
       }).catch((error) => {
         console.error(JSON.stringify({ event: 'match_result_backfill_failed', error: error.message }));
       });

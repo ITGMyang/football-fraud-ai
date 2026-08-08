@@ -1,6 +1,6 @@
 import { calculateModelCostUsd } from './model-cost.js';
 import { contextKey } from './context-utils.js';
-import { actualResultFromContext, buildAnalytics } from './evaluation.js';
+import { actualResultFromContext, buildAnalytics, isLikelyFinished } from './evaluation.js';
 
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 const PREDICTION_MODELS = ['gpt', 'claude', 'gemini', 'qwen'];
@@ -29,6 +29,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
   const todayUsageSummary = summarizeUsage(todayUsage);
   const todayPredictionRequests = predictionRequests.filter((row) => dateKey(row.created_at) === today);
   const predictionRuns = summarizePredictionRuns(systemEvents);
+  const resultCoverage = summarizeResultCoverage(contexts, systemEvents, now);
   const todayRefreshes = systemEvents.filter((row) => row.event_type === 'api_football_refresh' && dateKey(row.created_at) === today);
   const latestRefresh = [...systemEvents]
     .filter((row) => row.event_type === 'api_football_refresh')
@@ -44,6 +45,7 @@ export function buildAdminDashboard(input = {}, now = Date.now(), options = {}) 
   return {
     generatedAt: new Date(now).toISOString(),
     predictionRuns,
+    resultCoverage,
     core: {
       apiFootballCallsToday: sum(todayRefreshes, (row) => row.payload?.apiCalls),
       apiFootballDailyLimit: positiveNumber(input.apiFootballDailyLimit),
@@ -676,4 +678,48 @@ function summarizePredictionRuns(systemEvents = [], limit = 40) {
         }))
       };
     });
+}
+
+// How much of the history can actually be scored. Accuracy is computed over matches
+// that have a final score, so a large unsettled pile does not look like an error - it
+// looks like a smaller, quietly biased sample.
+function summarizeResultCoverage(contexts = [], systemEvents = [], now = Date.now()) {
+  let settled = 0;
+  let awaiting = 0;
+  let inPlay = 0;
+  const oldest = [];
+
+  for (const row of contexts) {
+    const context = row.payload || row;
+    const kickoff = Date.parse(context?.kickoff || '');
+    if (!Number.isFinite(kickoff) || kickoff > now) continue;
+    if (String(context?.actualScore || '').trim()) {
+      settled += 1;
+      continue;
+    }
+    if (!isLikelyFinished(context, now)) {
+      inPlay += 1;
+      continue;
+    }
+    awaiting += 1;
+    oldest.push({
+      fixtureId: String(context.matchId || context.id || ''),
+      matchName: String(context.matchName || ''),
+      kickoff: context.kickoff || ''
+    });
+  }
+
+  const lastRun = [...systemEvents]
+    .filter((row) => row.event_type === 'match_result_backfill')
+    .sort((a, b) => timestamp(b.created_at) - timestamp(a.created_at))[0];
+
+  return {
+    settled,
+    awaiting,
+    inPlay,
+    coverage: settled + awaiting > 0 ? settled / (settled + awaiting) : 1,
+    oldest: oldest.sort((a, b) => timestamp(a.kickoff) - timestamp(b.kickoff)).slice(0, 10),
+    lastRunAt: lastRun?.created_at || '',
+    lastRunFilled: Number(lastRun?.payload?.filled) || 0
+  };
 }

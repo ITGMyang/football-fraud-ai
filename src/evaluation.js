@@ -222,17 +222,27 @@ function buildTrend(evaluations) {
   return [...byDateModel.values()].sort((a, b) => a.date.localeCompare(b.date) || a.modelName.localeCompare(b.modelName));
 }
 
-function isLikelyFinished(context = {}) {
+// Long enough for a late kickoff, extra time and a delayed provider update. Two
+// answers to "has this finished" on one page is worse than either answer.
+export const SETTLE_DELAY_MS = 3 * 60 * 60 * 1000;
+
+export function isLikelyFinished(context = {}, now = Date.now()) {
   if (/played|finished|完场|结束|ft/i.test(String(context.status || context.matchStatus || ''))) return true;
   const kickoff = parseKickoffTime(context.kickoff);
-  return kickoff ? kickoff.getTime() + 150 * 60 * 1000 < Date.now() : false;
+  return kickoff ? kickoff.getTime() + SETTLE_DELAY_MS < now : false;
 }
 
+// A kickoff that states its offset means it. Rewriting every timestamp to +08:00 read
+// a UTC kickoff as eight hours earlier than it was, so a match still being played
+// looked long finished - and the score read at that point would have been stored as
+// final. Only a bare "YYYY-MM-DD HH:MM", which carries no offset, is Shanghai time.
 function parseKickoffTime(value) {
   const text = String(value || '').trim();
-  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
-  if (match) {
-    const [, year, month, day, hour, minute, second = '00'] = match;
+  if (!text) return null;
+  const hasOffset = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(text);
+  const bare = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!hasOffset && bare) {
+    const [, year, month, day, hour, minute, second = '00'] = bare;
     return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`);
   }
   const parsed = new Date(text);

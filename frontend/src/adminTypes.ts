@@ -144,6 +144,7 @@ export type OrderStatusCounts = { pending: number; completed: number; failed: nu
 
 export type Dashboard = {
   predictionRuns: PredictionRun[];
+  resultCoverage: ResultCoverage;
   generatedAt: string;
   core: CoreMetrics;
   models: UsageModelRow[];
@@ -203,6 +204,16 @@ export type TrafficCountry = {
   requests: number;
   threats: number;
   share: number;
+};
+
+export type ResultCoverage = {
+  settled: number;
+  awaiting: number;
+  inPlay: number;
+  coverage: number;
+  oldest: { fixtureId: string; matchName: string; kickoff: string }[];
+  lastRunAt: string;
+  lastRunFilled: number;
 };
 
 export type PredictionRunNode = {

@@ -80,3 +80,20 @@ test('a run with nothing to settle writes nothing', async () => {
   assert.equal(result.filled, 0);
   assert.equal(wrote, false);
 });
+
+test('a kickoff that states its offset is read at that offset', async () => {
+  const { isLikelyFinished } = await import('../src/evaluation.js');
+  const now = Date.parse('2026-08-08T12:00:00Z');
+
+  // Every timestamp used to be rewritten to +08:00, so a UTC kickoff read as eight
+  // hours earlier than it was: a match still being played looked long finished, and
+  // the score read at that moment would have been stored as final.
+  assert.equal(isLikelyFinished({ kickoff: '2026-08-08T11:00:00.000Z' }, now), false);
+  assert.equal(isLikelyFinished({ kickoff: '2026-08-08T19:00:00+08:00' }, now), false);
+  assert.equal(isLikelyFinished({ kickoff: '2026-08-08T07:00:00.000Z' }, now), true);
+  // A bare timestamp carries no offset and is Shanghai time, as it always was.
+  assert.equal(isLikelyFinished({ kickoff: '2026-08-08 12:00' }, now), true);
+  assert.equal(isLikelyFinished({ kickoff: '2026-08-08 21:00' }, now), false);
+  // The provider's own wording still settles it whatever the clock says.
+  assert.equal(isLikelyFinished({ kickoff: '2026-08-08T11:30:00Z', status: 'Match Finished' }, now), true);
+});
