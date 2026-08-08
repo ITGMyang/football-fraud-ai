@@ -9,20 +9,7 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
 
   for (const ranking of rankings || []) {
     const context = contextMap.get(ranking.contextId);
-    const actual = actualResultFromContext(context);
-    if (!actual) continue;
-    for (const result of ranking.results || []) {
-      if (result.error) continue;
-      const modelName = result.modelName || 'AI';
-      for (const pick of result.picks || []) {
-        const evaluation = evaluatePick(pick, actual, context, ranking, modelName);
-        if (evaluation) evaluations.push(evaluation);
-      }
-      const scoreEvaluation = evaluateScorePicks(result.scorePicks, actual, context, ranking, modelName);
-      if (scoreEvaluation) evaluations.push(scoreEvaluation);
-      const bttsEvaluation = evaluateBttsPick(result.bttsPick, actual, context, ranking, modelName);
-      if (bttsEvaluation) evaluations.push(bttsEvaluation);
-    }
+    evaluations.push(...evaluateRanking(ranking, context));
   }
 
   return {
@@ -39,6 +26,30 @@ export function buildAnalytics({ rankings = [], contexts = [] } = {}) {
       .sort((a, b) => String(b.matchDate).localeCompare(String(a.matchDate)) || String(a.contextName).localeCompare(String(b.contextName)))
       .slice(0, 5000)
   };
+}
+
+// Every market a single prediction made, judged against the final score. The card in
+// the app and the accuracy tables both read this, so "which ones were right" cannot
+// mean two different things in two places.
+export function evaluateRanking(ranking = {}, context = null) {
+  // A parameter default only replaces undefined, so a missing context arrives here as
+  // null and would reach the score reader untouched.
+  const actual = actualResultFromContext(context || {});
+  if (!actual) return [];
+  const evaluations = [];
+  for (const result of ranking.results || []) {
+    if (result.error) continue;
+    const modelName = result.modelName || 'AI';
+    for (const pick of result.picks || []) {
+      const evaluation = evaluatePick(pick, actual, context, ranking, modelName);
+      if (evaluation) evaluations.push(evaluation);
+    }
+    const scoreEvaluation = evaluateScorePicks(result.scorePicks, actual, context, ranking, modelName);
+    if (scoreEvaluation) evaluations.push(scoreEvaluation);
+    const bttsEvaluation = evaluateBttsPick(result.bttsPick, actual, context, ranking, modelName);
+    if (bttsEvaluation) evaluations.push(bttsEvaluation);
+  }
+  return evaluations;
 }
 
 function evaluateBttsPick(pick, actual, context, ranking, modelName) {

@@ -3423,3 +3423,57 @@ button.plan-option:disabled:hover {
   white-space: nowrap;
   border: 0;
 }
+
+/* Which markets landed, rather than one verdict for the whole card. A hit and a miss
+   have to be told apart without colour alone, so each carries its own mark. */
+.market-verdicts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 16px 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.market-verdicts li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.market-verdicts li span {
+  color: #7c8c84;
+}
+
+.market-verdicts li strong {
+  font-weight: 600;
+}
+
+.market-verdicts li::before {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.market-verdicts li.is-hit {
+  border-color: rgba(30, 185, 120, 0.4);
+  background: rgba(30, 185, 120, 0.1);
+  color: #4fd79c;
+}
+
+.market-verdicts li.is-hit::before {
+  content: "✓";
+}
+
+.market-verdicts li.is-miss {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #8b8b8b;
+}
+
+.market-verdicts li.is-miss::before {
+  content: "✕";
+}

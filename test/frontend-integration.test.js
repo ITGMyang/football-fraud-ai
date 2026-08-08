@@ -433,7 +433,11 @@ test('My Predictions uses date tabs and opens crest-aware match result cards', a
 
   assert.match(source, /className="history-date-tabs"/);
   assert.match(source, /function HistoryCard/);
-  assert.match(source, /Match Result/);
+  // "Match Result: Miss" judged only the exact scoreline, the hardest market, under a
+  // label promising the easiest. The card names each market instead.
+  assert.match(source, /market-verdicts/);
+  assert.match(source, /MARKET_LABEL/);
+  assert.doesNotMatch(source, /Match Result/);
   assert.match(source, /onOpenPrediction\(item\)/);
   assert.match(source, /api\("\/api\/analytics\/refresh"/);
   assert.match(source, /api\("\/api\/contexts"/);
@@ -491,4 +495,51 @@ test('a bundle that no longer exists 404s instead of returning the app shell', a
   // which is what left the page black after a deploy.
   assert.equal((await serveBundle(shellFallback, new Request('https://x/build/gone.js'))).status, 404);
   assert.equal((await serveBundle(realBundle, new Request('https://x/build/app.js'))).status, 200);
+});
+
+test('a history card names the markets that landed, judged by the shared rules', async () => {
+  const { predictionHistory } = frontendApi;
+  const ranking = {
+    contextId: '1',
+    contextName: 'Lech Poznan v KI Klaksvik',
+    results: [{
+      modelName: 'FutBots Expert Pipeline',
+      picks: [
+        { market: { marketType: 'Moneyline', selection: 'Lech Poznan', line: '1X2' }, estimatedProbability: 0.55 },
+        { market: { marketType: 'Goals Total', selection: 'Over', line: '2.5' }, estimatedProbability: 0.52 }
+      ],
+      scorePicks: [{ score: '2-1', estimatedProbability: 0.1 }],
+      bttsPick: { selection: 'Yes', estimatedProbability: 0.53 }
+    }]
+  };
+  const context = {
+    id: '1', matchId: '1', matchName: 'Lech Poznan v KI Klaksvik',
+    teams: ['Lech Poznan', 'KI Klaksvik'], kickoff: '2026-08-07T01:00:00Z', actualScore: '1:0'
+  };
+
+  const [group] = predictionHistory([{ ...frontendApi.rankingView(ranking), raw: ranking }], [context]);
+  const [match] = group.matches;
+
+  // The card used to test the exact scoreline only, and report it as "Match Result",
+  // so a correct home win read as a Miss.
+  const byCategory = Object.fromEntries(match.markets.map((entry) => [entry.category, entry.hit]));
+  assert.equal(byCategory.moneyline, true, 'the home win landed');
+  assert.equal(byCategory.total, false, '1:0 is under 2.5');
+  assert.equal(byCategory.btts, false, 'only one side scored');
+  assert.equal(byCategory.score, false, '2-1 was not the score');
+  assert.equal(match.hits, 1);
+  assert.equal(match.decided, 4);
+  assert.equal(match.result, 'hit', 'anything landing beats calling the whole card a miss');
+});
+
+test('a match without a score yet is pending, not a miss', async () => {
+  const { predictionHistory, rankingView } = frontendApi;
+  const ranking = {
+    contextId: '2',
+    results: [{ modelName: 'AI', picks: [{ market: { marketType: 'Moneyline', selection: 'A', line: '1X2' }, estimatedProbability: 0.5 }], scorePicks: [], bttsPick: null }]
+  };
+  const [group] = predictionHistory([{ ...rankingView(ranking), raw: ranking }], [{ id: '2', matchId: '2', teams: ['A', 'B'], kickoff: '2026-08-09T12:00:00Z' }]);
+
+  assert.equal(group.matches[0].result, 'pending');
+  assert.deepEqual(group.matches[0].markets, []);
 });

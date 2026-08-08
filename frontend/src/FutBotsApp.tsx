@@ -65,9 +65,13 @@ type RankingView = {
   createdAt: string;
   models: ModelView[];
 };
+type MarketVerdict = { category: string; selection: string; hit: boolean };
 type HistoryMatch = Match & {
   countryFlag: string;
   result: "hit" | "miss" | "pending";
+  markets: MarketVerdict[];
+  hits: number;
+  decided: number;
   ranking: RankingView;
 };
 type HistoryGroup = {
@@ -1446,18 +1450,37 @@ function Details({ navigate, onBack, match, ranking, showResult, analyzing, erro
 
 /* ============ PROFILE (Figma 1:393) ============ */
 
+const MARKET_LABEL: Record<string, string> = {
+  moneyline: "Result",
+  handicap: "Handicap",
+  total: "Goals",
+  btts: "Both score",
+  score: "Exact score"
+};
+
 function HistoryCard({ item, onOpen }: { item: HistoryMatch; onOpen: () => void }) {
-  const resultBadge = item.result === "hit"
-    ? <span className="badge badge--hit">Hit</span>
-    : item.result === "miss"
-      ? <span className="badge badge--miss">Miss</span>
-      : <span className="badge badge--soon">Pending</span>;
+  // Naming the markets instead of one verdict: "Miss" on a card whose only test was
+  // the exact scoreline told the reader nothing, and read as if the whole prediction
+  // had been wrong.
+  const resultBadge = item.decided === 0
+    ? <span className="badge badge--soon">Pending</span>
+    : <span className={`badge ${item.hits ? "badge--hit" : "badge--miss"}`}>{item.hits}/{item.decided}</span>;
   return (
     <article className="pcard pcard--done">
       <div className="pcard__head">
         <span className="pcard__date">{item.countryFlag} {item.date}{item.score ? ` · FT ${item.score}` : ""}</span>
-        <span className="history-result"><span>Match Result:</span>{resultBadge}</span>
+        <span className="history-result"><span>Landed:</span>{resultBadge}</span>
       </div>
+      {item.markets.length > 0 && (
+        <ul className="market-verdicts">
+          {item.markets.map((market) => (
+            <li key={`${market.category}|${market.selection}`} className={market.hit ? "is-hit" : "is-miss"}>
+              <span>{MARKET_LABEL[market.category] || market.category}</span>
+              <strong>{market.selection}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="pcard__result">
         <div className="stacked-teams">
           <div><TeamFlag team={item.teamA} /><span>{item.teamA.name}</span></div>

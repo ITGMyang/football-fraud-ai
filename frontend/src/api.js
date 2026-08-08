@@ -1,3 +1,5 @@
+import { evaluateRanking } from '../../src/evaluation.js';
+
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Shanghai',
   month: 'short',
@@ -146,6 +148,10 @@ export function createApiClient({
 
 export function rankingView(ranking = {}) {
   return {
+    // The view flattens picks for display and loses the market behind each one, which
+    // is what deciding "did this land" needs. Keep the original alongside so the card
+    // can be judged by the same code the accuracy tables use.
+    raw: ranking,
     contextId: String(ranking.contextId || ''),
     matchName: ranking.contextName || 'Match prediction',
     createdAt: ranking.createdAt || '',
@@ -196,10 +202,17 @@ export function predictionHistory(rankings = [], contexts = []) {
     const home = context.fixture?.home || {};
     const away = context.fixture?.away || {};
     const actualScore = normalizeHistoryScore(context.actualScore || context.score || context.result?.score);
-    const scoreCandidates = (ranking.models || []).flatMap((model) => (model.scores || []).map((pick) => normalizeHistoryScore(pick.score)));
-    const result = actualScore
-      ? scoreCandidates.includes(actualScore) ? 'hit' : 'miss'
-      : 'pending';
+    // One badge reading "Match Result: Miss" said nothing about which of the five
+    // markets was wrong, and judged only the exact scoreline - the hardest of them -
+    // under a label that promised the easiest.
+    const markets = evaluateRanking(ranking.raw || ranking, context).map((entry) => ({
+      category: entry.category,
+      selection: entry.selection,
+      hit: Boolean(entry.hit)
+    }));
+    const decided = markets.length;
+    const hits = markets.filter((entry) => entry.hit).length;
+    const result = !actualScore ? 'pending' : decided === 0 ? 'pending' : hits > 0 ? 'hit' : 'miss';
     const match = {
       id: String(ranking.contextId || context.matchId || context.id || ''),
       date: formatMatchDate(kickoff),
@@ -211,6 +224,9 @@ export function predictionHistory(rankings = [], contexts = []) {
       round: context.competition || context.fixture?.round || 'Football',
       countryFlag: countryFlagEmoji(context.fixture?.country || context.country || ''),
       result,
+      markets,
+      hits,
+      decided,
       ranking
     };
     if (!groups.has(date)) {
