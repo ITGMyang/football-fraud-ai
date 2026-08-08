@@ -140,8 +140,12 @@ export function mergeScheduleSnapshot(existing = {}, incoming = {}) {
   };
 }
 
+// Most recent first. Walking forward from six days ago meant a match that finished
+// last night waited behind five older days - one refresh each, one run in four - so
+// its score, and the accuracy that depends on it, arrived hours late while nobody was
+// asking about the older ones.
 export function selectHistoryBackfillDate(schedules = [], today = todayInShanghai(), historyDays = 6) {
-  for (let offset = -historyDays; offset < 0; offset += 1) {
+  for (let offset = -1; offset >= -historyDays; offset -= 1) {
     const date = offsetDate(today, offset);
     if (!schedules.length || schedules.some((schedule) => !schedule?.oddsCheckedDates?.[date])) return date;
   }

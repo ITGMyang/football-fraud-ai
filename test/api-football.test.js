@@ -550,16 +550,19 @@ test('legacy imported contexts inherit team images from the shared schedule cach
   assert.equal(enriched.fixture.away.logo, 'https://media.api-sports.io/football/teams/26.png');
 });
 
-test('history backfill selects the oldest unchecked date inside the seven-day odds window', () => {
-  const schedules = [{
-    competitionId: '39',
-    oddsCheckedDates: {
-      '2026-07-14': '2026-07-20T00:00:00.000Z',
-      '2026-07-15': '2026-07-20T00:20:00.000Z'
-    }
-  }];
+test('history backfill takes the most recent unchecked date first', () => {
+  const checked = (dates) => [{ competitionId: '39', oddsCheckedDates: Object.fromEntries(dates.map((date) => [date, '2026-07-20T00:00:00.000Z'])) }];
 
-  assert.equal(selectHistoryBackfillDate(schedules, '2026-07-20'), '2026-07-16');
+  // Yesterday is where the scores people are waiting on live. Walking forward from six
+  // days ago put it behind five older days at one refresh each, so a match that
+  // finished last night settled hours late while nobody asked about the older ones.
+  assert.equal(selectHistoryBackfillDate(checked([]), '2026-07-20'), '2026-07-19');
+  assert.equal(selectHistoryBackfillDate(checked(['2026-07-19']), '2026-07-20'), '2026-07-18');
+  assert.equal(selectHistoryBackfillDate(checked(['2026-07-19', '2026-07-18']), '2026-07-20'), '2026-07-17');
+
+  // Nothing left inside the window means nothing to backfill.
+  const all = ['2026-07-19', '2026-07-18', '2026-07-17', '2026-07-16', '2026-07-15', '2026-07-14'];
+  assert.equal(selectHistoryBackfillDate(checked(all), '2026-07-20'), '');
 });
 
 test('scheduled refresh covers today, tomorrow and the day after tomorrow', () => {
