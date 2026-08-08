@@ -543,3 +543,19 @@ test('a match without a score yet is pending, not a miss', async () => {
   assert.equal(group.matches[0].result, 'pending');
   assert.deepEqual(group.matches[0].markets, []);
 });
+
+test('a personal day is counted per market, like the platform figure it sits beside', async () => {
+  const source = await readFile(new URL('../frontend/src/FutBotsApp.tsx', import.meta.url), 'utf8');
+  const summary = source.slice(source.indexOf('function userDayFor'), source.indexOf('function lastPredictionDay'));
+
+  // Counting a match as a hit because any one of its five markets landed read as 100%
+  // on a day whose own cards showed 3/5 and 1/6 - and it was being compared against a
+  // platform average counted per market, so the two were never the same measurement.
+  assert.match(summary, /match\.hits/);
+  assert.match(summary, /match\.decided/);
+  assert.doesNotMatch(summary, /result === "hit"/);
+
+  // Both sides of the comparison say what they are counted over.
+  assert.match(source, /across \{userDay\.matchCount\}/);
+  assert.match(source, /same day, all accounts/);
+});

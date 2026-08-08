@@ -896,19 +896,25 @@ function MatchCard({ match, ranking, analyzing, busy, onStart, onSee }: {
   );
 }
 
-/* the user's own predictions on a given day, with hit/miss and accuracy */
-type UserDay = { date: string; hits: number; decided: number; accuracy: number; matches: HistoryMatch[] };
+/* the user's own predictions on a given day, counted the same way the platform average
+   is: one result per market, not one per match. Counting a match as a hit because any
+   one of its five markets landed reads as 100% on a day the cards themselves show as
+   3/5 and 1/6 - and it was being compared against a platform figure counted per
+   market, so the two were never the same measurement. */
+type UserDay = { date: string; hits: number; decided: number; matchCount: number; accuracy: number; matches: HistoryMatch[] };
 
 function userDayFor(historyGroups: HistoryGroup[], date: string): UserDay | null {
   const group = historyGroups.find((item) => item.date === date);
   if (!group || !group.matches.length) return null;
-  const decided = group.matches.filter((match) => match.result !== "pending");
-  const hits = decided.filter((match) => match.result === "hit").length;
+  const settled = group.matches.filter((match) => match.decided > 0);
+  const hits = settled.reduce((total, match) => total + match.hits, 0);
+  const decided = settled.reduce((total, match) => total + match.decided, 0);
   return {
     date,
     hits,
-    decided: decided.length,
-    accuracy: decided.length ? hits / decided.length : 0,
+    decided,
+    matchCount: settled.length,
+    accuracy: decided ? hits / decided : 0,
     matches: group.matches
   };
 }
@@ -942,8 +948,17 @@ function AccuracyCompare({ userDay, platformAcc, comparison }: {
     <div className="accuracy-compare">
       <AccuracyRing key={`${userDay.date}-${userPct}`} pct={userPct} />
       <div className="accuracy-compare__meta">
-        <span className="accuracy-compare__row"><b>You</b><span>{userPct}%</span><small>{userDay.hits}/{userDay.decided} hit</small></span>
-        {platPct != null && <span className="accuracy-compare__row accuracy-compare__row--platform"><b>Platform</b><span>{platPct}%</span></span>}
+        {/* Both figures count one result per market, so they are comparable. Saying
+            how many markets over how many matches keeps that visible. */}
+        <span className="accuracy-compare__row">
+          <b>You</b><span>{userPct}%</span>
+          <small>{userDay.hits}/{userDay.decided} across {userDay.matchCount} {userDay.matchCount === 1 ? "match" : "matches"}</small>
+        </span>
+        {platPct != null && (
+          <span className="accuracy-compare__row accuracy-compare__row--platform">
+            <b>Platform</b><span>{platPct}%</span><small>same day, all accounts</small>
+          </span>
+        )}
         {comparison && (
           <p className={`accuracy-compare__note accuracy-compare__note--${comparison.tone}`}>
             <b>{comparison.title}</b> {comparison.text}
