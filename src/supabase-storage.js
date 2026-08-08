@@ -353,11 +353,19 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
     // The old backfill ran off readDb, so it saw one account's twenty most recent
     // contexts - and only when that person happened to open their profile page.
     async listContextsAwaitingResult(before) {
+      // Compared as instants, not as text. Kickoffs are stored with their own offset,
+      // and "2026-08-08T09:00:00+08:00" sorts after "2026-08-08T02:00:00Z" as a string
+      // while being an hour earlier in fact - so a match that had finished read as not
+      // yet played, and was skipped on every run.
+      const cutoff = Date.parse(before);
       const rows = await client.selectAllRows(TABLES.matchContexts, 'owner_id,payload,updated_at', { order: 'updated_at.desc' });
       return rows
         .map((row) => ({ ownerId: row.owner_id, context: row.payload }))
         .filter((entry) => entry.context && entry.context.source === 'api-football')
-        .filter((entry) => String(entry.context.kickoff || '') && String(entry.context.kickoff) < before);
+        .filter((entry) => {
+          const kickoff = Date.parse(entry.context.kickoff || '');
+          return Number.isFinite(kickoff) && Number.isFinite(cutoff) && kickoff < cutoff;
+        });
     },
 
     async readAccuracySource() {

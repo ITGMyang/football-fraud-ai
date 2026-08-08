@@ -344,3 +344,25 @@ test('Supabase admin dashboard reads every usage and prediction page for accurat
   assert.ok(requests.some((url) => url.includes('offset=1000')));
   assert.ok(requests.some((url) => url.includes('/rankings?') && url.includes('offset=1000')));
 });
+
+test('a kickoff awaiting its result is compared as an instant, not as text', async () => {
+  const rows = [
+    // 09:00+08:00 is 01:00Z: an hour before the cutoff, but sorts after it as a string.
+    { owner_id: 'u1', payload: { source: 'api-football', matchId: 'offset', kickoff: '2026-08-08T09:00:00+08:00' } },
+    { owner_id: 'u2', payload: { source: 'api-football', matchId: 'utc', kickoff: '2026-08-08T01:00:00.000Z' } },
+    { owner_id: 'u3', payload: { source: 'api-football', matchId: 'later', kickoff: '2026-08-08T20:00:00.000Z' } },
+    { owner_id: 'u4', payload: { source: 'api-football', matchId: 'undated' } },
+    { owner_id: 'u5', payload: { source: 'manual', matchId: 'other', kickoff: '2026-08-01T00:00:00.000Z' } }
+  ];
+  const storage = createSupabaseStorage({
+    SUPABASE_URL: 'https://project.supabase.co',
+    SUPABASE_SECRET_KEY: 'sb_secret_modern'
+  }, async () => new Response(JSON.stringify(rows), { headers: { 'Content-Type': 'application/json' } }));
+
+  const waiting = await storage.listContextsAwaitingResult('2026-08-08T02:00:00.000Z');
+
+  // Text comparison read the offset kickoff as not yet played, so it was skipped on
+  // every run and its card stayed pending for good.
+  assert.deepEqual(waiting.map((entry) => entry.context.matchId), ['offset', 'utc']);
+  assert.equal(waiting[0].ownerId, 'u1', 'the row stays with whoever imported it');
+});
