@@ -32,6 +32,7 @@ import { proxyTelegramDiscovery, proxyTelegramJwks } from '../src/telegram-oidc.
 import { billingAccess, billingPlan, publicBillingPlans, reconcilePendingBillingOrders } from '../src/billing.js';
 import { buildAdminDashboard, summarizeDayAccuracy } from '../src/admin-dashboard.js';
 import { checkModels } from '../src/model-check.js';
+import { backfillMatchResults } from '../src/result-backfill.js';
 import { fetchSiteTraffic } from '../src/cloudflare-analytics.js';
 import { isAdminUser } from '../src/auth.js';
 import {
@@ -156,12 +157,20 @@ export default {
       }).catch((error) => {
         console.error(JSON.stringify({ event: 'billing_reconciliation_failed', error: error.message }));
       });
+      // Accuracy is only as complete as the scores behind it, and nothing filled those
+      // in on a schedule before - a match was settled only if whoever imported it came
+      // back and opened their profile page.
+      const resultsTask = backfillMatchResults(storage).then((result) => {
+        if (result.filled || result.unresolved) console.log(JSON.stringify({ event: 'match_result_backfill', ...result }));
+      }).catch((error) => {
+        console.error(JSON.stringify({ event: 'match_result_backfill_failed', error: error.message }));
+      });
       const weeklySettlementTask = settlePreviousWeekIfDue(storage).then((result) => {
         if (result) console.log(JSON.stringify({ event: 'weekly_model_settlement', ...result }));
       }).catch((error) => {
         console.error(JSON.stringify({ event: 'weekly_model_settlement_failed', error: error.message }));
       });
-      await Promise.all([refreshTask, billingTask, weeklySettlementTask]);
+      await Promise.all([refreshTask, billingTask, resultsTask, weeklySettlementTask]);
     })());
   }
 };
@@ -314,8 +323,11 @@ async function routeApi(request, env, access) {
     });
   }
   if (request.method === 'GET' && url.pathname === '/api/analytics') {
-    const db = await storage.readDb({ ownerId });
-    return json({ analytics: buildAnalytics({ rankings: db.rankings || [], contexts: db.matchContexts || [] }) });
+    // Every prediction this account has ever made. readDb stops at fifty rankings and
+    // twenty contexts because it feeds a screen, which quietly turned a career record
+    // into a rolling window of whatever was most recent.
+    const source = await storage.readOwnerAccuracySource(ownerId);
+    return json({ analytics: buildAnalytics({ rankings: source.rankings, contexts: source.contexts }) });
   }
   if (request.method === 'GET' && url.pathname === '/api/analytics/day') {
     const date = url.searchParams.get('date') || '';

@@ -226,6 +226,22 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
       return context;
     },
 
+    // One request for the whole batch: the backfill can touch dozens of fixtures, and
+    // a Worker gets fifty subrequests for everything it does in one invocation.
+    async upsertMatchContexts(entries = []) {
+      if (!entries.length) return [];
+      const now = new Date().toISOString();
+      await client.upsert(TABLES.matchContexts, entries.map(({ context, ownerId = 'guest' }) => ({
+        id: context.id,
+        owner_id: ownerId,
+        source_url: context.sourceUrl || context.id,
+        payload: context,
+        captured_at: context.capturedAt || now,
+        updated_at: now
+      })), 'owner_id,id');
+      return entries;
+    },
+
     async readMatchSchedule(competitionId) {
       const rows = await client.select(TABLES.matchSchedules, 'updated_at.desc', 1, '', `competition_id=eq.${encodeURIComponent(competitionId)}`);
       return rows[0]?.payload || null;
@@ -322,6 +338,28 @@ export function createSupabaseStorage(env, fetchImpl = fetch) {
 
     /* Minimal read for the public day-accuracy aggregate: rankings and
        match contexts only — no users, orders, or billing data. */
+    // Accuracy needs a whole history, not a recent window. readDb caps rankings at 50
+    // and contexts at 20 because it feeds a screen; using it here silently scored an
+    // active account on its last twenty matches and called it a career record.
+    async readOwnerAccuracySource(ownerId) {
+      const [rankings, contexts] = await Promise.all([
+        client.selectAllRows(TABLES.rankings, 'payload,created_at', { owner_id: `eq.${ownerId}`, order: 'created_at.desc' }),
+        client.selectAllRows(TABLES.matchContexts, 'payload,created_at,updated_at', { owner_id: `eq.${ownerId}`, order: 'updated_at.desc' })
+      ]);
+      return { rankings: rankings.map((row) => row.payload).filter(Boolean), contexts: contexts.map((row) => row.payload).filter(Boolean) };
+    },
+
+    // Every fixture that has kicked off and still has no score, whoever imported it.
+    // The old backfill ran off readDb, so it saw one account's twenty most recent
+    // contexts - and only when that person happened to open their profile page.
+    async listContextsAwaitingResult(before) {
+      const rows = await client.selectAllRows(TABLES.matchContexts, 'owner_id,payload,updated_at', { order: 'updated_at.desc' });
+      return rows
+        .map((row) => ({ ownerId: row.owner_id, context: row.payload }))
+        .filter((entry) => entry.context && entry.context.source === 'api-football')
+        .filter((entry) => String(entry.context.kickoff || '') && String(entry.context.kickoff) < before);
+    },
+
     async readAccuracySource() {
       const [rankings, contexts] = await Promise.all([
         client.selectAllRows(TABLES.rankings, 'payload,created_at', { order: 'created_at.desc' }),

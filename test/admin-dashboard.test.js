@@ -450,3 +450,27 @@ test('the console can read what each prediction run cost, per expert node', () =
   assert.equal(run.failed, 1, 'a node that failed is counted, not hidden');
   assert.equal(run.nodes[1].error, 'timeout');
 });
+
+test('personal accuracy reads the whole history, not a recent window', async () => {
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  const storage = await readFile(new URL('../src/supabase-storage.js', import.meta.url), 'utf8');
+
+  // readDb stops at fifty rankings and twenty contexts because it feeds a screen. Using
+  // it for accuracy scored an active account on its last twenty matches and presented
+  // that as a career record, with nothing on the page saying so.
+  const route = worker.slice(worker.indexOf("url.pathname === '/api/analytics'"), worker.indexOf("'/api/analytics/day'"));
+  assert.match(route, /readOwnerAccuracySource\(ownerId\)/);
+  assert.doesNotMatch(route, /storage\.readDb/);
+  assert.match(storage, /selectAllRows\(TABLES\.rankings, 'payload,created_at', \{ owner_id: `eq\.\$\{ownerId\}`/);
+  assert.match(storage, /selectAllRows\(TABLES\.matchContexts, 'payload,created_at,updated_at', \{ owner_id: `eq\.\$\{ownerId\}`/);
+});
+
+test('the cron settles finished matches, so accuracy stops depending on who visits', async () => {
+  const worker = await readFile(new URL('../worker/index.js', import.meta.url), 'utf8');
+  const scheduled = worker.slice(worker.indexOf('async scheduled('));
+
+  // The only writer used to be an endpoint the profile page called, so a match was
+  // settled only if whoever imported it came back and opened that page.
+  assert.match(scheduled, /backfillMatchResults\(storage\)/);
+  assert.match(scheduled, /Promise\.all\(\[refreshTask, billingTask, resultsTask, weeklySettlementTask\]\)/);
+});

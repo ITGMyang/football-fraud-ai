@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { backfillMatchResults, contextsNeedingResult, scoresFromSchedules } from '../src/result-backfill.js';
+
+const NOW = Date.parse('2026-08-08T12:00:00Z');
+const hoursAgo = (hours) => new Date(NOW - hours * 60 * 60 * 1000).toISOString();
+
+test('scores are read from the schedule cache, which the cron already refreshes', () => {
+  const scores = scoresFromSchedules([
+    { source: 'api-football', competitionId: '39', matches: [{ matchId: '1', score: '2:1' }, { matchId: '2', score: '' }] },
+    { source: 'api-football', competitionId: '140', matches: [{ id: '3', score: '0:0' }] },
+    { source: 'dongqiudi', competitionId: '39', matches: [{ matchId: '4', score: '9:9' }] }
+  ]);
+
+  // No provider request is spent: the schedule already carries the final score, and the
+  // refresh backfills a history date for exactly this reason.
+  assert.equal(scores.get('1'), '2:1');
+  assert.equal(scores.get('3'), '0:0');
+  assert.equal(scores.has('2'), false, 'a fixture with no score yet is not settled');
+  assert.equal(scores.has('4'), false, 'only api-football schedules are trusted');
+});
+
+test('a fixture is only settled once it has had time to finish', () => {
+  const scores = new Map([['a', '1:0'], ['b', '2:2'], ['c', '3:1']]);
+  const filled = contextsNeedingResult([
+    { ownerId: 'u1', context: { id: 'a', matchId: 'a', kickoff: hoursAgo(5) } },
+    { ownerId: 'u2', context: { id: 'b', matchId: 'b', kickoff: hoursAgo(1) } },
+    { ownerId: 'u3', context: { id: 'c', matchId: 'c', kickoff: hoursAgo(9), actualScore: '0:0' } }
+  ], scores, NOW);
+
+  // A score read an hour after kickoff would be stored as final, which is worse than
+  // reading it late.
+  assert.deepEqual(filled.map((entry) => entry.context.matchId), ['a']);
+  assert.equal(filled[0].context.actualScore, '1:0');
+  assert.equal(filled[0].ownerId, 'u1', 'the row stays with whoever imported it');
+});
+
+test('a fixture nobody can score yet is left alone rather than guessed at', () => {
+  const filled = contextsNeedingResult(
+    [{ ownerId: 'u1', context: { id: 'x', matchId: 'x', kickoff: hoursAgo(6) } }],
+    new Map(),
+    NOW
+  );
+  assert.deepEqual(filled, []);
+});
+
+test('the backfill covers every account, and writes them in one request', async () => {
+  const writes = [];
+  const storage = {
+    listContextsAwaitingResult: async () => [
+      { ownerId: 'u1', context: { id: 'a', matchId: 'a', kickoff: hoursAgo(6) } },
+      { ownerId: 'u2', context: { id: 'b', matchId: 'b', kickoff: hoursAgo(6) } },
+      { ownerId: 'u3', context: { id: 'c', matchId: 'c', kickoff: hoursAgo(6) } }
+    ],
+    listMatchSchedules: async () => [
+      { source: 'api-football', competitionId: '39', matches: [{ matchId: 'a', score: '1:0' }, { matchId: 'b', score: '2:2' }] }
+    ],
+    upsertMatchContexts: async (entries) => { writes.push(entries); return entries; }
+  };
+
+  const result = await backfillMatchResults(storage, NOW);
+
+  // The old backfill saw one account's twenty most recent fixtures, and only when that
+  // person opened their profile page. Everything else stayed unscored for good.
+  assert.equal(result.filled, 2);
+  assert.equal(result.checked, 3);
+  assert.equal(result.unresolved, 1, 'a fixture the schedule cannot score is reported, not hidden');
+  assert.equal(writes.length, 1, 'one request, because a Worker gets fifty subrequests in all');
+  assert.deepEqual(writes[0].map((entry) => entry.ownerId), ['u1', 'u2']);
+});
+
+test('a run with nothing to settle writes nothing', async () => {
+  let wrote = false;
+  const result = await backfillMatchResults({
+    listContextsAwaitingResult: async () => [],
+    listMatchSchedules: async () => [],
+    upsertMatchContexts: async () => { wrote = true; }
+  }, NOW);
+
+  assert.equal(result.filled, 0);
+  assert.equal(wrote, false);
+});
