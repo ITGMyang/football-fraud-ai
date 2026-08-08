@@ -160,8 +160,8 @@ export default {
       // Accuracy is only as complete as the scores behind it, and nothing filled those
       // in on a schedule before - a match was settled only if whoever imported it came
       // back and opened their profile page.
-      const resultsTask = backfillMatchResults(storage).then(async (result) => {
-        if (!result.filled && !result.unresolved) return;
+      const resultsTask = backfillMatchResults(storage, Date.now(), apiFootballOptions(env), workerFetch).then(async (result) => {
+        if (!result.filled && !result.lookedUp && !result.unresolved) return;
         console.log(JSON.stringify({ event: 'match_result_backfill', ...result }));
         await storage.recordSystemEvent('match_result_backfill', result).catch(() => null);
       }).catch((error) => {

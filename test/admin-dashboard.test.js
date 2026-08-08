@@ -471,6 +471,6 @@ test('the cron settles finished matches, so accuracy stops depending on who visi
 
   // The only writer used to be an endpoint the profile page called, so a match was
   // settled only if whoever imported it came back and opened that page.
-  assert.match(scheduled, /backfillMatchResults\(storage\)/);
+  assert.match(scheduled, /backfillMatchResults\(storage, Date\.now\(\), apiFootballOptions\(env\), workerFetch\)/);
   assert.match(scheduled, /Promise\.all\(\[refreshTask, billingTask, resultsTask, weeklySettlementTask\]\)/);
 });

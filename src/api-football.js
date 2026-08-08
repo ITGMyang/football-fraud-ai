@@ -21,6 +21,20 @@ export async function fetchApiFootballMatches(options = {}, fetchImpl = fetch) {
   });
 }
 
+// One request for one fixture's final score. The schedule cache answers this for free
+// when it happens to cover the date and the league, and this is what settles the rest -
+// a match whose league was later retired, or that finished outside the history window,
+// would otherwise wait for a score that is never coming.
+export async function fetchApiFootballScore(fixtureId, options = {}, fetchImpl = fetch) {
+  const rows = await apiRequest('/fixtures', { id: String(fixtureId), timezone: 'Asia/Shanghai' }, options, fetchImpl);
+  const row = rows?.[0];
+  const finished = /^(FT|AET|PEN)$/i.test(String(row?.fixture?.status?.short || ''));
+  const home = Number(row?.goals?.home);
+  const away = Number(row?.goals?.away);
+  if (!finished || !Number.isFinite(home) || !Number.isFinite(away)) return '';
+  return `${home}:${away}`;
+}
+
 export async function fetchApiFootballOddsFixtureIds(options = {}, fetchImpl = fetch) {
   const fixtureId = String(options.fixtureId || '').trim();
   const params = fixtureId

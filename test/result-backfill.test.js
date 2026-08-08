@@ -97,3 +97,67 @@ test('a kickoff that states its offset is read at that offset', async () => {
   // The provider's own wording still settles it whatever the clock says.
   assert.equal(isLikelyFinished({ kickoff: '2026-08-08T11:30:00Z', status: 'Match Finished' }, now), true);
 });
+
+test('a fixture the schedule cannot reach is looked up directly', async () => {
+  const dayAgo = new Date(NOW - 30 * 60 * 60 * 1000).toISOString();
+  const requests = [];
+  const writes = [];
+  const storage = {
+    listContextsAwaitingResult: async () => [
+      { ownerId: 'u1', context: { id: 'covered', matchId: 'covered', kickoff: hoursAgo(6) } },
+      { ownerId: 'u2', context: { id: 'stuck', matchId: 'stuck', kickoff: dayAgo } }
+    ],
+    listMatchSchedules: async () => [
+      { source: 'api-football', competitionId: '39', matches: [{ matchId: 'covered', score: '1:0' }] }
+    ],
+    upsertMatchContexts: async (entries) => { writes.push(entries); return entries; }
+  };
+
+  const result = await backfillMatchResults(storage, NOW, { apiKey: 'k' }, async (url) => {
+    requests.push(String(url));
+    return new Response(JSON.stringify({
+      response: [{ fixture: { status: { short: 'FT' } }, goals: { home: 2, away: 2 } }]
+    }), { headers: { 'Content-Type': 'application/json' } });
+  });
+
+  // The schedule cache covers a few days and the configured leagues. Anything outside
+  // that was waiting for a score that was never coming.
+  assert.equal(result.filled, 1, 'the free path settles what it can');
+  assert.equal(result.lookedUp, 1);
+  assert.equal(requests.length, 1, 'only the fixture the cache could not reach');
+  assert.match(requests[0], /id=stuck/);
+  assert.equal(result.unresolved, 0);
+  assert.deepEqual(writes[0].map((entry) => entry.context.actualScore), ['1:0', '2:2']);
+});
+
+test('a fixture still being played is not looked up, and a lookup failure is reported', async () => {
+  const dayAgo = new Date(NOW - 30 * 60 * 60 * 1000).toISOString();
+  const storage = {
+    listContextsAwaitingResult: async () => [
+      { ownerId: 'u1', context: { id: 'recent', matchId: 'recent', kickoff: hoursAgo(6) } },
+      { ownerId: 'u2', context: { id: 'old', matchId: 'old', kickoff: dayAgo } }
+    ],
+    listMatchSchedules: async () => [],
+    upsertMatchContexts: async () => []
+  };
+
+  const result = await backfillMatchResults(storage, NOW, {}, async () => { throw new Error('provider down'); });
+
+  // Six hours in, the schedule cache still has chances left; spending a request there
+  // would pay for something about to arrive free.
+  assert.equal(result.lookedUp, 0);
+  assert.equal(result.lookupErrors.length, 1);
+  assert.equal(result.lookupErrors[0].fixtureId, 'old');
+  assert.equal(result.unresolved, 2, 'nothing settled is reported as still waiting');
+});
+
+test('an unfinished fixture returns no score rather than a running one', async () => {
+  const { fetchApiFootballScore } = await import('../src/api-football.js');
+  const reply = (body) => async () => new Response(JSON.stringify({ response: [body] }), { headers: { 'Content-Type': 'application/json' } });
+
+  assert.equal(await fetchApiFootballScore('1', { apiKey: 'k' }, reply({ fixture: { status: { short: 'FT' } }, goals: { home: 1, away: 0 } })), '1:0');
+  assert.equal(await fetchApiFootballScore('1', { apiKey: 'k' }, reply({ fixture: { status: { short: 'AET' } }, goals: { home: 2, away: 1 } })), '2:1');
+  // A half-time score stored as final is the failure the whole settle delay exists for.
+  assert.equal(await fetchApiFootballScore('1', { apiKey: 'k' }, reply({ fixture: { status: { short: 'HT' } }, goals: { home: 1, away: 0 } })), '');
+  assert.equal(await fetchApiFootballScore('1', { apiKey: 'k' }, reply({ fixture: { status: { short: 'NS' } }, goals: { home: null, away: null } })), '');
+});
